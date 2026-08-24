@@ -35,9 +35,20 @@ class ObjectDetector(
     private val ortEnvironment = OrtEnvironment.getEnvironment()
     private val ortSession: OrtSession
 
-    /** True when inference is running on the NPU/DSP via NNAPI. */
-    var isHardwareAccelerated: Boolean = false
+    /**
+     * The execution provider actually verified to run inference (via a warm-up pass):
+     * "NNAPI" (device NPU/GPU/DSP), "XNNPACK" (optimized CPU) or "CPU" (plain).
+     * This is set only after a real inference succeeded, so it never over-claims.
+     */
+    var activeExecutionProvider: String = "CPU"
         private set
+
+    /**
+     * True ONLY when inference is verified to run on a hardware accelerator (NNAPI).
+     * XNNPACK is a CPU provider, so it does NOT count as hardware acceleration — this
+     * keeps the UI "NPU" chip honest (fixes the false-NPU concern in T-PERF-INFER).
+     */
+    val isHardwareAccelerated: Boolean get() = activeExecutionProvider == "NNAPI"
 
     private val confidenceThreshold = 0.40f
     private val iouThreshold = 0.45f
@@ -53,6 +64,10 @@ class ObjectDetector(
 
     companion object {
         private const val TAG = "ObjectDetector"
+
+        /** COCO class ids we actually map to a display name — scanning only these
+         *  (instead of all 80) shortens the per-box post-processing loop ~10× (PERF-P04). */
+        private val RELEVANT_CLASS_IDS = intArrayOf(0, 1, 2, 3, 5, 7, 16, 17)
 
         /** COCO id → display name. Only the classes we care about for a walker are named. */
         fun classNameFor(classId: Int): String = when (classId) {
@@ -71,50 +86,75 @@ class ObjectDetector(
     init {
         val modelBytes = context.assets.open(modelName).use { it.readBytes() }
 
-        var session: OrtSession? = null
-        try {
-            val nnOpts = OrtSession.SessionOptions().apply {
-                setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-                setIntraOpNumThreads(4)
-                addNnapi()
+        // Try execution providers in order of preference. Each candidate is not just
+        // *configured* but actually *verified* with a warm-up inference before we claim
+        // it — so the reported EP (and the "NPU" chip) reflects reality, never intent.
+        //   1. NNAPI    — device accelerator (NPU/GPU/DSP), best-effort.
+        //   2. XNNPACK  — optimized CPU kernels (reliable everywhere on ARM).
+        //   3. CPU      — plain reference kernels (always works).
+        var built: OrtSession? = null
+        var builtEp = "CPU"
+        var resolvedInput = requestedInputSize
+
+        for (ep in listOf("NNAPI", "XNNPACK", "CPU")) {
+            try {
+                val opts = OrtSession.SessionOptions().apply {
+                    setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+                    when (ep) {
+                        "NNAPI"   -> { setIntraOpNumThreads(4); addNnapi() }
+                        // XNNPACK manages its own threadpool — force a single ORT
+                        // intra-op thread and hand the worker count to the provider.
+                        "XNNPACK" -> { setIntraOpNumThreads(1); addXnnpack(mapOf("intra_op_num_threads" to "4")) }
+                        else      -> { setIntraOpNumThreads(4) }
+                    }
+                }
+                val candidate = ortEnvironment.createSession(modelBytes, opts)
+                val dim = readInputSize(candidate, modelName, requestedInputSize)
+                warmUp(candidate, dim)   // throws if this EP can't actually run the graph
+                built = candidate
+                builtEp = ep
+                resolvedInput = dim
+                Log.i(TAG, "Execution provider verified: $ep for $modelName")
+                break
+            } catch (e: Exception) {
+                Log.w(TAG, "EP '$ep' unavailable — trying next. Reason: ${e.message}")
             }
-            session = ortEnvironment.createSession(modelBytes, nnOpts)
-            isHardwareAccelerated = true
-            Log.i(TAG, "NNAPI hardware acceleration enabled for $modelName")
-        } catch (e: Exception) {
-            Log.w(TAG, "NNAPI session failed — falling back to CPU. Reason: ${e.message}")
-            isHardwareAccelerated = false
         }
 
-        if (session == null) {
-            val cpuOpts = OrtSession.SessionOptions().apply {
-                setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-                setIntraOpNumThreads(4)
-            }
-            session = ortEnvironment.createSession(modelBytes, cpuOpts)
-            Log.i(TAG, "CPU fallback session created for $modelName")
-        }
-
-        ortSession = session!!
-
-        inputSize = try {
-            @Suppress("UNCHECKED_CAST")
-            val shape = (ortSession.inputInfo.values.first().info as ai.onnxruntime.TensorInfo).shape
-            val modelDim = if (shape.size >= 4 && shape[2] > 0) shape[2].toInt() else requestedInputSize
-            if (modelDim != requestedInputSize) {
-                Log.w(TAG, "Model $modelName requires ${modelDim}px input (requested ${requestedInputSize}px) — auto-correcting")
-            }
-            modelDim
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not read model input shape — using ${requestedInputSize}px")
-            requestedInputSize
-        }
+        ortSession = built ?: ortEnvironment.createSession(
+            modelBytes,
+            OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }
+        )
+        activeExecutionProvider = if (built != null) builtEp else "CPU"
+        inputSize = resolvedInput
 
         pixels = IntArray(inputSize * inputSize)
         floatBuffer = FloatBuffer.allocate(3 * inputSize * inputSize)
 
         val family = if (skipNms) "YOLO26 (NMS-free)" else "YOLO11"
-        Log.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | HW accel: $isHardwareAccelerated")
+        Log.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider | HW accel: $isHardwareAccelerated")
+    }
+
+    private fun readInputSize(session: OrtSession, modelName: String, requested: Int): Int = try {
+        val shape = (session.inputInfo.values.first().info as ai.onnxruntime.TensorInfo).shape
+        val modelDim = if (shape.size >= 4 && shape[2] > 0) shape[2].toInt() else requested
+        if (modelDim != requested) {
+            Log.w(TAG, "Model $modelName requires ${modelDim}px input (requested ${requested}px) — auto-correcting")
+        }
+        modelDim
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not read model input shape — using ${requested}px")
+        requested
+    }
+
+    /** Runs one dummy inference so we only claim an EP that genuinely executes the graph. */
+    private fun warmUp(session: OrtSession, dim: Int) {
+        val buf = FloatBuffer.allocate(3 * dim * dim)
+        val shape = longArrayOf(1, 3, dim.toLong(), dim.toLong())
+        val name = session.inputNames.iterator().next()
+        OnnxTensor.createTensor(ortEnvironment, buf, shape).use { t ->
+            session.run(mapOf(name to t)).use { /* discard */ }
+        }
     }
 
     /**
@@ -193,7 +233,9 @@ class ObjectDetector(
         for (i in 0 until numBoxes) {
             var maxScore = 0f
             var classId = -1
-            for (c in 0 until numClasses) {
+            // Only score the handful of COCO classes we display, not all ~80.
+            for (c in RELEVANT_CLASS_IDS) {
+                if (c >= numClasses) continue
                 val score = if (isStandard) output[0][4 + c][i] else output[0][i][4 + c]
                 if (score > maxScore) { maxScore = score; classId = c }
             }

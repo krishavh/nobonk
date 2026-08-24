@@ -53,6 +53,8 @@ class DetectionEngine(private val appContext: Context) {
 
     private var objectDetector: ObjectDetector? = null
     val isHardwareAccelerated: Boolean get() = objectDetector?.isHardwareAccelerated ?: false
+    /** The verified active execution provider ("NNAPI" | "XNNPACK" | "CPU"). */
+    val executionProvider: String get() = objectDetector?.activeExecutionProvider ?: "CPU"
     val inputSize: Int get() = objectDetector?.inputSize ?: 416
 
     @Suppress("DEPRECATION")

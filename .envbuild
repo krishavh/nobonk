@@ -1,0 +1,4 @@
+export JAVA_HOME=$HOME/toolchain/jdk-17.0.13+11
+export ANDROID_HOME=$HOME/android-sdk
+export ANDROID_SDK_ROOT=$HOME/android-sdk
+export PATH=$JAVA_HOME/bin:$HOME/toolchain/gradle-9.2.1/bin:$PATH
