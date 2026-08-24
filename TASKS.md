@@ -88,6 +88,7 @@ Base path: `app/src/main/java/com/persondetection/android/`
 **Accept:** No duplicate boxes on one person in a quick sample; distinct overlapping objects both survive.
 
 ### T-SEC-ENCRYPT (P1) — Encrypt history at rest (or drop coords)
+**Status: DONE (release-eng)** — `DetectionRepository` now stores a Keystore-backed AES-256-GCM **append log** (`detection_events.enc`); key created/held via `androidx.security.crypto.MasterKey`, per-record AEAD (12-byte IV + tag). Not human-readable at rest. EncryptedFile intentionally not used (its Tink stream can't append — documented); per-record AEAD gives encryption AND append-only, and skips a corrupt record without losing the rest.
 **Files:** `data/DetectionRepository.kt` (~23,42,85), `app/build.gradle.kts` (add `androidx.security:security-crypto`). **Conflicts:** T-SEC-LOCATION (same data). **Depends on:** decide with T-SEC-LOCATION whether coords stay.
 **Do:** If any location is persisted, use `androidx.security.crypto.EncryptedFile` with a Keystore master key (ProGuard keep already present). Remove the stale "future SEC-04" comments in build.gradle:48 / proguard:57.
 **Accept:** `detection_events.json` is not human-readable on disk; read/write round-trips.
@@ -132,17 +133,19 @@ Base path: `app/src/main/java/com/persondetection/android/`
 **Accept:** No `getPixel(` in hot loops; no per-frame ARGB bitmap alloc leaks.
 
 ### T-PERF-INFER (P2) — XNNPACK EP + prune YOLO class scan
+**Status: DONE** — EP tried NNAPI→XNNPACK→CPU, each verified with a warm-up inference before it's claimed (`activeExecutionProvider`); `isHardwareAccelerated` is NNAPI-only so the "NPU" chip never over-claims for XNNPACK/CPU. Class scan restricted to `RELEVANT_CLASS_IDS` (8 classes, not 80).
 **Files:** `ml/ObjectDetector.kt` (EP setup ~78, `parseAllObjects` ~194-229). **Depends on:** T-CORE.
 **Do:** Add XNNPACK CPU execution provider; treat NNAPI as best-effort and verify the active EP (don't show a false "NPU" chip). Restrict the 8400×80 scan to the ~5 mapped classes (PERF-P02, P04).
 **Accept:** Inference runs with a verified accelerated EP; post-processing loop measurably shorter.
 
 ### T-PERF-PERSIST (P2) — Append-only history + lazy summaries + clear-history UI
-**Status: PARTIAL** — 'Clear history' button wired to clearAll(); summaries no longer recomputed on every logged event (only on refresh). Append-only single-event file write (avoid full rewrite) NOT done — left for data-layer follow-up.
+**Status: DONE (release-eng)** — append-only single-event writes now done: each `addEvent` appends ONE encrypted record via `FileOutputStream(append=true)`; in-memory cache appended O(1); no full re-read/re-parse/rewrite per event (trim is the only full rewrite, ~once per 5000 events, via temp-file rename). Summaries computed on demand (History open) only. 'Clear history' button wired to `clearAll()`.
 **Files:** `data/DetectionRepository.kt`, `viewmodel/…` (`logEvent`/`getRecentSessions`), NEW small "Clear history" button in `ui/HistoryScreen.kt` (wire the already-written `clearAll()`). **Independent-ish** (data + a UI button).
 **Do:** Append one event per write (not full-file rewrite, PERF-P05); compute session summaries only when History opens; append to in-memory list in place. Add a **"Clear history"** control (needed for the privacy story + uses dead `clearAll()`). Handle whole-file corruption non-silently (backup/rename).
 **Accept:** Logging an event doesn't rewrite the whole file or rebuild all summaries; user can clear history from the UI.
 
 ### T-SEC-LOGGING (P2) — Guard release logging
+**Status: DONE (release-eng)** — new `util/Dbg` facade whose every method is guarded by `BuildConfig.DEBUG`; `buildConfig = true` re-enabled; all 5 files migrated off `android.util.Log`. Release builds emit no app logs.
 **Files:** all `*.kt` with `Log.*`; `app/build.gradle.kts` (fix false BuildConfig comment). **Low conflict** (additive guards).
 **Do:** Wrap `Log.*` in `if (BuildConfig.DEBUG)` or add ProGuard `-assumenosideeffects` for `android.util.Log`. Remove per-frame logs. Correct the build.gradle:48 comment (or actually use BuildConfig.DEBUG — currently `buildConfig=true` is enabled but unused).
 **Accept:** Release build emits no app logs; per-frame `Log.d` gone.
@@ -152,7 +155,7 @@ Base path: `app/src/main/java/com/persondetection/android/`
 ## P3 — Cleanup (low conflict; batch into one agent)
 
 ### T-CLEAN-DEAD (P3) — Remove dead code
-**Status: PARTIAL** — ApproachDetector (incl. isCollisionImminent) removed; detectPeople shim removed. SessionSummary.topThreat / OverallStats fields still unused (left; low risk).
+**Status: DONE (release-eng)** — ApproachDetector removed earlier; now also removed `AnalyticsEngine.averageDistance`, `DetectionRepository.getSessionEvents`, unused `OverallStats.{avgEventsPerSession,topThreat}`, and the stale `roundToInt` import. `SessionSummary.topThreat` is now surfaced in the session row ("mostly <class>"). Also fixed `DetectionEvent.VALID_CLASS_NAMES` (was missing bus/truck/cat → those records were silently dropped on read now that vehicles default ON).
 **Files:** `ml/ApproachDetector.kt` (`isCollisionImminent`, `reset` — unless T-ML-APPROACH uses reset), `data/DetectionRepository.kt` (`getSessionEvents`), `analytics/AnalyticsEngine.kt` (`averageDistance`), `data/DetectionEvent.kt`/repo (`SessionSummary.topThreat`, `OverallStats.topThreat/avgEventsPerSession`, `AlertStats.closeCalls` — remove or surface in UI). **Depends on:** confirm none are used by P0/P1 tasks first.
 **Do:** Delete unused functions/fields (PERF-D01..D06) OR wire the useful ones into the UI (topThreat is nice to show). Keep `clearAll` (T-PERF-PERSIST uses it).
 **Accept:** No unreferenced public API remains except intentional; app still builds.
@@ -165,6 +168,7 @@ Base path: `app/src/main/java/com/persondetection/android/`
 **Accept:** Lint-clean on these; comments match code.
 
 ### T-DOCS-LICENSES (P3) — In-app open-source licenses screen
+**Status: DONE (release-eng)** — `ui/LicensesScreen.kt` lists ONNX Runtime (MIT), CameraX (Apache-2.0), Ultralytics YOLO (AGPL-3.0) + security-crypto + Compose, with a source-code link (AGPL §13). Reachable from the History screen footer.
 **Files:** NEW `ui/LicensesScreen.kt` + nav entry. **Independent.**
 **Do:** List ONNX Runtime (MIT), CameraX (Apache-2.0), Ultralytics YOLO (AGPL-3.0) + a source link (also helps satisfy AGPL §13).
 **Accept:** Reachable from the app; lists deps + link.
