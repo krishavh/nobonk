@@ -212,11 +212,9 @@ fun DetectionScreen(
         // ── Full-screen overlays (highest priority on top) ────────────────────
         if (isCameraBlocked) {
             CameraBlockedOverlay()
-        } else {
-            val highAlertDetection = detections.find { it.alertLevel == AlertLevel.HIGH }
-            if (highAlertDetection != null) {
-                LookUpOverlay(className = highAlertDetection.className)
-            }
+        } else if (viewModel.frameAlert == AlertLevel.HIGH) {
+            // Driven by the engine's linger-debounced alert so the overlay doesn't strobe.
+            LookUpOverlay(className = viewModel.lookUpLabel ?: "person")
         }
 
         if (isInitializing) {

@@ -73,6 +73,12 @@ class DetectionViewModel : ViewModel() {
     var isCameraBlocked by mutableStateOf(false)
         private set
 
+    /** Debounced frame-level alert + label, from the engine (drives the LOOK UP overlay). */
+    var frameAlert by mutableStateOf(AlertLevel.NONE)
+        private set
+    var lookUpLabel by mutableStateOf<String?>(null)
+        private set
+
     var isWallDetected by mutableStateOf(false)
         private set
     var isGroundHazardDetected by mutableStateOf(false)
@@ -292,6 +298,8 @@ class DetectionViewModel : ViewModel() {
 
                 withContext(Dispatchers.Main) {
                     detections = result.detections
+                    frameAlert = result.highestAlert
+                    lookUpLabel = result.lookUpLabel
                     isCameraBlocked = result.cameraBlocked
                     isWallDetected = result.wallDetected
                     isGroundHazardDetected = result.groundHazard

@@ -39,7 +39,8 @@ class DetectionEngine(private val appContext: Context) {
 
     data class Result(
         val detections: List<Detection>,      // alertLevel + isApproaching populated
-        val highestAlert: AlertLevel,
+        val highestAlert: AlertLevel,         // linger-debounced (drives overlay/sound/HUD)
+        val lookUpLabel: String?,             // class label for the LOOK UP overlay when HIGH
         val cameraBlocked: Boolean,
         val wallDetected: Boolean,
         val groundHazard: Boolean,
@@ -59,6 +60,14 @@ class DetectionEngine(private val appContext: Context) {
         appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     private val lastHapticTime = mutableMapOf<AlertLevel, Long>()
     private var lastSoundTime = 0L
+
+    // Alert-level hysteresis (fixes ML-11 flicker): escalate immediately, but hold the
+    // level for LINGER_MS before de-escalating so overlay/sound/HUD don't strobe when an
+    // object hovers right at a ladder boundary.
+    private var heldAlert = AlertLevel.NONE
+    private var heldUntil = 0L
+    private var heldLabel: String? = null
+    private val lingerMs = 700L
 
     // Reused analysis pixel buffer (fixes PERF-C04: no per-pixel getPixel() JNI calls).
     private var analysisPixels: IntArray = IntArray(0)
@@ -125,7 +134,9 @@ class DetectionEngine(private val appContext: Context) {
 
         if (blocked || detector == null) {
             work.recycle()
-            return Result(emptyList(), AlertLevel.NONE, cameraBlocked = blocked,
+            // Reset linger so a stale HIGH doesn't survive a blocked frame.
+            heldAlert = AlertLevel.NONE; heldLabel = null; heldUntil = 0L
+            return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = blocked,
                 wallDetected = false, groundHazard = false, hudMessage = null)
         }
 
@@ -153,31 +164,42 @@ class DetectionEngine(private val appContext: Context) {
             det.copy(isApproaching = approaching, alertLevel = level)
         }
 
-        val highest = scored.maxByOrNull { it.alertLevel.ordinal }?.alertLevel ?: AlertLevel.NONE
+        val rawHighest = scored.maxByOrNull { it.alertLevel.ordinal }?.alertLevel ?: AlertLevel.NONE
+        val topDet = scored.filter { it.alertLevel == rawHighest && rawHighest != AlertLevel.NONE }
+            .maxByOrNull { AlertPolicy.fillFraction(it.boundingBox, it.className) }
 
-        // ── Shared feedback (identical in both modes) ──
-        if (highest != AlertLevel.NONE) handleHaptics(highest)
-        if (scored.any { it.alertLevel == AlertLevel.HIGH }) playAlertSound()
+        // ── Alert-level linger ──
+        val now = System.currentTimeMillis()
+        if (rawHighest.ordinal >= heldAlert.ordinal) {
+            heldAlert = rawHighest
+            if (rawHighest != AlertLevel.NONE) { heldLabel = topDet?.className; heldUntil = now + lingerMs }
+        } else if (now >= heldUntil) {
+            heldAlert = rawHighest
+            heldLabel = topDet?.className
+        }
+        val displayAlert = heldAlert
 
-        val hud = buildHud(scored, highest, wall, ground)
-        return Result(scored, highest, blocked, wall, ground, hud)
+        // ── Shared feedback (identical in both modes), driven by the debounced level ──
+        if (displayAlert != AlertLevel.NONE) handleHaptics(displayAlert)
+        if (displayAlert == AlertLevel.HIGH) playAlertSound()
+
+        val lookUpLabel = if (displayAlert == AlertLevel.HIGH) heldLabel else null
+        val hud = buildHud(displayAlert, heldLabel, topDet?.isApproaching == true, wall, ground)
+        return Result(scored, displayAlert, lookUpLabel, blocked, wall, ground, hud)
     }
 
     private fun buildHud(
-        detections: List<Detection>, highest: AlertLevel, wall: Boolean, ground: Boolean
+        highest: AlertLevel, className: String?, closing: Boolean, wall: Boolean, ground: Boolean
     ): String? = when {
         highest == AlertLevel.HIGH -> {
-            val top = detections.filter { it.alertLevel == AlertLevel.HIGH }
-                .maxByOrNull { AlertPolicy.fillFraction(it.boundingBox, it.className) }
-            val label = when (top?.className) {
+            val label = when (className) {
                 "person" -> "PERSON AHEAD"
                 "car", "truck", "bus" -> "VEHICLE AHEAD"
                 "motorcycle", "bicycle" -> "BIKE AHEAD"
                 "dog", "cat", "horse" -> "ANIMAL AHEAD"
                 else -> "OBJECT AHEAD"
             }
-            val closing = if (top?.isApproaching == true) " (closing)" else ""
-            "⚠️ LOOK UP!  $label$closing"
+            "⚠️ LOOK UP!  $label${if (closing) " (closing)" else ""}"
         }
         wall   -> "🧱 WALL AHEAD — LOOK UP NOW"
         ground -> "⚠️ WATCH YOUR STEP!"
