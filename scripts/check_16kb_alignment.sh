@@ -64,10 +64,21 @@ check_one() {
     *readelf)
       # Every LOAD segment's Align (last hex field on the line) must be >= 0x4000.
       # awk exits 1 the moment it sees an under-aligned LOAD segment.
+      # NOTE: uses a portable hex parser (NOT gawk's strtonum) so the check is truthful
+      # under mawk too — on a mawk-only box strtonum is undefined and every segment was
+      # misread as unaligned (false FAIL).
       if "$TOOL" -lW "$so" 2>/dev/null | awk '
+          function hex2dec(s,   n,i,c,d) {
+            s = tolower(s); n = 0
+            for (i = 1; i <= length(s); i++) {
+              d = index("0123456789abcdef", substr(s,i,1)) - 1
+              if (d >= 0) n = n*16 + d
+            }
+            return n
+          }
           $1=="LOAD" {
             a = $NF; sub(/^0x/,"",a)
-            if (strtonum("0x" a) < 16384) exit 1
+            if (hex2dec(a) < 16384) exit 1
           }
         '; then ok=1; else ok=0; fi
       ;;

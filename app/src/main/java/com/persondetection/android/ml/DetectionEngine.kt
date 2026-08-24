@@ -231,16 +231,23 @@ class DetectionEngine(private val appContext: Context) {
             }
             lastHighByTrack.entries.removeAll { now - it.value > 10_000L }
         }
-        val suppressLoud = mutedRepeat || angleBad
+        // Distinguish "don't re-PLAY the sound" from "hide the visual warning" (HIGH-1).
+        // A persistent hazard re-fires HIGH every frame; after the first alert we mute the
+        // re-played SOUND on that track for the mute window — but the red LOOK-UP visual
+        // (overlay + HUD line) must stay up, not blink out for 2 s. Only a BAD angle (camera
+        // at ceiling/ground → unreliable detections) suppresses the visual, swapping in the
+        // "point phone forward" cue instead.
+        val suppressSound = mutedRepeat || angleBad
+        val suppressVisual = angleBad
 
         // ── Shared feedback (identical in both modes), driven by the debounced level ──
         if (displayAlert != AlertLevel.NONE && !angleBad) handleHaptics(displayAlert)
-        if (displayAlert == AlertLevel.HIGH && !suppressLoud) playAlertSound()
+        if (displayAlert == AlertLevel.HIGH && !suppressSound) playAlertSound()
 
-        val lookUpLabel = if (displayAlert == AlertLevel.HIGH && !suppressLoud) heldLabel else null
+        val lookUpLabel = if (displayAlert == AlertLevel.HIGH && !suppressVisual) heldLabel else null
         val hud = buildHud(
             displayAlert, heldLabel, topDet?.isApproaching == true, wall, ground,
-            angleBad, angleHint, lowLight, suppressLoud
+            angleBad, angleHint, lowLight
         )
         return Result(
             scored, displayAlert, lookUpLabel, blocked, wall, ground, hud,
@@ -250,12 +257,14 @@ class DetectionEngine(private val appContext: Context) {
 
     private fun buildHud(
         highest: AlertLevel, className: String?, closing: Boolean, wall: Boolean, ground: Boolean,
-        angleBad: Boolean, angleHint: String, lowLight: Boolean, suppressLoud: Boolean
+        angleBad: Boolean, angleHint: String, lowLight: Boolean
     ): String? = when {
         // Bad angle takes priority: detection is unreliable, so tell the user to fix it
         // instead of blasting a possibly-bogus LOOK UP.
         angleBad -> "📐 " + angleHint.ifEmpty { "POINT PHONE FORWARD — camera off-angle" }
-        highest == AlertLevel.HIGH && !suppressLoud -> {
+        // Show the LOOK-UP line whenever the debounced level is HIGH (the re-alert mute
+        // silences the SOUND, not the visual — HIGH-1). Bad angle is already handled above.
+        highest == AlertLevel.HIGH -> {
             val label = when (className) {
                 "person" -> "PERSON AHEAD"
                 "car", "truck", "bus" -> "VEHICLE AHEAD"

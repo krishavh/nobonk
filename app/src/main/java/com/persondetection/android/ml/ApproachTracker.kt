@@ -39,11 +39,24 @@ class ApproachTracker(
     /**
      * Constant-bearing collision cone (Round-2 calibration, the biggest false-positive
      * killer). An object on a real collision course keeps its box centre near the frame
-     * centre; one you'll harmlessly pass drifts laterally. Approach / imminent is only
-     * asserted while |centerX − 0.5| < [bearingCone] has held for [approachFramesRequired]
-     * consecutive frames.
+     * centre; one you'll harmlessly pass drifts laterally. On-bearing is asserted when the
+     * centre sat inside |centerX − 0.5| < [bearingCone] for at least [approachFramesRequired]
+     * of the last [bearingWindow] frames (an N-of-M test, NOT a fragile consecutive streak:
+     * a single jittered frame no longer resets the count and drops the TTC lead-time path).
      */
     private val bearingCone: Float = 0.15f,
+    /** Window length M for the N-of-M on-bearing test above. */
+    private val bearingWindow: Int = 4,
+    /**
+     * Constant-bearing-by-low-drift: an object converging at a fixed NON-zero bearing
+     * (both parties walking, meeting at an angle) keeps a near-constant centerX even though
+     * it is not centred. Once a track has been seen for [constantBearingFrames] frames with
+     * a smoothed lateral drift below [constantBearingDrift] per frame it counts as on-bearing
+     * too — the true constant-bearing case the centred cone alone would miss. Kept tight so
+     * laterally-drifting pass-bys (high drift) stay excluded.
+     */
+    private val constantBearingFrames: Int = 4,
+    private val constantBearingDrift: Float = 0.03f,
     /**
      * Time-to-contact (s) at or below which a closing, on-bearing object is "imminent".
      * Raised 1.2 → 1.5 s so [DetectionEngine] gets head-on lead time after pipeline
@@ -60,7 +73,9 @@ class ApproachTracker(
         var lastSeen: Long,
         var fillVelocity: Float = 0f,   // fill fraction per second, EMA-smoothed
         var closingStreak: Int = 0,
-        var centeredStreak: Int = 0     // consecutive frames inside the bearing cone
+        var bearingBits: Int = 0,       // ring bitmask: 1 = frame was inside the bearing cone
+        var framesMatched: Int = 0,     // frames this track has been observed
+        var lateralDriftEma: Float = 1f // EMA of |Δ centerX| per frame; starts high (unknown)
     )
 
     private val tracks = mutableListOf<Track>()
@@ -102,13 +117,21 @@ class ApproachTracker(
                 val instRate = (fill - match.fill) / dtSec
                 // EMA smoothing to reject single-frame noise.
                 match.fillVelocity = match.fillVelocity * 0.6f + instRate * 0.4f
+                val prevCenterX = match.box.centerX
+                val centerX = det.boundingBox.centerX
+                match.lateralDriftEma =
+                    match.lateralDriftEma * 0.6f + kotlin.math.abs(centerX - prevCenterX) * 0.4f
+                match.framesMatched++
                 match.box = det.boundingBox
                 match.fill = fill
                 match.lastSeen = now
 
-                // Constant-bearing test: is the box centre still in the collision cone?
-                val onBearingNow = kotlin.math.abs(det.boundingBox.centerX - 0.5f) < bearingCone
-                if (onBearingNow) match.centeredStreak++ else match.centeredStreak = 0
+                // Constant-bearing test (N-of-M, jitter-tolerant): record whether the centre
+                // is in the cone this frame into a ring bitmask and require it in >= N of the
+                // last M frames — a single jittered frame no longer zeroes the count.
+                val onBearingNow = kotlin.math.abs(centerX - 0.5f) < bearingCone
+                match.bearingBits = ((match.bearingBits shl 1) or (if (onBearingNow) 1 else 0)) and
+                    ((1 shl bearingWindow) - 1)
 
                 if (match.fillVelocity > minClosingFillRate) {
                     match.closingStreak++
@@ -116,11 +139,15 @@ class ApproachTracker(
                     match.closingStreak = 0
                 }
 
-                // Approach requires BOTH sustained closing AND a sustained on-bearing
-                // track. A laterally-drifting pass-by fails the bearing gate and is
-                // never flagged, even as its box grows.
+                // Approach requires BOTH sustained closing AND an on-bearing track. On-bearing
+                // is either the N-of-M centred test OR a settled low-lateral-drift track (a
+                // constant NON-zero bearing). A laterally-drifting pass-by satisfies neither
+                // and is never flagged, even as its box grows.
                 val closing = match.closingStreak >= approachFramesRequired
-                val onBearing = match.centeredStreak >= approachFramesRequired
+                val centeredEnough = Integer.bitCount(match.bearingBits) >= approachFramesRequired
+                val constantBearing = match.framesMatched >= constantBearingFrames &&
+                    match.lateralDriftEma < constantBearingDrift
+                val onBearing = centeredEnough || constantBearing
                 if (closing && onBearing) {
                     approaching.add(det.id)
                     // Estimate time-to-contact from fill-growth rate; low → imminent.
@@ -136,7 +163,8 @@ class ApproachTracker(
                         box = det.boundingBox,
                         fill = fill,
                         lastSeen = now,
-                        centeredStreak = if (kotlin.math.abs(det.boundingBox.centerX - 0.5f) < bearingCone) 1 else 0
+                        framesMatched = 1,
+                        bearingBits = if (kotlin.math.abs(det.boundingBox.centerX - 0.5f) < bearingCone) 1 else 0
                     )
                 )
             }

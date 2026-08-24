@@ -223,8 +223,13 @@ fun DetectionScreen(
         // ── Full-screen overlays (highest priority on top) ────────────────────
         if (isCameraBlocked) {
             CameraBlockedOverlay()
-        } else if (viewModel.frameAlert == AlertLevel.HIGH) {
+        } else if (viewModel.frameAlert == AlertLevel.HIGH &&
+            viewModel.phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
             // Driven by the engine's linger-debounced alert so the overlay doesn't strobe.
+            // Suppressed when the phone is at a bad angle (camera at ceiling/ground →
+            // detections unreliable): the engine mutes sound/haptics and shows the
+            // "point phone forward" cue, so the full-screen LOOK UP must not fire either
+            // (HIGH-3 — keep foreground consistent with the background trust model).
             LookUpOverlay(className = viewModel.lookUpLabel ?: "person")
         }
 

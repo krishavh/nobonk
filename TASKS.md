@@ -175,6 +175,16 @@ Base path: `app/src/main/java/com/persondetection/android/`
 
 ---
 
+## Round-3 review fixes (safety + adversarial + build) — **Status: DONE**
+Fixed every Critical/High from the three round-3 reviews; `testDebugUnitTest` (17 tests) + `assembleDebug` + `assembleRelease` all green.
+- **SAFETY-HIGH-1 (DONE)** — Background HUD no longer blanks during the 2 s re-alert mute. `DetectionEngine` now splits `suppressSound` (mutedRepeat ‖ angleBad) from `suppressVisual` (angleBad only); `buildHud` LOOK-UP line + `lookUpLabel` persist through a per-track sound mute, so a persistent hazard keeps a steady red warning.
+- **SAFETY-HIGH-2 (DONE)** — Bearing gate is no longer a fragile consecutive centred-streak. `ApproachTracker` now uses an N-of-M cone test (≥2 of last 4 frames, jitter-tolerant, via a ring bitmask) OR a settled low-lateral-drift path (constant NON-zero bearing). Added a jitter regression test proving TTC still forces HIGH when the box hops the cone edge each frame; pass-by suppression unchanged.
+- **SAFETY-HIGH-3 (DONE)** — Foreground full-screen LOOK-UP now gated on `phoneAngleQuality != BAD`, matching the background angle gate (no loud over-fire from a ceiling-pointed camera).
+- **ADVERSARIAL-HIGH (DONE)** — `DetectionRepository` migrates the legacy plaintext `detection_events.json` into the encrypted log on first construction, then **securely erases** it (zero-overwrite + delete, even on parse failure) so old GPS-geotagged history is neither lost nor left in the clear.
+- **BUILD-BLOCKER-3 (DONE, was non-blocking)** — `scripts/check_16kb_alignment.sh` no longer depends on gawk's `strtonum`; portable hex parser gives a truthful result under mawk.
+- **BUILD-BLOCKER-1 (OPEN, human)** — ML `.onnx` model still not in `app/src/main/assets/`; no model is available in this environment to commit. App builds green but detects nothing until a model is bundled. See report.
+- **BUILD-BLOCKER-2 (OPEN, human)** — Release still unsigned by design (no keystore secrets on box); run `bundleRelease` with `NOBONK_*` creds per `docs/RELEASE_CHECKLIST.md`.
+
 ## Suggested first wave (parallel-safe, no conflicts)
 `T-CORE` (solo, blocks the ML/perf tasks) **‖** `T-REL-SDK` **‖** `T-REL-PRIVACY` **‖** `T-REL-ASSETS` **‖** `T-UI-CRASH` **‖** `T-CLEAN-IMPORTS` **‖** `T-DOCS-LICENSES` **‖** `T-REL-16K`.
 **Second wave (after T-CORE):** all `T-ML-*`, `T-PERF-*`, `T-SEC-ENCRYPT`, `T-PERF-PERSIST`.

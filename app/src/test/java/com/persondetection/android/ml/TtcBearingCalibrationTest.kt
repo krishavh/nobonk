@@ -64,6 +64,30 @@ class TtcBearingCalibrationTest {
         assertTrue("TTC must force HIGH for a fast head-on closer", ttcDroveHigh)
     }
 
+    @Test fun `head-on closer whose box jitters in and out of the cone still reaches HIGH via TTC`() {
+        // Regression for the brittle consecutive-streak bearing gate: a genuinely head-on
+        // person whose detected centre jitters across the cone edge every other frame (normal
+        // YOLO box noise) used to reset the streak and lose the TTC lead-time path. The N-of-M
+        // bearing test must keep it on-bearing and let TTC force HIGH below the fill backstop.
+        var now = 0L
+        val tracker = ApproachTracker(clock = { now })
+        val cxs   = listOf(0.50f, 0.66f, 0.50f, 0.66f, 0.50f, 0.66f)   // 0.66 = just off-cone
+        val fills = listOf(0.12f, 0.24f, 0.36f, 0.46f, 0.54f, 0.56f)   // all below 0.60 backstop
+
+        var ttcDroveHigh = false
+        for (i in cxs.indices) {
+            now = i * 100L
+            val d = det("p", personBox(cxs[i], fills[i]), "person")
+            val approaching = tracker.update(listOf(d)).contains("p")
+            val imminent = tracker.isImminent("p")
+            val withTtc  = AlertPolicy.levelFor(d.boundingBox, "person", 2.0f, approaching, imminent)
+            val fillOnly = AlertPolicy.levelFor(d.boundingBox, "person", 2.0f, false, false)
+            assertNotEquals("fill-only must stay below HIGH at fill=${fills[i]}", AlertLevel.HIGH, fillOnly)
+            if (imminent && withTtc == AlertLevel.HIGH) ttcDroveHigh = true
+        }
+        assertTrue("jittering head-on closer must still reach HIGH via TTC", ttcDroveHigh)
+    }
+
     @Test fun `laterally drifting pass-by object never reaches HIGH`() {
         var now = 0L
         val tracker = ApproachTracker(clock = { now })

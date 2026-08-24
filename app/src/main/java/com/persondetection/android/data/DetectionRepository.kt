@@ -3,6 +3,7 @@ package com.persondetection.android.data
 import android.content.Context
 import androidx.security.crypto.MasterKey
 import com.persondetection.android.util.Dbg
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.DataInputStream
 import java.io.EOFException
@@ -46,10 +47,19 @@ class DetectionRepository(context: Context) {
 
     private val appContext = context.applicationContext
     private val file: File = File(appContext.filesDir, "detection_events.enc")
+    // Pre-round-2 plaintext store. It held GPS-geotagged events in the clear — the exact
+    // thing SEC-N02 / T-SEC-ENCRYPT set out to fix. On upgrade we migrate its records into
+    // the encrypted log and then securely erase it, so nothing is silently lost AND no
+    // plaintext GPS lingers on disk.
+    private val legacyFile: File = File(appContext.filesDir, "detection_events.json")
     private val lock = ReentrantReadWriteLock()
 
     // Authoritative in-memory copy (decrypted once, lazily). addEvent appends in O(1).
     private var cache: MutableList<DetectionEvent>? = null
+
+    init {
+        migrateLegacyPlaintext()
+    }
 
     companion object {
         private const val TAG = "DetectionRepository"
@@ -169,6 +179,65 @@ class DetectionRepository(context: Context) {
     fun clearAll() = lock.write {
         cache = mutableListOf()
         try { file.delete() } catch (e: Exception) { Dbg.e(TAG, "Clear failed: ${e.message}") }
+    }
+
+    // ── Legacy plaintext migration (SEC-N02 upgrade path) ──────────────────────
+
+    /**
+     * One-shot upgrade: if the old plaintext `detection_events.json` exists, re-encrypt each
+     * record into the append log, then **securely erase** the plaintext file. The erase runs
+     * even if parsing fails, so a corrupt/partial legacy file's geotagged contents never
+     * linger. Idempotent (the file is gone afterwards) and safe on a fresh install (no-op).
+     */
+    private fun migrateLegacyPlaintext() {
+        if (!legacyFile.exists()) return
+        lock.write {
+            if (!legacyFile.exists()) return@write
+            try {
+                val text = legacyFile.readText().trim()
+                if (text.isNotEmpty()) {
+                    val arr = JSONArray(text)
+                    val list = loadCacheLocked()
+                    for (i in 0 until arr.length()) {
+                        try {
+                            val ev = DetectionEvent.fromJson(arr.getJSONObject(i))
+                            list.add(ev)
+                            appendRecord(ev)
+                        } catch (e: Exception) {
+                            // Skip an unparseable legacy record; keep migrating the rest.
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Dbg.e(TAG, "Legacy migration failed (erasing plaintext anyway): ${e.message}")
+            } finally {
+                secureDeleteLegacy()
+            }
+        }
+    }
+
+    /** Overwrite the plaintext file with zeros, flush, then delete — no plaintext GPS left. */
+    private fun secureDeleteLegacy() {
+        try {
+            if (!legacyFile.exists()) return
+            val len = legacyFile.length()
+            if (len > 0) {
+                FileOutputStream(legacyFile).use { out ->
+                    val zeros = ByteArray(4096)
+                    var written = 0L
+                    while (written < len) {
+                        val n = minOf(zeros.size.toLong(), len - written).toInt()
+                        out.write(zeros, 0, n)
+                        written += n
+                    }
+                    out.fd.sync()
+                }
+            }
+            legacyFile.delete()
+        } catch (e: Exception) {
+            Dbg.e(TAG, "Legacy secure-delete failed: ${e.message}")
+            try { legacyFile.delete() } catch (_: Exception) {}
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
