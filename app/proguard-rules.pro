@@ -61,6 +61,15 @@
 -keep class androidx.security.crypto.** { *; }
 -dontwarn androidx.security.crypto.**
 
+# Tink (transitive via security-crypto) references compile-time-only annotations
+# from Error Prone / JSR-305 that are not on the runtime classpath. They are
+# discarded before packaging, so it is safe to silence the missing-class warnings.
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn javax.annotation.concurrent.**
+
 # ── Suppress known-harmless warnings from transitive dependencies ─────────────
 -dontwarn org.bouncycastle.**
 -dontwarn org.conscrypt.**
