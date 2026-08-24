@@ -22,7 +22,9 @@ import com.persondetection.android.MainActivity
 import com.persondetection.android.R
 import com.persondetection.android.ml.DetectionEngine
 import com.persondetection.android.model.AlertLevel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -49,6 +51,7 @@ class DetectionService : LifecycleService() {
     private var lastProcessTime = 0L
     private val minFrameIntervalMs = 100
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var windowManager: WindowManager
     private var hudView: View? = null
     private var scanningView: View? = null
@@ -99,7 +102,7 @@ class DetectionService : LifecycleService() {
         }
         showScanningIndicator()
 
-        lifecycleScope.launch {
+        lifecycleScope.launch(Dispatchers.Default) {
             try {
                 engine = DetectionEngine(this@DetectionService).also {
                     it.loadModel(modelFile, inputPx, skipNms)
@@ -109,7 +112,7 @@ class DetectionService : LifecycleService() {
                 return@launch
             }
             kotlinx.coroutines.delay(400)   // let the activity release the camera first
-            startCamera()
+            withContext(Dispatchers.Main) { startCamera() }
         }
     }
 
@@ -164,11 +167,11 @@ class DetectionService : LifecycleService() {
         if (!gate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
 
-        lifecycleScope.launch {
+        lifecycleScope.launch(Dispatchers.Default) {
             try {
                 val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson)
                 val result = eng.process(imageProxy, cfg)   // closes imageProxy, fires haptics+sound
-                Handler(Looper.getMainLooper()).post { updateHud(result.hudMessage) }
+                mainHandler.post { updateHud(result.hudMessage) }
                 if (result.highestAlert != AlertLevel.NONE) {
                     updateNotification("Alert: ${result.highestAlert} — ${result.detections.size} object(s)")
                 }

@@ -155,9 +155,6 @@ class ObjectDetector(
         }
     }
 
-    /** Kept for backward-compatible callers/tests; delegates to [detect]. */
-    fun detectPeople(bitmap: Bitmap): List<Detection> = detect(bitmap)
-
     // ── Letterbox pre-processing ────────────────────────────────────────────────
 
     private fun letterbox(src: Bitmap, t: Letterbox.Transform): Bitmap {
