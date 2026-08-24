@@ -13,7 +13,7 @@ review risk on a safety-themed app.
 | Field | Value |
 |---|---|
 | App name (≤30 chars) | **NoBonk** |
-| Package | `com.persondetection.android` |
+| Package | `ai.genwhy.nobonk` |
 | Default language | English (United States) |
 | Category | **Tools** |
 | Tags | safety, camera, walking, pedestrian |

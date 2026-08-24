@@ -3,7 +3,9 @@
 **How to use:** Each task is self-contained. Before starting, set `Status: CLAIMED (<agent>)`; when done, `Status: DONE` + one-line note. **Respect `Files` + `Conflicts` to avoid stepping on another agent.** Work on a branch; small, tested commits. Do NOT change `applicationId`, licensing, or delete features without a task saying so.
 
 Legend — Priority: **P0** safety/release-blocker · **P1** high · **P2** medium · **P3** cleanup.
-Base path: `app/src/main/java/com/persondetection/android/`
+Base path: `app/src/main/java/ai/genwhy/nobonk/`
+
+**Rebrand DONE (release-eng):** code package `com.persondetection.android` → `ai.genwhy.nobonk` (namespace, source tree via `git mv`, all package/import statements, proguard entry-point keeps, docs/scripts). `applicationId` already `ai.genwhy.nobonk`. All three builds green (test/debug/release-R8).
 
 ---
 
@@ -48,7 +50,7 @@ Base path: `app/src/main/java/com/persondetection/android/`
 **Do (doc only, in `docs/RELEASE_CHECKLIST.md`):** Note the Play account holder must be a parent/guardian (18+, ID-verified); Krishav credited as author in the listing, not as account holder. Target audience 13+/adult (NOT "Designed for Families").
 
 ### T-REL-LICENSE (P0, decision) — Resolve AGPL/YOLO model licensing
-**Status:** DONE (release-eng) — decision recorded: **Option A, comply with AGPL-3.0** (keep repo public). Obligations written in `docs/RELEASE_CHECKLIST.md` §6 (tag exact commit per versionCode, publish exact .onnx or pinned export recipe, in-app licenses screen for §13) + README license section updated. Remaining human steps: commit model/recipe + tag release; ship T-DOCS-LICENSES screen.
+**Status:** DONE (release-eng) — decision recorded: **Option A, comply with AGPL-3.0** (keep repo public). Obligations written in `docs/RELEASE_CHECKLIST.md` §6 (tag exact commit per versionCode, publish exact .onnx or pinned export recipe, in-app licenses screen for §13) + README license section updated. **Model corresponding-source now committed: `docs/MODEL.md`** documents the exact asset roster (default `yolo11s.onnx` @416, plus yolo11m + YOLO26 tier), the pinned `yolo export` recipe (ultralytics version + imgsz + opset), and the AGPL-3.0 weights provenance; referenced from README and the in-app LicensesScreen. Remaining human steps: export + `git add -f` the actual `.onnx` (none available in this env), fill in the exact pinned version hashes, tag release.
 **Files:** `docs/RELEASE_CHECKLIST.md`, `README.md`, in-app licenses screen (see T-DOCS-LICENSES).
 **Do:** Choose: (A) ship AGPL — keep repo public, tag the exact commit for each versionCode, commit the exact `.onnx` (or the precise `yolo export` recipe), add in-app "Source/Licenses" link (satisfies AGPL §13). OR (B) retrain/switch to a permissively-licensed detector to avoid AGPL. Document the decision + the model provenance.
 **Accept:** A written decision + the corresponding source/model-availability step in the checklist.
@@ -182,7 +184,7 @@ Fixed every Critical/High from the three round-3 reviews; `testDebugUnitTest` (1
 - **SAFETY-HIGH-3 (DONE)** — Foreground full-screen LOOK-UP now gated on `phoneAngleQuality != BAD`, matching the background angle gate (no loud over-fire from a ceiling-pointed camera).
 - **ADVERSARIAL-HIGH (DONE)** — `DetectionRepository` migrates the legacy plaintext `detection_events.json` into the encrypted log on first construction, then **securely erases** it (zero-overwrite + delete, even on parse failure) so old GPS-geotagged history is neither lost nor left in the clear.
 - **BUILD-BLOCKER-3 (DONE, was non-blocking)** — `scripts/check_16kb_alignment.sh` no longer depends on gawk's `strtonum`; portable hex parser gives a truthful result under mawk.
-- **BUILD-BLOCKER-1 (OPEN, human)** — ML `.onnx` model still not in `app/src/main/assets/`; no model is available in this environment to commit. App builds green but detects nothing until a model is bundled. See report.
+- **BUILD-BLOCKER-1 (OPEN, human)** — ML `.onnx` model still not in `app/src/main/assets/`; no model is available in this environment to commit. App builds green but detects nothing until a model is bundled. The reproducible-recipe half of the AGPL obligation is now satisfied by `docs/MODEL.md`; a human must still run that recipe with the pinned toolchain and `git add -f` the exported weights. See report.
 - **BUILD-BLOCKER-2 (OPEN, human)** — Release still unsigned by design (no keystore secrets on box); run `bundleRelease` with `NOBONK_*` creds per `docs/RELEASE_CHECKLIST.md`.
 
 ## Suggested first wave (parallel-safe, no conflicts)

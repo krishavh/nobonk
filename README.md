@@ -57,14 +57,16 @@ People walk while looking at their phones and run into each other, walls, and cu
 
 The AI model file is **not** included in this repo (it's large, and the weights are distributed by Ultralytics under AGPL-3.0). After cloning, export a model and drop it into `app/src/main/assets/`.
 
-The app loads `yolo11n.onnx` by default (the nano model, ~10 MB — fastest, good for phones). To produce it with the [Ultralytics](https://docs.ultralytics.com/) tools:
+The app loads `yolo11s.onnx` (the small model, at 416 px) by default. To produce it with the [Ultralytics](https://docs.ultralytics.com/) tools:
 
 ```bash
 pip install ultralytics
-yolo export model=yolo11n.pt format=onnx
+yolo export model=yolo11s.pt format=onnx imgsz=416 opset=12
 ```
 
-Then move `yolo11n.onnx` into `app/src/main/assets/`. The detector also supports the `s`/`m` variants and the YOLO26 family — change the `modelName` in `ObjectDetector.kt` to match the file you add.
+Then move `yolo11s.onnx` into `app/src/main/assets/`. The detector also supports the `m` variant and the YOLO26 family — the roster is defined in `AccuracyMode` in `DetectionViewModel.kt`.
+
+**The exact model files the app expects, the pinned `yolo export` recipe to reproduce them, and the AGPL-3.0 provenance of the weights are documented in [`docs/MODEL.md`](docs/MODEL.md)** — this is the model's "corresponding source" for AGPL §13. Regenerate every asset from that file.
 
 ## Building it yourself
 

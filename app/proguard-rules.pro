@@ -11,8 +11,8 @@
 # ── Android entry points (Activities, Services, BroadcastReceivers) ──────────
 # R8 keeps @Keep-annotated and manifest-declared entry points by default, but
 # being explicit avoids surprises.
--keep class com.persondetection.android.MainActivity { *; }
--keep class com.persondetection.android.service.DetectionService { *; }
+-keep class ai.genwhy.nobonk.MainActivity { *; }
+-keep class ai.genwhy.nobonk.service.DetectionService { *; }
 
 # ── Data classes used with JSON serialisation ─────────────────────────────────
 # DetectionEvent and SessionSummary are serialised/deserialised manually via
@@ -20,10 +20,10 @@
 # survive obfuscation because we use them as string keys in toJson/fromJson.
 # R8 will obfuscate the class bytecode names but leaves field access intact
 # when accessed directly (not via reflection), so these rules are precautionary.
--keepclassmembers class com.persondetection.android.data.DetectionEvent {
+-keepclassmembers class ai.genwhy.nobonk.data.DetectionEvent {
     public *;
 }
--keepclassmembers class com.persondetection.android.data.SessionSummary {
+-keepclassmembers class ai.genwhy.nobonk.data.SessionSummary {
     public *;
 }
 

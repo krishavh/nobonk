@@ -1,7 +1,7 @@
 # NoBonk — Privacy Policy
 
 **Last updated:** 2026-08-23
-**App:** NoBonk (`com.persondetection.android`)
+**App:** NoBonk (`ai.genwhy.nobonk`)
 **Developer:** Published by a parent/guardian on behalf of Krishav (student author).
 **Contact:** `<GUARDIAN_CONTACT_EMAIL>` — *(fill in the adult account holder's email; this must match the contact email in the Play Console listing.)*
 

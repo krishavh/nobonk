@@ -52,7 +52,7 @@ echo ""
 
 echo ""
 echo "🚀  Done! App installed. Launching..."
-"$ADB" shell am start -n "com.persondetection.android/.MainActivity"
+"$ADB" shell am start -n "ai.genwhy.nobonk/.MainActivity"
 echo ""
 echo "========================================"
 echo "  All done — check your phone!"

@@ -20,7 +20,7 @@ fun releaseCredential(name: String): String? =
 val hasReleaseSigning: Boolean = releaseCredential("NOBONK_STORE_FILE") != null
 
 android {
-    namespace = "com.persondetection.android"
+    namespace = "ai.genwhy.nobonk"
     compileSdk = 36
 
     defaultConfig {
