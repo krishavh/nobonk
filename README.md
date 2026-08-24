@@ -5,7 +5,7 @@
 NoBonk is an Android app that taps you on the shoulder before you walk into someone. It uses an on-device AI vision model to spot approaching people, walls, and ground hazards through your phone's back camera — and warns you with vibration and on-screen alerts — all while you're still staring at your screen.
 
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![Platform](https://img.shields.io/badge/platform-Android%2015%2B-green)
+![Platform](https://img.shields.io/badge/platform-Android%2010%2B-green)
 ![Language](https://img.shields.io/badge/kotlin-100%25-purple)
 ![Awards](https://img.shields.io/badge/STEM4All-1st%20Place%20%2B%20IEEE%20Award-gold)
 
@@ -35,11 +35,13 @@ People walk while looking at their phones and run into each other, walls, and cu
 
 ## Privacy by design
 
-- **No video or photos are ever recorded, stored, or transmitted.** Frames are processed in memory and immediately discarded.
-- **Everything runs on-device.** No network connection is used or required — the app works in airplane mode.
-- **GPS is optional.** If you grant location, alert locations are saved to a local file *on your phone only*, so the history screen can show where your close calls happen. Deny location and everything else still works.
-- **`allowBackup` is disabled** so history isn't swept into cloud backups.
-- You can clear all history at any time from within the app.
+- **No video or photos are ever recorded, stored, or transmitted.** Camera frames are processed in memory and immediately discarded — nothing from the camera is ever written to disk or sent anywhere.
+- **Everything runs on-device.** There is no `INTERNET` permission and no network connection is used or required — the app works in airplane mode, so nothing *can* leave your phone.
+- **The one thing NoBonk does store is a local detection-event history** (session stats + close-call hotspots), kept only in the app's private storage and never uploaded. You can clear it at any time from within the app.
+- **Location is optional, approximate, and off by default.** If — and only if — you turn it on, NoBonk tags those history events with your *coarse* (approximate) location so the history screen can map roughly where your close calls happen. It stays *on your phone only*. Deny or leave it off and everything else still works.
+- **`allowBackup` is disabled** (and backup/transfer rules explicitly exclude the history file) so nothing is swept into cloud backups.
+
+> So "nothing recorded" means exactly that for **camera imagery** — no photos, no video, ever. The optional on-device event history (and its optional coarse-location tags) is the only thing persisted, it never leaves the device, and you can wipe it whenever you like.
 
 ## Measured results (Pixel 9a)
 
@@ -71,9 +73,12 @@ Then move `yolo11n.onnx` into `app/src/main/assets/`. The detector also supports
 3. Add a model file to `app/src/main/assets/` (see above).
 4. Enable Developer Mode + USB debugging on your phone, connect it, and press **Run**.
 
-Or from the command line: `./gradlew assembleDebug` (a helper script, `build_and_install.sh`, builds and installs to a connected device).
+From the command line:
 
-**Requirements:** Android 15+ (API 35). Best results on recent Pixel devices. iOS is not supported — Apple does not allow background camera access, which is the whole point of the app.
+- **Debug build / install:** `./gradlew assembleDebug` (a helper script, `build_and_install.sh`, builds and installs to a connected device).
+- **Signed release bundle (for Play):** `./gradlew bundleRelease` produces `app/build/outputs/bundle/release/app-release.aab`. Signing reads keystore credentials from `~/.gradle/gradle.properties` or the `NOBONK_*` environment variables — **no secrets are committed**. See [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md) for keystore generation and the full Play submission steps, and [`docs/PLAY_16KB_CHECK.md`](docs/PLAY_16KB_CHECK.md) for the required 16 KB native-library check (`scripts/check_16kb_alignment.sh`).
+
+**Requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Best results on recent Pixel devices. iOS is not supported — Apple does not allow background camera access, which is the whole point of the app.
 
 ## Known limitations
 
@@ -101,3 +106,5 @@ Built with Android Studio, Jetpack Compose, CameraX, and ONNX Runtime. YOLO mode
 ## License
 
 Licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0) — see [LICENSE](LICENSE). AGPL-3.0 was chosen for compatibility with Ultralytics YOLO, which is itself AGPL-3.0. In short: use, modify, and share freely, but derivative works must remain open source under the same license, including over a network.
+
+Because NoBonk ships an AGPL-covered YOLO model, publishing it on Google Play carries source-availability obligations (AGPL, including §13). The decision and the concrete obligations we meet — public source tagged per release, model/export-recipe availability, and an in-app open-source-licenses notice — are documented in [`docs/RELEASE_CHECKLIST.md` §6](docs/RELEASE_CHECKLIST.md). To keep the model reproducible for AGPL, **pin the `ultralytics` version** used for `yolo export` and record the upstream weights identifier when you add a model.
