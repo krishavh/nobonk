@@ -36,14 +36,16 @@ class ApproachTrackerTest {
     @Test fun `static person in a two-person scene is never falsely flagged approaching`() {
         var now = 0L
         val tracker = ApproachTracker(clock = { now })
-        val aBox = NormBox.fromCenter(0.25f, 0.5f, 0.12f, 0.30f)
+        // A: static, off to the left (both stationary AND off-bearing → never flagged).
+        val aBox = NormBox.fromCenter(0.20f, 0.5f, 0.12f, 0.30f)
+        // B: closing head-on (centred, growing) → must be flagged.
         val bFills = listOf(0.20f, 0.34f, 0.50f, 0.70f, 0.90f)
         var falseFlag = false
         var bFlagged = false
         for ((i, bf) in bFills.withIndex()) {
             now = i * 100L
             val a = Detection("A", aBox, 0.9f, 3f, "person", 0)
-            val b = person("B", 0.75f, bf)
+            val b = person("B", 0.5f, bf)
             val approaching = tracker.update(listOf(a, b))
             if (approaching.contains("A")) falseFlag = true
             if (i == bFills.lastIndex) bFlagged = approaching.contains("B")

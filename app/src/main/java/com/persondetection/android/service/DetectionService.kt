@@ -41,7 +41,9 @@ class DetectionService : LifecycleService() {
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     private var distanceThreshold = 2.0f
-    private var includeNonPerson = false
+    // Round-2: vehicles/bikes/obstacles ON by default (the marketing promises them, and
+    // TTC gating now makes them safe to surface). The intent extra still overrides.
+    private var includeNonPerson = true
     private var modelFile = "yolo11s.onnx"
     private var inputPx = 416
     private var skipNms = false
@@ -106,6 +108,7 @@ class DetectionService : LifecycleService() {
             try {
                 engine = DetectionEngine(this@DetectionService).also {
                     it.loadModel(modelFile, inputPx, skipNms)
+                    it.startSensors()   // background angle gating (was never wired before)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Model load failed: ${e.message}", e)
@@ -205,6 +208,8 @@ class DetectionService : LifecycleService() {
             val tv = hudView!!.findViewById<android.widget.TextView>(R.id.warningText)
             tv?.text = message
             val bgColor = when {
+                message.contains("ANGLE") || message.contains("PHONE") -> android.graphics.Color.parseColor("#CCD32F2F")
+                message.contains("LOW LIGHT") -> android.graphics.Color.parseColor("#CC37474F")
                 message.contains("STEP") -> android.graphics.Color.parseColor("#CC994400")
                 message.contains("WALL") -> android.graphics.Color.parseColor("#CC1565C0")
                 else -> android.graphics.Color.parseColor("#CCCC0000")

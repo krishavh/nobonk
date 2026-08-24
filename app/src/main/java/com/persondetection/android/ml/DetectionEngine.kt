@@ -45,11 +45,32 @@ class DetectionEngine(private val appContext: Context) {
         val wallDetected: Boolean,
         val groundHazard: Boolean,
         /** Ready-to-show background HUD line, or null to hide it. */
-        val hudMessage: String?
+        val hudMessage: String?,
+        /** Dim-but-not-blocked scene → show "reduced reliability" banner. */
+        val lowLight: Boolean = false,
+        /** Phone-angle reliability (now gated in BOTH foreground and background). */
+        val angleQuality: SensorMonitor.AngleQuality = SensorMonitor.AngleQuality.OK,
+        val angleHint: String = ""
     )
 
     private val approachTracker = ApproachTracker()
     private val frameAnalyzer = FrameAnalyzer()
+
+    // Phone-angle monitor now lives in the ENGINE, so the background DetectionService
+    // (which never touched SensorMonitor before) gets the same angle gating as the
+    // foreground. Created lazily on the first [startSensors] call.
+    private var sensorMonitor: SensorMonitor? = null
+
+    /** Begin listening to the gravity sensor. Idempotent. */
+    fun startSensors() {
+        val sm = sensorMonitor ?: SensorMonitor(appContext).also { sensorMonitor = it }
+        sm.start()
+    }
+
+    /** Stop listening to the gravity sensor. */
+    fun stopSensors() {
+        sensorMonitor?.stop()
+    }
 
     private var objectDetector: ObjectDetector? = null
     val isHardwareAccelerated: Boolean get() = objectDetector?.isHardwareAccelerated ?: false
@@ -62,6 +83,12 @@ class DetectionEngine(private val appContext: Context) {
         appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     private val lastHapticTime = mutableMapOf<AlertLevel, Long>()
     private var lastSoundTime = 0L
+
+    // Per-track HIGH re-alert mute (Round-2): after a HIGH fires the loud LOOK-UP + sound
+    // on a track, don't re-blast the same track for MUTE_MS — the box stays red and
+    // haptics continue, but we stop hammering the user for one persistent hazard.
+    private val lastHighByTrack = mutableMapOf<String, Long>()
+    private val highReAlertMuteMs = 2000L
 
     // Alert-level hysteresis (fixes ML-11 flicker): escalate immediately, but hold the
     // level for LINGER_MS before de-escalating so overlay/sound/HUD don't strobe when an
@@ -158,11 +185,20 @@ class DetectionEngine(private val appContext: Context) {
 
         val filtered = if (config.includeNonPerson) raw else raw.filter { it.className == "person" }
 
-        // ── Approach tracking + fill-based alert level ──
+        // Reliability signals for this frame.
+        val lowLight = LowLight.isLowLight(meanBrightness, blocked = false)
+        val angleQuality = sensorMonitor?.angleQuality ?: SensorMonitor.AngleQuality.OK
+        val angleHint = sensorMonitor?.angleHint ?: ""
+        val angleBad = angleQuality == SensorMonitor.AngleQuality.BAD
+
+        // ── Approach tracking + fill-based alert level (with TTC force-HIGH) ──
         val approachingIds = approachTracker.update(filtered)
         val scored = filtered.map { det ->
             val approaching = approachingIds.contains(det.id)
-            val level = AlertPolicy.levelFor(det.boundingBox, det.className, config.distanceThreshold, approaching)
+            val imminent = approachTracker.isImminent(det.id)   // TTC ≤ 1.5 s, on-bearing
+            val level = AlertPolicy.levelFor(
+                det.boundingBox, det.className, config.distanceThreshold, approaching, imminent
+            )
             det.copy(isApproaching = approaching, alertLevel = level)
         }
 
@@ -181,19 +217,45 @@ class DetectionEngine(private val appContext: Context) {
         }
         val displayAlert = heldAlert
 
-        // ── Shared feedback (identical in both modes), driven by the debounced level ──
-        if (displayAlert != AlertLevel.NONE) handleHaptics(displayAlert)
-        if (displayAlert == AlertLevel.HIGH) playAlertSound()
+        // ── Per-track HIGH re-alert mute + bad-angle gating ──
+        // When the angle is BAD the camera is pointed at the ceiling/ground: detections
+        // are unreliable, so we suppress the loud LOOK-UP + sound and instead surface a
+        // "point phone forward" reliability cue. When the same track already fired HIGH
+        // within the mute window, we also hold the loud re-alert.
+        var mutedRepeat = false
+        if (displayAlert == AlertLevel.HIGH) {
+            val trackId = topDet?.let { approachTracker.trackIdFor(it.id) }
+            if (trackId != null) {
+                val last = lastHighByTrack[trackId] ?: 0L
+                if (now - last < highReAlertMuteMs) mutedRepeat = true else lastHighByTrack[trackId] = now
+            }
+            lastHighByTrack.entries.removeAll { now - it.value > 10_000L }
+        }
+        val suppressLoud = mutedRepeat || angleBad
 
-        val lookUpLabel = if (displayAlert == AlertLevel.HIGH) heldLabel else null
-        val hud = buildHud(displayAlert, heldLabel, topDet?.isApproaching == true, wall, ground)
-        return Result(scored, displayAlert, lookUpLabel, blocked, wall, ground, hud)
+        // ── Shared feedback (identical in both modes), driven by the debounced level ──
+        if (displayAlert != AlertLevel.NONE && !angleBad) handleHaptics(displayAlert)
+        if (displayAlert == AlertLevel.HIGH && !suppressLoud) playAlertSound()
+
+        val lookUpLabel = if (displayAlert == AlertLevel.HIGH && !suppressLoud) heldLabel else null
+        val hud = buildHud(
+            displayAlert, heldLabel, topDet?.isApproaching == true, wall, ground,
+            angleBad, angleHint, lowLight, suppressLoud
+        )
+        return Result(
+            scored, displayAlert, lookUpLabel, blocked, wall, ground, hud,
+            lowLight = lowLight, angleQuality = angleQuality, angleHint = angleHint
+        )
     }
 
     private fun buildHud(
-        highest: AlertLevel, className: String?, closing: Boolean, wall: Boolean, ground: Boolean
+        highest: AlertLevel, className: String?, closing: Boolean, wall: Boolean, ground: Boolean,
+        angleBad: Boolean, angleHint: String, lowLight: Boolean, suppressLoud: Boolean
     ): String? = when {
-        highest == AlertLevel.HIGH -> {
+        // Bad angle takes priority: detection is unreliable, so tell the user to fix it
+        // instead of blasting a possibly-bogus LOOK UP.
+        angleBad -> "📐 " + angleHint.ifEmpty { "POINT PHONE FORWARD — camera off-angle" }
+        highest == AlertLevel.HIGH && !suppressLoud -> {
             val label = when (className) {
                 "person" -> "PERSON AHEAD"
                 "car", "truck", "bus" -> "VEHICLE AHEAD"
@@ -205,6 +267,7 @@ class DetectionEngine(private val appContext: Context) {
         }
         wall   -> "🧱 WALL AHEAD — LOOK UP NOW"
         ground -> "⚠️ WATCH YOUR STEP!"
+        lowLight -> "🔅 LOW LIGHT — reduced reliability"
         else   -> null
     }
 
@@ -286,6 +349,9 @@ class DetectionEngine(private val appContext: Context) {
         objectDetector?.close()
         objectDetector = null
         approachTracker.reset()
+        stopSensors()
+        sensorMonitor = null
+        lastHighByTrack.clear()
     }
 
     companion object { private const val TAG = "DetectionEngine" }

@@ -69,6 +69,7 @@ fun DetectionScreen(
     val isGroundHazard = viewModel.isGroundHazardDetected
     val phoneAngleHint = viewModel.phoneAngleHint
     val phoneAngleQuality = viewModel.phoneAngleQuality
+    val isLowLight = viewModel.isLowLight
     val isHardwareAccelerated = viewModel.isHardwareAccelerated
     val context = LocalContext.current
 
@@ -188,6 +189,14 @@ fun DetectionScreen(
             GroundHazardBanner(modifier = Modifier.align(Alignment.BottomCenter))
         }
 
+        // ── Low-light reliability banner ──────────────────────
+        // Detection silently degrades at dusk/night — exactly when a distracted walker
+        // is at most risk — so surface it honestly. Suppressed while fully blocked
+        // (that has its own overlay) or when the angle warning already occupies the slot.
+        if (isLowLight && !isCameraBlocked && phoneAngleQuality == SensorMonitor.AngleQuality.OK) {
+            LowLightBanner(modifier = Modifier.align(Alignment.TopCenter).padding(top = 80.dp))
+        }
+
         // ── Control panel ──────────────────────────────────────
         ControlPanel(
             modifier = Modifier.align(Alignment.CenterEnd),
@@ -241,6 +250,29 @@ fun AngleWarningBanner(modifier: Modifier = Modifier, hint: String, isBad: Boole
             text = hint,
             color = Color.White,
             fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp
+        )
+    }
+}
+
+// ── New: Low-light reliability banner ───────────────────────────
+
+@Composable
+fun LowLightBanner(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF37474F).copy(alpha = 0.9f))
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("🔅", fontSize = 18.sp)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "LOW LIGHT — reduced reliability",
+            color = Color.White,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.5.sp
         )

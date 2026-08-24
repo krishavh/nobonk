@@ -33,7 +33,10 @@ object AlertPolicy {
     data class Ladder(val high: Float, val medium: Float, val low: Float)
 
     fun ladderFor(className: String): Ladder = when (className) {
-        "person"                       -> Ladder(high = 0.70f, medium = 0.46f, low = 0.30f)
+        // Round-2 calibration: fill-only HIGH backstop lowered 0.70 → 0.60 so a head-on
+        // person clears HIGH ~0.15 s earlier (fill-only fired at ~0.75 s to collision —
+        // too late after pipeline latency). The 0.85 cap in levelFor keeps HIGH reachable.
+        "person"                       -> Ladder(high = 0.60f, medium = 0.42f, low = 0.28f)
         // Vehicles are large and fast — warn earlier (a lower fill already means danger).
         "car", "truck", "bus"          -> Ladder(high = 0.55f, medium = 0.36f, low = 0.22f)
         "motorcycle", "bicycle"        -> Ladder(high = 0.52f, medium = 0.34f, low = 0.20f)
@@ -67,13 +70,21 @@ object AlertPolicy {
      * @param className      object class
      * @param thresholdMeters user's "alert at N m" preset (sensitivity knob)
      * @param isApproaching  tracker verdict — escalates one level when true
+     * @param isImminent     tracker time-to-contact verdict (TTC ≤ 1.5 s, on-bearing).
+     *                       When true the alarm is FORCED to HIGH regardless of fill —
+     *                       this is what finally wires the previously-dead collision
+     *                       signal and gives head-on lead time (and is the ONLY way
+     *                       fast vehicles/bikes ever reach HIGH, since their fill never
+     *                       grows early enough at 5–10 m/s).
      */
     fun levelFor(
         box: NormBox,
         className: String,
         thresholdMeters: Float,
-        isApproaching: Boolean
+        isApproaching: Boolean,
+        isImminent: Boolean = false
     ): AlertLevel {
+        if (isImminent) return AlertLevel.HIGH
         val fill = fillFraction(box, className)
         val s = sensitivity(thresholdMeters)
         val ladder = ladderFor(className)

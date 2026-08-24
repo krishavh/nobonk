@@ -65,7 +65,9 @@ class DetectionViewModel : ViewModel() {
     var initializationStatus by mutableStateOf("Starting system...")
         private set
 
-    var isObjectDetectionEnabled by mutableStateOf(false)
+    // Round-2: vehicles/bikes/obstacles ON by default (marketing promises them; TTC
+    // gating now makes them safe to surface without sidewalk spam).
+    var isObjectDetectionEnabled by mutableStateOf(true)
     var accuracyMode by mutableStateOf(AccuracyMode.Y11S)
 
     var batteryLevel by mutableIntStateOf(100)
@@ -87,6 +89,9 @@ class DetectionViewModel : ViewModel() {
         private set
     var phoneAngleQuality by mutableStateOf(SensorMonitor.AngleQuality.OK)
         private set
+    /** Dim-but-not-blocked scene → drives the "low light — reduced reliability" banner. */
+    var isLowLight by mutableStateOf(false)
+        private set
 
     var isHardwareAccelerated by mutableStateOf(false)
         private set
@@ -102,7 +107,6 @@ class DetectionViewModel : ViewModel() {
         private set
 
     private var engine: DetectionEngine? = null
-    private var sensorMonitor: SensorMonitor? = null
     private var appContext: Context? = null
 
     private val sessionId = UUID.randomUUID().toString()
@@ -123,7 +127,8 @@ class DetectionViewModel : ViewModel() {
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
-        sensorMonitor = SensorMonitor(context.applicationContext).also { it.start() }
+        // Phone-angle monitoring now lives in the shared DetectionEngine (so the
+        // background service is gated too); the engine is created in loadModel().
         repository = DetectionRepository(context.applicationContext)
         refreshHistory()
 
@@ -158,6 +163,7 @@ class DetectionViewModel : ViewModel() {
         initializationStatus = "Loading ${mode.modelFile} @ ${mode.inputPx}px..."
         val eng = engine ?: DetectionEngine(context.applicationContext).also { engine = it }
         eng.loadModel(mode.modelFile, mode.inputPx, mode.skipNms)
+        eng.startSensors()   // angle monitoring for the foreground pipeline
         isHardwareAccelerated = eng.isHardwareAccelerated
         initializationStatus = "Running AI pre-flight..."
         eng.warmUp()
@@ -291,9 +297,6 @@ class DetectionViewModel : ViewModel() {
                 val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled)
                 val result = eng.process(imageProxy, cfg)
 
-                val newAngleQuality = sensorMonitor?.angleQuality ?: SensorMonitor.AngleQuality.OK
-                val newAngleHint = sensorMonitor?.angleHint ?: ""
-
                 for (d in result.detections) if (d.alertLevel != AlertLevel.NONE) logEvent(d)
 
                 withContext(Dispatchers.Main) {
@@ -303,8 +306,9 @@ class DetectionViewModel : ViewModel() {
                     isCameraBlocked = result.cameraBlocked
                     isWallDetected = result.wallDetected
                     isGroundHazardDetected = result.groundHazard
-                    phoneAngleQuality = newAngleQuality
-                    phoneAngleHint = newAngleHint
+                    phoneAngleQuality = result.angleQuality
+                    phoneAngleHint = result.angleHint
+                    isLowLight = result.lowLight
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Frame processing error: ${e.message}")
@@ -324,8 +328,7 @@ class DetectionViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        sensorMonitor?.stop()
-        engine?.close()
+        engine?.close()   // also stops the engine's sensor monitor
         try { locationListener?.let { locationManager?.removeUpdates(it) } } catch (_: Exception) {}
     }
 }

@@ -25,4 +25,19 @@ object LowLight {
         brightnessThreshold: Float = 35f,
         varianceThreshold: Float = 40f
     ): Boolean = meanBrightness < brightnessThreshold && variance < varianceThreshold
+
+    /**
+     * Dim-but-not-blocked scene → detection still runs but recall/accuracy degrade
+     * (Round-2 reliability indicators). Drives the "low light — reduced reliability"
+     * banner so the app is honest in exactly the dusk/night cases a distracted walker
+     * is at most risk. Not "blocked" (that would disable detection entirely, ML-06).
+     *
+     * @param meanBrightness average luma over the sampled grid, 0‥255
+     * @param blocked        the [isBlocked] verdict for this frame (never both at once)
+     */
+    fun isLowLight(
+        meanBrightness: Float,
+        blocked: Boolean,
+        lowLightThreshold: Float = 60f
+    ): Boolean = !blocked && meanBrightness < lowLightThreshold
 }

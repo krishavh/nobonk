@@ -30,8 +30,26 @@ class ApproachTracker(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val iouMatchThreshold: Float = 0.2f,
     private val approachFramesRequired: Int = 2,
-    /** Minimum fill-fraction increase per second to count a frame as "closing". */
-    private val minClosingFillRate: Float = 0.04f,
+    /**
+     * Minimum fill-fraction increase per second to count a frame as "closing".
+     * Raised from 0.04 → 0.12 (Round-2 calibration) so only genuine fast-closers
+     * survive; a slow drift in box size no longer trips "approaching".
+     */
+    private val minClosingFillRate: Float = 0.12f,
+    /**
+     * Constant-bearing collision cone (Round-2 calibration, the biggest false-positive
+     * killer). An object on a real collision course keeps its box centre near the frame
+     * centre; one you'll harmlessly pass drifts laterally. Approach / imminent is only
+     * asserted while |centerX − 0.5| < [bearingCone] has held for [approachFramesRequired]
+     * consecutive frames.
+     */
+    private val bearingCone: Float = 0.15f,
+    /**
+     * Time-to-contact (s) at or below which a closing, on-bearing object is "imminent".
+     * Raised 1.2 → 1.5 s so [DetectionEngine] gets head-on lead time after pipeline
+     * latency (10 fps + hysteresis + linger + inference eats ~0.2–0.4 s).
+     */
+    private val imminentTtcSec: Float = 1.5f,
     private val maxMissedMs: Long = 1500L
 ) {
     private data class Track(
@@ -41,7 +59,8 @@ class ApproachTracker(
         var fill: Float,
         var lastSeen: Long,
         var fillVelocity: Float = 0f,   // fill fraction per second, EMA-smoothed
-        var closingStreak: Int = 0
+        var closingStreak: Int = 0,
+        var centeredStreak: Int = 0     // consecutive frames inside the bearing cone
     )
 
     private val tracks = mutableListOf<Track>()
@@ -54,6 +73,15 @@ class ApproachTracker(
     private var imminentIds: Set<String> = emptySet()
 
     /**
+     * Stable track id for a current-frame detection id, or null if this detection did
+     * not match any existing track (i.e. it's brand new this frame). Lets the engine
+     * mute repeat HIGH re-alerts per *track* rather than per (unstable) detection id.
+     */
+    fun trackIdFor(detectionId: String): String? = detIdToTrackId[detectionId]
+
+    private var detIdToTrackId: Map<String, String> = emptyMap()
+
+    /**
      * Feed the current frame's detections. Returns the set of **detection ids** that
      * are confidently approaching (survived hysteresis).
      */
@@ -61,6 +89,7 @@ class ApproachTracker(
         val now = clock()
         val approaching = mutableSetOf<String>()
         val imminent = mutableSetOf<String>()
+        val idMap = mutableMapOf<String, String>()
         val available = tracks.toMutableList()
 
         for (det in detections) {
@@ -68,6 +97,7 @@ class ApproachTracker(
             val match = bestMatch(det, available)
             if (match != null) {
                 available.remove(match)
+                idMap[det.id] = match.id
                 val dtSec = ((now - match.lastSeen).coerceAtLeast(1L)) / 1000f
                 val instRate = (fill - match.fill) / dtSec
                 // EMA smoothing to reject single-frame noise.
@@ -76,17 +106,27 @@ class ApproachTracker(
                 match.fill = fill
                 match.lastSeen = now
 
+                // Constant-bearing test: is the box centre still in the collision cone?
+                val onBearingNow = kotlin.math.abs(det.boundingBox.centerX - 0.5f) < bearingCone
+                if (onBearingNow) match.centeredStreak++ else match.centeredStreak = 0
+
                 if (match.fillVelocity > minClosingFillRate) {
                     match.closingStreak++
                 } else {
                     match.closingStreak = 0
                 }
-                if (match.closingStreak >= approachFramesRequired) {
+
+                // Approach requires BOTH sustained closing AND a sustained on-bearing
+                // track. A laterally-drifting pass-by fails the bearing gate and is
+                // never flagged, even as its box grows.
+                val closing = match.closingStreak >= approachFramesRequired
+                val onBearing = match.centeredStreak >= approachFramesRequired
+                if (closing && onBearing) {
                     approaching.add(det.id)
-                    // Estimate frames-to-fill; very low → imminent.
+                    // Estimate time-to-contact from fill-growth rate; low → imminent.
                     val remaining = (0.9f - fill).coerceAtLeast(0f)
                     val ttcSec = if (match.fillVelocity > 0f) remaining / match.fillVelocity else Float.MAX_VALUE
-                    if (ttcSec < 1.2f) imminent.add(det.id)
+                    if (ttcSec <= imminentTtcSec) imminent.add(det.id)
                 }
             } else {
                 tracks.add(
@@ -95,7 +135,8 @@ class ApproachTracker(
                         className = det.className,
                         box = det.boundingBox,
                         fill = fill,
-                        lastSeen = now
+                        lastSeen = now,
+                        centeredStreak = if (kotlin.math.abs(det.boundingBox.centerX - 0.5f) < bearingCone) 1 else 0
                     )
                 )
             }
@@ -104,6 +145,7 @@ class ApproachTracker(
         // Drop stale tracks.
         tracks.removeAll { now - it.lastSeen > maxMissedMs }
         imminentIds = imminent
+        detIdToTrackId = idMap
         return approaching
     }
 
@@ -149,5 +191,6 @@ class ApproachTracker(
     fun reset() {
         tracks.clear()
         imminentIds = emptySet()
+        detIdToTrackId = emptyMap()
     }
 }
