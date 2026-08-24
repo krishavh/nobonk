@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto-backup rules for API 30 and below (referenced via
+  android:fullBackupContent). The app already sets android:allowBackup="false",
+  so nothing is backed up regardless. This file is defence-in-depth: if backup is
+  ever enabled, the on-device detection history — which may contain optional
+  coarse-location data — is explicitly excluded so it never leaves the device.
+-->
+<full-backup-content>
+    <exclude domain="file" path="detection_events.json" />
+</full-backup-content>

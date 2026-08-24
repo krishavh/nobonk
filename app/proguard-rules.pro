@@ -54,7 +54,10 @@
 -dontwarn kotlinx.coroutines.debug.*
 
 # ── Android Keystore / Security ───────────────────────────────────────────────
-# Used by EncryptedFile (future SEC-04 work). Keep to avoid issues if added.
+# Precautionary keep for androidx.security.crypto (EncryptedFile / Keystore master
+# key). Only takes effect if the security-crypto dependency is on the classpath;
+# harmless otherwise. Kept so history-at-rest encryption can be added without a
+# ProGuard regression.
 -keep class androidx.security.crypto.** { *; }
 -dontwarn androidx.security.crypto.**
 
