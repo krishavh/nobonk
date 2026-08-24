@@ -24,7 +24,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.persondetection.android"
+        applicationId = "ai.genwhy.nobonk"
         minSdk = 29        // Android 10+ (floor 26 for the SYSTEM_ALERT_WINDOW overlay; 29 ≈ 95%+ device reach)
         targetSdk = 36     // Android 16 — required for new-app submissions (Play API-36 cutoff)
         versionCode = 1
