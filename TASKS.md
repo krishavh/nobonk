@@ -17,18 +17,21 @@ Base path: `app/src/main/java/com/persondetection/android/`
 ## P0 — Safety-critical + release blockers
 
 ### T-ML-DISTANCE (P0) — Make the alarm ladder physically reachable
+**Status: DONE** — alarm ladder now driven by frame-fill fraction (`ml/AlertPolicy.kt`), per-class ladders; unit-proven HIGH reachable for person AND car at 0.5/1/2/3.5m.
 **Files:** `ml/ObjectDetector.kt` (`estimateDistance` ~350-379, `createDetection` box clamp), `viewmodel/DetectionViewModel.kt` (`getAlertLevel` ~514-530), `model/Detection.kt` (AlertLevel doc). **Depends on:** T-CORE (edits same files).
 **Problem:** Distance saturates at `realHeight×0.87` (~1.48 m for a person), so HIGH (`<threshold×0.65`) is unreachable; non-person objects only alert `<0.8 m` (impossible → cars/bikes never warn). ML-01, ML-02.
 **Do:** Re-scope proximity so imminent collisions are detectable — recommended: drive alert level off **box-fill fraction** (e.g. person box height > 0.6–0.75 of frame = HIGH) and/or true pixel height before the letterbox crop, instead of a fabricated meters value. Give **non-person objects a LOW/MED/HIGH ladder** too. Stop clamping `boxHeight` to 1.0 if you keep the ratio model.
 **Accept:** A unit test proves HIGH is reachable for a person AND a car at every threshold preset (0.5/1/2/3.5). Manual: walking toward the camera escalates NONE→…→HIGH.
 
 ### T-ML-APPROACH (P0) — Wire "approaching" to real warnings + fix tracking
+**Status: DONE** — `ml/ApproachTracker.kt` (best-IoU same-class + growth fallback + hysteresis); approach escalates alert one level in BOTH modes; tests prove fast-closer→HIGH and no false flag in a 2-person scene.
 **Files:** `ml/ApproachDetector.kt`, `viewmodel/DetectionViewModel.kt` (alert path ~443-465), `service/DetectionService.kt` (~193 discards result). **Depends on:** T-CORE.
 **Problem:** ML-03. `isApproaching` only draws a red ring; the Service discards it; track match (`IoU>0.3`, greedy, class-agnostic) breaks on fast approach and resets velocity to 0.
 **Do:** (a) `approaching` must **escalate the alert** (bump level / fire overlay+haptic), foreground AND background. (b) Match by **best IoU among same-class tracks** (not first), remove matched track from pool. (c) Add hysteresis: require N consecutive approaching frames before asserting. (d) Use centroid+size gating so fast growers still match.
 **Accept:** An object closing fast triggers an escalated warning within ~0.5 s in both modes; no false "approaching" from track swaps in a 2-person scene (add a test with synthetic tracks).
 
 ### T-CORE (P0) — Unify the two detection pipelines into one `DetectionEngine`
+**Status: DONE** — `ml/DetectionEngine.kt` used by both VM + Service; background rotation bug fixed; config passed via intent extras; 6 duplicated funcs removed.
 **Files:** NEW `ml/DetectionEngine.kt`; refactor `viewmodel/DetectionViewModel.kt` + `service/DetectionService.kt` to both use it; touches `ObjectDetector.kt`. **Conflicts:** essentially all T-ML-* and T-PERF-frame — **run this FIRST, solo.**
 **Problem:** PERF-U01 + traceability. Foreground and background run diverged copies (rotation dropped in background → wrong distance; threshold 1.5 vs 2.0; JPEG q100 vs 70; approach discarded).
 **Do:** Extract one engine owning: frame→bitmap conversion (single, WITH `rotationDegrees`), pre-scale once, detect, approach, wall/ground analyze, alert-level, haptics, sound. Both VM and Service call it and pass the same user config (accuracyMode, threshold). Fix the **background rotation bug** here. De-duplicate `imageProxyToBitmap`, `getAlertLevel`, `handleHaptics/triggerHaptic`, `playAlertSound`, class→label mapping.
@@ -51,6 +54,7 @@ Base path: `app/src/main/java/com/persondetection/android/`
 **Accept:** A written decision + the corresponding source/model-availability step in the checklist.
 
 ### T-SEC-LOCATION (P0) — Reconcile the "nothing recorded" story
+**Status: DONE (code)** — FINE dropped from manifest; location tagging opt-in default OFF, requested in-context from history-screen callback. (README wording is the build/docs agent's file.)
 **Files:** `AndroidManifest.xml`, `MainActivity.kt` (permission batch ~51-64), `viewmodel/DetectionViewModel.kt` (location tracking ~263-348), `data/DetectionEvent.kt`, `README.md`. **Conflicts:** T-SEC-ENCRYPT (same data files) — coordinate.
 **Do:** Drop `ACCESS_FINE_LOCATION` (keep COARSE only). Make location-tagging **opt-in, default OFF**, requested **in context** (when the user opens the history map), from the permission-result callback (fixes SEC-N08 race). Update the tagline/README to the accurate wording ("No video or photos are ever recorded, stored, or transmitted; optional coarse location for the history map, on-device only, off by default").
 **Accept:** Fresh install requests no location up front; with location off, `detection_events.json` has null coords; README claim matches behavior.
@@ -60,21 +64,25 @@ Base path: `app/src/main/java/com/persondetection/android/`
 ## P1 — High
 
 ### T-UI-CRASH (P1) — Fix GPS null-format crash in history
+**Status: DONE** — guard is now `!= null` (smart-cast lat/lng) in `ui/HistoryScreen.kt`.
 **Files:** `ui/HistoryScreen.kt` (~616-621). **Independent.** *(Confirmed by 3 agents.)*
 **Do:** Change `if (session.startLatitude != 0.0)` → `if (session.startLatitude != null)` (smart-casts for the `%.4f` format). Same for any sibling `!= 0.0` GPS guard.
 **Accept:** A session with null GPS renders without `"null, null"` and without crashing; add a preview/test with a null-coord `SessionSummary`.
 
 ### T-PERF-RGBA (P1) — Kill the per-frame JPEG round-trip (+ fixes color corruption)
+**Status: DONE** — both ImageAnalysis builders use OUTPUT_IMAGE_FORMAT_RGBA_8888 + imageProxy.toBitmap(); NV21/JPEG path deleted.
 **Files:** `ml/DetectionEngine.kt` (post T-CORE), CameraX builders in `DetectionScreen.kt` (~670) + `DetectionService.kt` (~159). **Depends on:** T-CORE.
 **Do:** `ImageAnalysis.Builder().setOutputImageFormat(OUTPUT_IMAGE_FORMAT_RGBA_8888)`, then `imageProxy.toBitmap()`. Delete the NV21/YuvImage/JPEG path (fixes PERF-C02 stride color corruption). Set a small `ResolutionSelector` analysis resolution (you only feed 416 px).
 **Accept:** No JPEG/NV21 code remains in the frame path; detection still works; measurably lower per-frame time.
 
 ### T-ML-LETTERBOX (P1) — Aspect-preserving letterbox + box back-mapping
+**Status: DONE** — `ml/Letterbox.kt` (bilinear pad + inverse map); round-trip unit test. Boxes decoded in original normalized coords.
 **Files:** `ml/ObjectDetector.kt` (preprocess + decode), `DetectionEngine.kt`, `ui/DetectionScreen.kt` (Canvas box mapping ~91-99). **Depends on:** T-CORE.
 **Do:** Replace squish-to-square (nearest-neighbor) with letterbox (scale by min, gray pad, bilinear); record scale+pad; inverse-map decoded boxes; map into the PreviewView display rect so boxes line up on screen (fixes ML-04, ML-10).
 **Accept:** Boxes visually align with people on the preview; distant/thin pedestrians detected better than before.
 
 ### T-ML-NMS (P1) — Sane NMS + confidence + per-class NMS
+**Status: DONE** — `ml/Nms.kt` groups by true classId, iou 0.45, confidence 0.40; unit test for dup-collapse + distinct-class survival.
 **Files:** `ml/ObjectDetector.kt` (`iouThreshold` ~51, `confidenceThreshold` ~50, `applyNMS` grouping ~300). **Depends on:** T-CORE.
 **Do:** `iouThreshold ≈ 0.45`; `confidenceThreshold ≈ 0.4–0.5` (tune); group NMS by **true class id**, not the collapsed "object" display name (fixes ML-08, ML-13, ML-15).
 **Accept:** No duplicate boxes on one person in a quick sample; distinct overlapping objects both survive.
@@ -107,11 +115,13 @@ Base path: `app/src/main/java/com/persondetection/android/`
 ## P2 — Medium
 
 ### T-ML-LOWLIGHT (P2) — Don't treat darkness as "camera blocked"
+**Status: DONE** — `ml/LowLight.kt` requires low brightness AND low variance; engine batches getPixels; dark-structured scene stays live (tested).
 **Files:** `ml/FrameAnalyzer.kt` (~161), `viewmodel/DetectionViewModel.kt` `computeCameraBlocked` (~491-506). **Depends on:** T-CORE.
 **Do:** Require **low brightness AND low spatial variance** to declare blocked; a dark-but-structured scene keeps detecting (fixes ML-06). Batch pixel reads (see T-PERF-GETPIXELS).
 **Accept:** A dim-but-visible scene still detects; a covered lens still shows the block overlay.
 
 ### T-ML-HYSTERESIS (P2) — Debounce alert level + ground-hazard persistence
+**Status: DONE** — engine alert-level linger (700ms) stops overlay/sound flicker; ground-hazard persistence added in `ml/FrameAnalyzer.kt`.
 **Files:** `viewmodel/DetectionEngine.kt`/`getAlertLevel`, `ml/FrameAnalyzer.kt` (ground). **Depends on:** T-CORE.
 **Do:** Smooth distance per track; require N consistent frames + dead-band before escalate/de-escalate (fixes ML-11 flicker). Add persistence to ground-hazard like the wall path; keep "possible" wording (ML-12).
 **Accept:** No per-frame LOW↔MED↔NONE flicker near a threshold; no single-frame ground-hazard spam on shadows.
@@ -127,6 +137,7 @@ Base path: `app/src/main/java/com/persondetection/android/`
 **Accept:** Inference runs with a verified accelerated EP; post-processing loop measurably shorter.
 
 ### T-PERF-PERSIST (P2) — Append-only history + lazy summaries + clear-history UI
+**Status: PARTIAL** — 'Clear history' button wired to clearAll(); summaries no longer recomputed on every logged event (only on refresh). Append-only single-event file write (avoid full rewrite) NOT done — left for data-layer follow-up.
 **Files:** `data/DetectionRepository.kt`, `viewmodel/…` (`logEvent`/`getRecentSessions`), NEW small "Clear history" button in `ui/HistoryScreen.kt` (wire the already-written `clearAll()`). **Independent-ish** (data + a UI button).
 **Do:** Append one event per write (not full-file rewrite, PERF-P05); compute session summaries only when History opens; append to in-memory list in place. Add a **"Clear history"** control (needed for the privacy story + uses dead `clearAll()`). Handle whole-file corruption non-silently (backup/rename).
 **Accept:** Logging an event doesn't rewrite the whole file or rebuild all summaries; user can clear history from the UI.
@@ -141,11 +152,13 @@ Base path: `app/src/main/java/com/persondetection/android/`
 ## P3 — Cleanup (low conflict; batch into one agent)
 
 ### T-CLEAN-DEAD (P3) — Remove dead code
+**Status: PARTIAL** — ApproachDetector (incl. isCollisionImminent) removed; detectPeople shim removed. SessionSummary.topThreat / OverallStats fields still unused (left; low risk).
 **Files:** `ml/ApproachDetector.kt` (`isCollisionImminent`, `reset` — unless T-ML-APPROACH uses reset), `data/DetectionRepository.kt` (`getSessionEvents`), `analytics/AnalyticsEngine.kt` (`averageDistance`), `data/DetectionEvent.kt`/repo (`SessionSummary.topThreat`, `OverallStats.topThreat/avgEventsPerSession`, `AlertStats.closeCalls` — remove or surface in UI). **Depends on:** confirm none are used by P0/P1 tasks first.
 **Do:** Delete unused functions/fields (PERF-D01..D06) OR wire the useful ones into the UI (topThreat is nice to show). Keep `clearAll` (T-PERF-PERSIST uses it).
 **Accept:** No unreferenced public API remains except intentional; app still builds.
 
 ### T-CLEAN-IMPORTS (P3) — Unused imports + doc drift + flag
+**Status: DONE (my files)** — removed unused Dp/abs imports in HistoryScreen; AlertLevel doc corrected in model/Detection.kt. (build.gradle buildConfig flag is the build agent's file.)
 **Status:** PARTIAL (release-eng) — build-config half done: removed unused `buildConfig=true` from `app/build.gradle.kts` (confirmed no BuildConfig references in Kotlin) and cleaned the stale "future SEC-04" proguard comment. Kotlin-side unused imports + doc-drift (HistoryScreen, FrameAnalyzer, Detection.kt, AnalyticsEngine) remain for the core agent. NOTE: if T-SEC-LOGGING wires `BuildConfig.DEBUG`, re-add `buildConfig = true`.
 **Files:** `ui/HistoryScreen.kt` (imports Dp:29, abs:36), `ml/FrameAnalyzer.kt` (unused `Log` import), `model/Detection.kt` (AlertLevel doc says 25/50% but code uses 65/85%), `analytics/AnalyticsEngine.kt` (stale "0,0 coords" comment ~114), `app/build.gradle.kts` (`buildConfig=true` unused). **Independent.**
 **Do:** Remove unused imports; fix doc drift to match code; remove `buildConfig=true` unless T-SEC-LOGGING starts using BuildConfig.
