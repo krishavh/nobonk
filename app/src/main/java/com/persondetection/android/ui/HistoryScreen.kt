@@ -26,14 +26,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.persondetection.android.analytics.AnalyticsEngine
 import com.persondetection.android.data.DetectionEvent
 import com.persondetection.android.data.SessionSummary
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 // ── Colour palette ────────────────────────────────────────────────────────────
@@ -61,7 +59,11 @@ private val TextSecondary= Color(0xFF9E9E9E)
 fun HistoryScreen(
     events: List<DetectionEvent>,
     sessions: List<SessionSummary>,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onClearHistory: () -> Unit = {},
+    locationTaggingEnabled: Boolean = false,
+    onEnableLocation: () -> Unit = {},
+    onDisableLocation: () -> Unit = {}
 ) {
     val stats   = remember(events) { AnalyticsEngine.overallStats(events) }
     val hourly  = remember(events) { AnalyticsEngine.warningsByHour(events) }
@@ -82,6 +84,16 @@ fun HistoryScreen(
             // ── Header ─────────────────────────────────────────
             item {
                 Header(onBack = onBack)
+            }
+
+            // ── Controls: location opt-in + clear history ──────
+            item {
+                HistoryControls(
+                    locationEnabled = locationTaggingEnabled,
+                    onEnableLocation = onEnableLocation,
+                    onDisableLocation = onDisableLocation,
+                    onClearHistory = onClearHistory
+                )
             }
 
             // ── Key stat cards ─────────────────────────────────
@@ -173,6 +185,58 @@ private fun Header(onBack: () -> Unit) {
                 fontSize = 12.sp
             )
         }
+    }
+}
+
+// ── Controls (location opt-in + clear history) ──────────────────────────────────
+
+@Composable
+private fun HistoryControls(
+    locationEnabled: Boolean,
+    onEnableLocation: () -> Unit,
+    onDisableLocation: () -> Unit,
+    onClearHistory: () -> Unit
+) {
+    var confirmClear by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Location tagging is OFF by default; the user opts in here, in context.
+        OutlinedButton(
+            onClick = { if (locationEnabled) onDisableLocation() else onEnableLocation() },
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = if (locationEnabled) Green else TextSecondary
+            )
+        ) {
+            Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(if (locationEnabled) "Location ON" else "Tag location", fontSize = 12.sp)
+        }
+        OutlinedButton(
+            onClick = { confirmClear = true },
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Red)
+        ) {
+            Text("Clear history", fontSize = 12.sp)
+        }
+    }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            confirmButton = {
+                TextButton(onClick = { confirmClear = false; onClearHistory() }) {
+                    Text("Delete all", color = Red)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+            title = { Text("Clear all history?") },
+            text = { Text("This permanently deletes every stored detection event from this device.") }
+        )
     }
 }
 
@@ -615,9 +679,13 @@ private fun SessionRow(session: SessionSummary) {
                 Text(
                     buildString {
                         append(AnalyticsEngine.formatDuration(session.durationMinutes))
-                        if (session.startLatitude != 0.0) {
+                        // Guard against null (GPS-less session). The old `!= 0.0` check let a
+                        // null Double? through to String.format → "null, null" / crash (T-UI-CRASH).
+                        val lat = session.startLatitude
+                        val lng = session.startLongitude
+                        if (lat != null && lng != null) {
                             append("  •  ")
-                            append(String.format(Locale.US, "%.4f, %.4f", session.startLatitude, session.startLongitude))
+                            append(String.format(Locale.US, "%.4f, %.4f", lat, lng))
                         }
                     },
                     color = TextSecondary,

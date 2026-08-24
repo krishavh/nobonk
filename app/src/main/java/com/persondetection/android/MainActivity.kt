@@ -35,8 +35,15 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // Camera must be granted; location is optional (gracefully degraded)
+        // Only camera (+ notifications) are requested up front. Location is opt-in.
         hasPermission = permissions[Manifest.permission.CAMERA] == true
+    }
+
+    // In-context COARSE-location opt-in, triggered from the history screen.
+    private val requestLocationLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.enableLocationTagging(applicationContext)
     }
 
     private val overlayPermissionLauncher = registerForActivityResult(
@@ -48,10 +55,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Location is NOT requested here — it is opt-in, in-context (history screen).
         val permissions = mutableListOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.CAMERA
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -81,7 +87,13 @@ class MainActivity : ComponentActivity() {
                                 onBack   = {
                                     viewModel.refreshHistory()   // reload on return
                                     showHistory = false
-                                }
+                                },
+                                onClearHistory = { viewModel.clearHistory() },
+                                locationTaggingEnabled = viewModel.locationTaggingEnabled,
+                                onEnableLocation = {
+                                    requestLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                },
+                                onDisableLocation = { viewModel.disableLocationTagging() }
                             )
                         } else {
                             // ── Main detection screen ─────────────────
@@ -120,8 +132,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startDetectionService() {
+        val mode = viewModel.accuracyMode
         val intent = Intent(this, DetectionService::class.java).apply {
             action = DetectionService.ACTION_START
+            // Hand the user's config to the background pipeline so it matches foreground.
+            putExtra(DetectionService.EXTRA_THRESHOLD, viewModel.distanceThreshold)
+            putExtra(DetectionService.EXTRA_INCLUDE_NONPERSON, viewModel.isObjectDetectionEnabled)
+            putExtra(DetectionService.EXTRA_MODEL, mode.modelFile)
+            putExtra(DetectionService.EXTRA_INPUT_PX, mode.inputPx)
+            putExtra(DetectionService.EXTRA_SKIP_NMS, mode.skipNms)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)

@@ -1,7 +1,6 @@
 package com.persondetection.android.ml
 
 import android.graphics.Bitmap
-import android.util.Log
 import kotlin.math.abs
 
 /**
@@ -46,6 +45,7 @@ class FrameAnalyzer {
     // ── State for wall persistence ──────────────────────────────
 
     private var wallConsecutiveFrames = 0
+    private var groundConsecutiveFrames = 0
 
     // ── Tuning constants ────────────────────────────────────────
 
@@ -62,6 +62,7 @@ class FrameAnalyzer {
         private const val WALL_MIN_MEAN_BRIGHTNESS = 10f      // exclude near-black (camera covered)
         private const val WALL_MAX_MEAN_BRIGHTNESS = 245f     // exclude fully blown-out frames
         private const val WALL_PERSISTENCE_FRAMES = 2         // consecutive frames required
+        private const val GROUND_PERSISTENCE_FRAMES = 2       // consecutive frames (fixes ML-12: no single-frame shadow spam)
 
         // Ground hazard
         private const val GROUND_CELL_COLS = 8
@@ -82,7 +83,13 @@ class FrameAnalyzer {
         }
         isWallDetected = wallConsecutiveFrames >= WALL_PERSISTENCE_FRAMES
 
-        isGroundHazardDetected = checkGroundHazard(bitmap)
+        // Ground hazard: require persistence too, so a single-frame shadow doesn't spam.
+        if (checkGroundHazard(bitmap)) {
+            groundConsecutiveFrames = (groundConsecutiveFrames + 1).coerceAtMost(GROUND_PERSISTENCE_FRAMES + 1)
+        } else {
+            groundConsecutiveFrames = 0
+        }
+        isGroundHazardDetected = groundConsecutiveFrames >= GROUND_PERSISTENCE_FRAMES
     }
 
     // ── Wall detection — adjacent-cell difference ────────────────

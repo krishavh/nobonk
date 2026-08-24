@@ -70,7 +70,6 @@ fun DetectionScreen(
     val phoneAngleHint = viewModel.phoneAngleHint
     val phoneAngleQuality = viewModel.phoneAngleQuality
     val isHardwareAccelerated = viewModel.isHardwareAccelerated
-    val wallDebugScore = viewModel.wallDebugScore
     val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -91,7 +90,7 @@ fun DetectionScreen(
         Canvas(modifier = Modifier.fillMaxSize()) {
             for (detection in detections) {
                 val box = detection.boundingBox
-                val color = viewModel.getDistanceColor(detection.distance)
+                val color = viewModel.colorFor(detection)
 
                 val left = box.left * size.width
                 val top = box.top * size.height
@@ -210,38 +209,11 @@ fun DetectionScreen(
             WallWarningBanner(modifier = Modifier.align(Alignment.TopCenter).padding(top = 110.dp))
         }
 
-        // ── Wall debug badge (bottom-left) — remove once tuned ───────────────
-        // Shows live score + whether the final isWallDetected flag is true
-        // and whether the camera is considered blocked (which gates wall analysis).
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 8.dp, bottom = 8.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            val wallScoreColor = when {
-                wallDebugScore < 18f -> Color(0xFF4CAF50)
-                wallDebugScore < 30f -> Color(0xFFFFB300)
-                else                 -> Color.White.copy(alpha = 0.5f)
-            }
-            Text("Wall score: ${"%.1f".format(wallDebugScore)} (<18=✓)",
-                color = wallScoreColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Text("Detected: ${if (isWallDetected) "YES ✓" else "no"}",
-                color = if (isWallDetected) Color(0xFF4CAF50) else Color.White.copy(alpha = 0.5f),
-                fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Text("Blocked:  ${if (isCameraBlocked) "YES (gates wall)" else "no"}",
-                color = if (isCameraBlocked) Color(0xFFFF5252) else Color.White.copy(alpha = 0.5f),
-                fontSize = 9.sp, fontWeight = FontWeight.Bold)
-        }
-
         // ── Full-screen overlays (highest priority on top) ────────────────────
         if (isCameraBlocked) {
             CameraBlockedOverlay()
         } else {
-            val highAlertDetection = detections.find { viewModel.getAlertLevel(it) == AlertLevel.HIGH }
+            val highAlertDetection = detections.find { it.alertLevel == AlertLevel.HIGH }
             if (highAlertDetection != null) {
                 LookUpOverlay(className = highAlertDetection.className)
             }
@@ -669,6 +641,7 @@ fun CameraPreview(modifier: Modifier = Modifier, onFrameAnalyzed: (androidx.came
             val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
                 .also { it.setAnalyzer(cameraExecutor) { imageProxy -> onFrameAnalyzed(imageProxy) } }
             try {
