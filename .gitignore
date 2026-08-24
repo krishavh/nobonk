@@ -8,3 +8,8 @@ local.properties
 .idea/
 *.iml
 .DS_Store
+*.jks
+*.keystore
+upload.jks
+nobonk-upload.jks
+# NOTE: keep REAL signing creds in ~/.gradle/gradle.properties, never here
