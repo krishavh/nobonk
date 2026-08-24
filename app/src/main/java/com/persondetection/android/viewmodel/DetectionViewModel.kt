@@ -10,7 +10,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Bundle
-import android.util.Log
+import com.persondetection.android.util.Dbg
 import androidx.camera.core.ImageProxy
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
@@ -151,7 +151,7 @@ class DetectionViewModel : ViewModel() {
                 delay(600)
                 isInitializing = false
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize: ${e.message}")
+                Dbg.e(TAG, "Failed to initialize: ${e.message}")
                 initializationStatus = "Error: ${e.message} — tap a model to retry"
                 isInitializing = false
             }
@@ -180,7 +180,7 @@ class DetectionViewModel : ViewModel() {
                 initializationStatus = "Ready — ${mode.family} ${mode.label}"
                 delay(600)
             } catch (e: Exception) {
-                Log.e(TAG, "Model switch failed: ${e.message}")
+                Dbg.e(TAG, "Model switch failed: ${e.message}")
                 initializationStatus = "Failed to load ${mode.modelFile}: ${e.message}"
             } finally {
                 isInitializing = false
@@ -201,7 +201,7 @@ class DetectionViewModel : ViewModel() {
             context, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         if (!coarseGranted) {
-            Log.i(TAG, "Coarse location not granted — tagging stays off")
+            Dbg.i(TAG, "Coarse location not granted — tagging stays off")
             return
         }
         locationTaggingEnabled = true
@@ -225,7 +225,7 @@ class DetectionViewModel : ViewModel() {
                 lastKnownLocation = locationManager?.getLastKnownLocation(provider)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Location tracking failed: ${e.message}")
+            Dbg.w(TAG, "Location tracking failed: ${e.message}")
         }
     }
 
@@ -311,7 +311,7 @@ class DetectionViewModel : ViewModel() {
                     isLowLight = result.lowLight
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Frame processing error: ${e.message}")
+                Dbg.e(TAG, "Frame processing error: ${e.message}")
             } finally {
                 _processingGate.set(false)
             }

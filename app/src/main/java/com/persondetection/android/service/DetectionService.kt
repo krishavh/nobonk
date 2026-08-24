@@ -7,7 +7,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.*
-import android.util.Log
+import com.persondetection.android.util.Dbg
 import android.view.*
 import android.view.animation.LinearInterpolator
 import androidx.camera.core.CameraSelector
@@ -111,7 +111,7 @@ class DetectionService : LifecycleService() {
                     it.startSensors()   // background angle gating (was never wired before)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Model load failed: ${e.message}", e)
+                Dbg.e(TAG, "Model load failed: ${e.message}", e)
                 return@launch
             }
             kotlinx.coroutines.delay(400)   // let the activity release the camera first
@@ -141,7 +141,7 @@ class DetectionService : LifecycleService() {
                 start()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to show scanning indicator", e)
+            Dbg.e(TAG, "Failed to show scanning indicator", e)
         }
     }
 
@@ -158,7 +158,7 @@ class DetectionService : LifecycleService() {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis)
             } catch (e: Exception) {
-                Log.e(TAG, "Camera binding failed", e)
+                Dbg.e(TAG, "Camera binding failed", e)
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -179,7 +179,7 @@ class DetectionService : LifecycleService() {
                     updateNotification("Alert: ${result.highestAlert} — ${result.detections.size} object(s)")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Frame processing error: ${e.message}", e)
+                Dbg.e(TAG, "Frame processing error: ${e.message}", e)
             } finally {
                 gate.set(false)
             }
@@ -202,17 +202,18 @@ class DetectionService : LifecycleService() {
                     hudView = LayoutInflater.from(this).inflate(R.layout.layout_collision_warning, null)
                     windowManager.addView(hudView, params)
                 } catch (e: Exception) {
-                    Log.e(TAG, "HUD add error", e); return
+                    Dbg.e(TAG, "HUD add error", e); return
                 }
             }
             val tv = hudView!!.findViewById<android.widget.TextView>(R.id.warningText)
             tv?.text = message
+            // Opaque, high-contrast backing bar (accessibility: glanceable in motion).
             val bgColor = when {
-                message.contains("ANGLE") || message.contains("PHONE") -> android.graphics.Color.parseColor("#CCD32F2F")
-                message.contains("LOW LIGHT") -> android.graphics.Color.parseColor("#CC37474F")
-                message.contains("STEP") -> android.graphics.Color.parseColor("#CC994400")
-                message.contains("WALL") -> android.graphics.Color.parseColor("#CC1565C0")
-                else -> android.graphics.Color.parseColor("#CCCC0000")
+                message.contains("ANGLE") || message.contains("PHONE") -> android.graphics.Color.parseColor("#FFC62828")
+                message.contains("LOW LIGHT") -> android.graphics.Color.parseColor("#FF263238")
+                message.contains("STEP") -> android.graphics.Color.parseColor("#FF994400")
+                message.contains("WALL") -> android.graphics.Color.parseColor("#FF0D47A1")
+                else -> android.graphics.Color.parseColor("#FFCC0000")
             }
             hudView!!.setBackgroundColor(bgColor)
         } else if (hudView != null) {

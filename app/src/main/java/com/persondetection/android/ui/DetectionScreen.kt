@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -236,22 +238,25 @@ fun DetectionScreen(
 
 @Composable
 fun AngleWarningBanner(modifier: Modifier = Modifier, hint: String, isBad: Boolean) {
-    val bgColor = if (isBad) Color(0xFFD32F2F) else Color(0xFFF57C00)
+    // Solid (opaque) high-contrast bar; meaning is carried by TEXT, not colour/emoji, and
+    // the whole banner is exposed to TalkBack as one description (accessibility pass).
+    val bgColor = if (isBad) Color(0xFFC62828) else Color(0xFFE65100)
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(bgColor.copy(alpha = 0.9f))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .background(bgColor)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics { contentDescription = "Camera angle warning. $hint" },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("📐", fontSize = 18.sp)
+        Text("📐", fontSize = 20.sp)
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = hint,
             color = Color.White,
-            fontSize = 12.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 0.5.sp
+            letterSpacing = 0.3.sp
         )
     }
 }
@@ -263,18 +268,21 @@ fun LowLightBanner(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF37474F).copy(alpha = 0.9f))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .background(Color(0xFF263238))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics {
+                contentDescription = "Low light. Detection reliability is reduced. Stay extra alert."
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("🔅", fontSize = 18.sp)
+        Text("🔅", fontSize = 20.sp)
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = "LOW LIGHT — reduced reliability",
             color = Color.White,
-            fontSize = 13.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 0.5.sp
+            letterSpacing = 0.3.sp
         )
     }
 }
@@ -315,16 +323,17 @@ fun WallWarningBanner(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1565C0).copy(alpha = 0.85f))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .background(Color(0xFF0D47A1))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics { contentDescription = "Obstacle ahead. Watch your path." },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("🧱", fontSize = 16.sp)
+        Text("🧱", fontSize = 18.sp)
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = "Obstacle ahead — watch your path",
             color = Color.White,
-            fontSize = 12.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.3.sp
         )
@@ -602,9 +611,15 @@ fun LookUpOverlay(className: String) {
         animationSpec = infiniteRepeatable(animation = tween(500), repeatMode = RepeatMode.Reverse),
         label = "color"
     )
-    Box(modifier = Modifier.fillMaxSize().background(color), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(color)
+            .semantics { contentDescription = "Look up now. $subtitle. Collision warning." },
+        contentAlignment = Alignment.Center
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(100.dp), tint = Color.White)
+            Icon(Icons.Default.Warning, contentDescription = "Collision warning", modifier = Modifier.size(100.dp), tint = Color.White)
             Spacer(modifier = Modifier.height(16.dp))
             Text("LOOK UP!", color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
             Text(subtitle, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -629,12 +644,12 @@ fun InitializingOverlay(status: String) {
                 Spacer(modifier = Modifier.height(40.dp))
                 Surface(color = Color.White.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp)) {
                     Text(
-                        text = "NOTE: Object detection is in BETA. System is optimizing NPU paths.",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 11.sp,
+                        text = "Assistive backup — not a certified safety device. It can miss hazards. Keep looking up.",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
                         modifier = Modifier.padding(16.dp),
                         textAlign = TextAlign.Center,
-                        lineHeight = 16.sp
+                        lineHeight = 17.sp
                     )
                 }
             }
@@ -644,9 +659,17 @@ fun InitializingOverlay(status: String) {
 
 @Composable
 fun CameraBlockedOverlay() {
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.7f))
+            .semantics {
+                contentDescription = "Camera covered. Detection is paused. Hold the phone so the back camera can see ahead."
+            },
+        contentAlignment = Alignment.Center
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.Yellow)
+            Icon(Icons.Default.Warning, contentDescription = "Camera covered", modifier = Modifier.size(80.dp), tint = Color.Yellow)
             Spacer(modifier = Modifier.height(16.dp))
             Text("CAMERA COVERED", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black)
             Text("Hold phone better for visibility", color = Color.White.copy(alpha = 0.8f), fontSize = 18.sp, textAlign = TextAlign.Center)

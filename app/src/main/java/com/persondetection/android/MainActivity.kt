@@ -1,7 +1,9 @@
 package com.persondetection.android
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -15,9 +17,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import com.persondetection.android.service.DetectionService
 import com.persondetection.android.ui.DetectionScreen
+import com.persondetection.android.ui.FirstRunScreen
 import com.persondetection.android.ui.HistoryScreen
+import com.persondetection.android.ui.LicensesScreen
 import com.persondetection.android.ui.theme.PersonDetectionTheme
 import com.persondetection.android.viewmodel.DetectionViewModel
 
@@ -26,6 +31,9 @@ class MainActivity : ComponentActivity() {
     private var hasPermission by mutableStateOf(false)
     private var canDrawOverlays by mutableStateOf(false)
     private var showHistory by mutableStateOf(false)
+    private var showLicenses by mutableStateOf(false)
+    // First-run rationale + safety-disclaimer gate (shown before any permission request).
+    private var showFirstRun by mutableStateOf(false)
     // Incremented on every onResume so CameraPreview knows to rebind.
     // Wrapping CameraPreview in key(cameraRebindKey) forces Compose to fully
     // recreate the AndroidView — re-running the factory lambda which re-calls
@@ -55,19 +63,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Location is NOT requested here — it is opt-in, in-context (history screen).
-        val permissions = mutableListOf(
-            Manifest.permission.CAMERA
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        val prefs = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE)
+        // Show the rationale + safety disclaimer once, before any permission is requested.
+        showFirstRun = !prefs.getBoolean(PREF_FIRST_RUN_DONE, false)
+        // A returning user may already have granted camera — reflect that so we don't
+        // pointlessly re-prompt or get stuck on a blank screen.
+        hasPermission = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
 
         // Keep the screen on while the app is in the foreground — this is a
         // safety app and the user must not be distracted by a locking screen.
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        requestPermissionLauncher.launch(permissions.toTypedArray())
+        // Only request permissions immediately for returning users; first-run users are
+        // prompted after they read the rationale and tap "continue".
+        if (!showFirstRun && !hasPermission) requestCorePermissions()
         viewModel.initialize(applicationContext)
 
         setContent {
@@ -78,39 +89,63 @@ class MainActivity : ComponentActivity() {
                 ) {
                     canDrawOverlays = Settings.canDrawOverlays(this)
 
-                    if (hasPermission) {
-                        if (showHistory) {
-                            // ── Analytics dashboard ───────────────────
-                            HistoryScreen(
-                                events   = viewModel.historyEvents,
-                                sessions = viewModel.historySessions,
-                                onBack   = {
-                                    viewModel.refreshHistory()   // reload on return
-                                    showHistory = false
-                                },
-                                onClearHistory = { viewModel.clearHistory() },
-                                locationTaggingEnabled = viewModel.locationTaggingEnabled,
-                                onEnableLocation = {
-                                    requestLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-                                },
-                                onDisableLocation = { viewModel.disableLocationTagging() }
-                            )
-                        } else {
-                            // ── Main detection screen ─────────────────
-                            DetectionScreen(
-                                viewModel         = viewModel,
-                                onStartBackground = { startDetectionService() },
-                                onStopBackground  = { stopDetectionService() },
-                                canDrawOverlays   = canDrawOverlays,
-                                onGrantOverlay    = { requestOverlayPermission() },
-                                onShowHistory     = { showHistory = true },
-                                cameraRebindKey   = cameraRebindKey
-                            )
+                    if (showFirstRun) {
+                        // ── First-run rationale + safety disclaimer ────
+                        FirstRunScreen(onContinue = {
+                            prefs.edit().putBoolean(PREF_FIRST_RUN_DONE, true).apply()
+                            showFirstRun = false
+                            if (!hasPermission) requestCorePermissions()
+                        })
+                    } else if (hasPermission) {
+                        when {
+                            showLicenses -> {
+                                // ── Open-source licenses (AGPL §13) ─────
+                                LicensesScreen(onBack = { showLicenses = false })
+                            }
+                            showHistory -> {
+                                // ── Analytics dashboard ─────────────────
+                                HistoryScreen(
+                                    events   = viewModel.historyEvents,
+                                    sessions = viewModel.historySessions,
+                                    onBack   = {
+                                        viewModel.refreshHistory()   // reload on return
+                                        showHistory = false
+                                    },
+                                    onClearHistory = { viewModel.clearHistory() },
+                                    locationTaggingEnabled = viewModel.locationTaggingEnabled,
+                                    onEnableLocation = {
+                                        requestLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                    },
+                                    onDisableLocation = { viewModel.disableLocationTagging() },
+                                    onShowLicenses = { showLicenses = true }
+                                )
+                            }
+                            else -> {
+                                // ── Main detection screen ───────────────
+                                DetectionScreen(
+                                    viewModel         = viewModel,
+                                    onStartBackground = { startDetectionService() },
+                                    onStopBackground  = { stopDetectionService() },
+                                    canDrawOverlays   = canDrawOverlays,
+                                    onGrantOverlay    = { requestOverlayPermission() },
+                                    onShowHistory     = { showHistory = true },
+                                    cameraRebindKey   = cameraRebindKey
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    /** Requests only camera (+ notifications on 13+). Location stays opt-in, in-context. */
+    private fun requestCorePermissions() {
+        val permissions = mutableListOf(Manifest.permission.CAMERA)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        requestPermissionLauncher.launch(permissions.toTypedArray())
     }
 
     override fun onResume() {
@@ -157,5 +192,9 @@ class MainActivity : ComponentActivity() {
             action = DetectionService.ACTION_STOP
         }
         startService(intent)
+    }
+
+    companion object {
+        private const val PREF_FIRST_RUN_DONE = "first_run_done"
     }
 }

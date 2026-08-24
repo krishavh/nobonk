@@ -8,7 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.util.Log
+import com.persondetection.android.util.Dbg
 import com.persondetection.android.model.Detection
 import com.persondetection.android.model.NormBox
 import java.nio.FloatBuffer
@@ -114,10 +114,10 @@ class ObjectDetector(
                 built = candidate
                 builtEp = ep
                 resolvedInput = dim
-                Log.i(TAG, "Execution provider verified: $ep for $modelName")
+                Dbg.i(TAG, "Execution provider verified: $ep for $modelName")
                 break
             } catch (e: Exception) {
-                Log.w(TAG, "EP '$ep' unavailable — trying next. Reason: ${e.message}")
+                Dbg.w(TAG, "EP '$ep' unavailable — trying next. Reason: ${e.message}")
             }
         }
 
@@ -132,18 +132,18 @@ class ObjectDetector(
         floatBuffer = FloatBuffer.allocate(3 * inputSize * inputSize)
 
         val family = if (skipNms) "YOLO26 (NMS-free)" else "YOLO11"
-        Log.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider | HW accel: $isHardwareAccelerated")
+        Dbg.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider | HW accel: $isHardwareAccelerated")
     }
 
     private fun readInputSize(session: OrtSession, modelName: String, requested: Int): Int = try {
         val shape = (session.inputInfo.values.first().info as ai.onnxruntime.TensorInfo).shape
         val modelDim = if (shape.size >= 4 && shape[2] > 0) shape[2].toInt() else requested
         if (modelDim != requested) {
-            Log.w(TAG, "Model $modelName requires ${modelDim}px input (requested ${requested}px) — auto-correcting")
+            Dbg.w(TAG, "Model $modelName requires ${modelDim}px input (requested ${requested}px) — auto-correcting")
         }
         modelDim
     } catch (e: Exception) {
-        Log.w(TAG, "Could not read model input shape — using ${requested}px")
+        Dbg.w(TAG, "Could not read model input shape — using ${requested}px")
         requested
     }
 
@@ -190,7 +190,7 @@ class ObjectDetector(
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Detection error: ${e.message}", e)
+            Dbg.e(TAG, "Detection error: ${e.message}", e)
             emptyList()
         }
     }

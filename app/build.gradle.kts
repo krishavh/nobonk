@@ -80,6 +80,9 @@ android {
 
     buildFeatures {
         compose = true
+        // Enables the generated BuildConfig, whose DEBUG flag gates every Dbg.* log call
+        // so release artifacts emit no app logs (SEC-N04 / T-SEC-LOGGING).
+        buildConfig = true
     }
 
     packaging {

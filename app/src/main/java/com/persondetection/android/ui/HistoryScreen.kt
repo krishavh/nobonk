@@ -63,7 +63,8 @@ fun HistoryScreen(
     onClearHistory: () -> Unit = {},
     locationTaggingEnabled: Boolean = false,
     onEnableLocation: () -> Unit = {},
-    onDisableLocation: () -> Unit = {}
+    onDisableLocation: () -> Unit = {},
+    onShowLicenses: () -> Unit = {}
 ) {
     val stats   = remember(events) { AnalyticsEngine.overallStats(events) }
     val hourly  = remember(events) { AnalyticsEngine.warningsByHour(events) }
@@ -148,6 +149,22 @@ fun HistoryScreen(
             if (events.isEmpty()) {
                 item {
                     EmptyState()
+                }
+            }
+
+            // ── Footer: open-source licenses / source (AGPL §13) ──
+            item {
+                Spacer(Modifier.height(24.dp))
+                TextButton(
+                    onClick = onShowLicenses,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Open-source licenses & source code",
+                        color = Cyan,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -679,6 +696,8 @@ private fun SessionRow(session: SessionSummary) {
                 Text(
                     buildString {
                         append(AnalyticsEngine.formatDuration(session.durationMinutes))
+                        append("  •  mostly ")
+                        append(session.topThreat)
                         // Guard against null (GPS-less session). The old `!= 0.0` check let a
                         // null Double? through to String.format → "null, null" / crash (T-UI-CRASH).
                         val lat = session.startLatitude
@@ -716,7 +735,7 @@ private fun SessionRow(session: SessionSummary) {
                 Column(horizontalAlignment = Alignment.End) {
                     Icon(
                         Icons.Default.Warning,
-                        contentDescription = null,
+                        contentDescription = "High alerts",
                         tint = Red,
                         modifier = Modifier.size(16.dp)
                     )

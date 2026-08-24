@@ -5,7 +5,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
  * Pure, stateless analytics engine.
@@ -85,23 +84,17 @@ object AnalyticsEngine {
         val totalSessions: Int,
         val totalEvents: Int,
         val closeCalls: Int,
-        val avgEventsPerSession: Float,
-        val peakHour: Int,
-        val topThreat: String
+        val peakHour: Int
     )
 
     fun overallStats(events: List<DetectionEvent>): OverallStats {
         val totalSessions = events.map { it.sessionId }.distinct().size
         val closeCalls = events.count { it.alertLevel == "HIGH" && it.isApproaching }
-        val avgPerSession = if (totalSessions > 0) events.size / totalSessions.toFloat() else 0f
-        val topThreat = threatBreakdown(events).firstOrNull()?.first ?: "—"
         return OverallStats(
             totalSessions = totalSessions,
             totalEvents = events.size,
             closeCalls = closeCalls,
-            avgEventsPerSession = avgPerSession,
-            peakHour = peakDangerHour(events),
-            topThreat = topThreat
+            peakHour = peakDangerHour(events)
         )
     }
 
@@ -162,12 +155,6 @@ object AnalyticsEngine {
     }
 
     // ── Distance insights ─────────────────────────────────────────────────────
-
-    /** Average distance of all detected objects across all events. */
-    fun averageDistance(events: List<DetectionEvent>): Float {
-        if (events.isEmpty()) return 0f
-        return events.map { it.distance }.average().toFloat()
-    }
 
     /** Returns a rounded "closest call" distance in metres, or null if no events. */
     fun closestCallDistance(events: List<DetectionEvent>): Float? =

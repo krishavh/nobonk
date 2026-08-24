@@ -7,7 +7,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.util.Log
+import com.persondetection.android.util.Dbg
 import androidx.camera.core.ImageProxy
 import com.persondetection.android.model.AlertLevel
 import com.persondetection.android.model.Detection
@@ -329,7 +329,7 @@ class DetectionEngine(private val appContext: Context) {
                 @Suppress("DEPRECATION") vib.vibrate(pattern, -1)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Haptic failed: ${e.message}")
+            Dbg.e(TAG, "Haptic failed: ${e.message}")
         }
     }
 
@@ -341,7 +341,7 @@ class DetectionEngine(private val appContext: Context) {
             val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             RingtoneManager.getRingtone(appContext, uri)?.play()
         } catch (e: Exception) {
-            Log.e(TAG, "Alert sound failed: ${e.message}")
+            Dbg.e(TAG, "Alert sound failed: ${e.message}")
         }
     }
 

@@ -45,8 +45,10 @@ data class DetectionEvent(
     companion object {
         /** Valid values for alertLevel — rejects any arbitrary string injected via a corrupt file. */
         private val VALID_ALERT_LEVELS = setOf("LOW", "MEDIUM", "HIGH")
-        /** Known COCO classes emitted by ObjectDetector. */
-        private val VALID_CLASS_NAMES  = setOf("person", "bicycle", "car", "motorcycle", "dog", "object")
+        /** Known COCO classes emitted by ObjectDetector.classNameFor (keep in sync). */
+        private val VALID_CLASS_NAMES  = setOf(
+            "person", "bicycle", "car", "motorcycle", "bus", "truck", "dog", "cat", "object"
+        )
 
         fun fromJson(json: JSONObject): DetectionEvent {
             val rawAlert = json.getString("alertLevel")
