@@ -120,6 +120,12 @@ dependencies {
     // ONNX Runtime for ML inference
     implementation(libs.onnxruntime.android)
 
+    // Encrypted on-device history at rest (Keystore master key + EncryptedFile)
+    implementation(libs.androidx.security.crypto)
+
     // Core library desugaring runtime (enables java.time etc. down to minSdk)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    // Unit tests (pure-Kotlin safety-core tests under src/test)
+    testImplementation(libs.junit)
 }
