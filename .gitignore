@@ -13,3 +13,6 @@ local.properties
 upload.jks
 nobonk-upload.jks
 # NOTE: keep REAL signing creds in ~/.gradle/gradle.properties, never here
+
+# AGPL YOLO model weights — exported per docs/MODEL.md, never committed
+app/src/main/assets/*.onnx
