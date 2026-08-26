@@ -44,9 +44,9 @@ class DetectionService : LifecycleService() {
     // Round-2: vehicles/bikes/obstacles ON by default (the marketing promises them, and
     // TTC gating now makes them safe to surface). The intent extra still overrides.
     private var includeNonPerson = true
-    private var modelFile = "yolo11s.onnx"
+    private var modelFile = "yolo26s_416.onnx"
     private var inputPx = 416
-    private var skipNms = false
+    private var skipNms = true
 
     // FPS cap + single-flight gate (fixes PERF-C03: no unbounded background inference).
     private val gate = AtomicBoolean(false)

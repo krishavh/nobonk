@@ -68,7 +68,7 @@ class DetectionViewModel : ViewModel() {
     // Round-2: vehicles/bikes/obstacles ON by default (marketing promises them; TTC
     // gating now makes them safe to surface without sidewalk spam).
     var isObjectDetectionEnabled by mutableStateOf(true)
-    var accuracyMode by mutableStateOf(AccuracyMode.Y11S)
+    var accuracyMode by mutableStateOf(AccuracyMode.Y26S)
 
     var batteryLevel by mutableIntStateOf(100)
         private set
