@@ -20,7 +20,8 @@ package ai.genwhy.nobonk.model
  *                      driven by this value — see [ai.genwhy.nobonk.ml.AlertPolicy]
  *                      — because monocular distance saturates once a person fills the
  *                      frame, which historically made HIGH alerts mathematically
- *                      unreachable. May be [Float.NaN] when no estimate is available.
+ *                      unreachable. May be [Float.NaN] when no estimate is available;
+ *                      consumers should use [Float.isNaN] rather than equality checks.
  * @param className     Human-readable class ("person", "car", …).
  * @param classId       Raw COCO class id (used for per-class NMS grouping).
  *                      Defaults to -1 when the raw id is unknown or irrelevant.
@@ -59,5 +60,9 @@ enum class AlertLevel {
     MEDIUM,
 
     /** Imminent — full-screen LOOK UP + sound. */
-    HIGH
+    HIGH;
+
+    /** True when this level warrants user-visible interruption (sound / full-screen). */
+    val requiresInterruption: Boolean
+        get() = this >= MEDIUM
 }
