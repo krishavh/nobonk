@@ -13,7 +13,8 @@ package ai.genwhy.nobonk.model
  * division by zero when both boxes are degenerate.
  *
  * Note: inputs are expected to be finite; NaN coordinates propagate through
- * comparisons in the usual IEEE-754 way (e.g. [contains] returns false).
+ * comparisons in the usual IEEE-754 way (e.g. [contains] returns false, and
+ * [iou] returns 0f because the overlap checks fail).
  */
 data class NormBox(
     val left: Float,
@@ -53,7 +54,8 @@ data class NormBox(
         val inter = (interRight - interLeft) * (interBottom - interTop)
         // Union = sum of areas minus the double-counted intersection.
         val union = area + other.area - inter
-        // Union can only be ≤ 0 when both boxes are degenerate (zero area).
+        // Union can only be ≤ 0 when both boxes are degenerate (zero area);
+        // the strict `> 0f` check also makes NaN inputs fall through to 0f.
         return if (union > 0f) inter / union else 0f
     }
 
