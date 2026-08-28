@@ -132,7 +132,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // reports an out-of-range magnitude.
         val smoothed = cameraPitchDegrees * PREVIOUS_SAMPLE_WEIGHT +
             rawPitch * (1f - PREVIOUS_SAMPLE_WEIGHT)
-        cameraPitchDegrees = smoothed.coerceIn(-90f, 90f)
+        cameraPitchDegrees = smoothed.coerceIn(PITCH_CLAMP_MIN, PITCH_CLAMP_MAX)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
@@ -150,7 +150,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
          */
         const val PREVIOUS_SAMPLE_WEIGHT = 0.7f
 
-        /** Physically meaningful pitch range in degrees. */
+        /** Physically meaningful pitch range in degrees, used to clamp the smoothed value. */
         const val PITCH_CLAMP_MIN = -90f
         const val PITCH_CLAMP_MAX = 90f
     }
