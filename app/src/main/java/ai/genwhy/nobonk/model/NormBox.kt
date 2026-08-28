@@ -39,14 +39,15 @@ data class NormBox(
      * (both boxes degenerate).
      */
     fun iou(other: NormBox): Float {
-        val il = maxOf(left, other.left)
-        val it = maxOf(top, other.top)
-        val ir = minOf(right, other.right)
-        val ib = minOf(bottom, other.bottom)
+        val interLeft = maxOf(left, other.left)
+        val interTop = maxOf(top, other.top)
+        val interRight = minOf(right, other.right)
+        val interBottom = minOf(bottom, other.bottom)
         // Empty overlap (touching edges count as no intersection).
-        if (il >= ir || it >= ib) return 0f
-        val inter = (ir - il) * (ib - it)
+        if (interLeft >= interRight || interTop >= interBottom) return 0f
+        val inter = (interRight - interLeft) * (interBottom - interTop)
         val union = area + other.area - inter
+        // Union can only be ≤ 0 when both boxes are degenerate (zero area).
         return if (union > 0f) inter / union else 0f
     }
 
@@ -64,7 +65,10 @@ data class NormBox(
          * all in normalized coordinates. Negative sizes produce inverted
          * edges; use [width]/[height] (which clamp to 0) for extents.
          */
-        fun fromCenter(cx: Float, cy: Float, w: Float, h: Float): NormBox =
-            NormBox(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f)
+        fun fromCenter(cx: Float, cy: Float, w: Float, h: Float): NormBox {
+            val halfW = w / 2f
+            val halfH = h / 2f
+            return NormBox(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
+        }
     }
 }
