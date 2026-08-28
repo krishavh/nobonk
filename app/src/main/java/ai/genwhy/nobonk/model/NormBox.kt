@@ -14,7 +14,8 @@ package ai.genwhy.nobonk.model
  *
  * Note: inputs are expected to be finite; NaN coordinates propagate through
  * comparisons in the usual IEEE-754 way (e.g. [contains] returns false, and
- * [iou] returns 0f because the overlap checks fail).
+ * [iou] returns 0f because the overlap checks fail). Infinities are not
+ * specially handled and will propagate through arithmetic as usual.
  */
 data class NormBox(
     val left: Float,
@@ -49,7 +50,8 @@ data class NormBox(
         val interTop = maxOf(top, other.top)
         val interRight = minOf(right, other.right)
         val interBottom = minOf(bottom, other.bottom)
-        // Empty overlap (touching edges count as no intersection).
+        // Empty overlap (touching edges count as no intersection); also
+        // rejects NaN extents, since all comparisons with NaN are false.
         if (interLeft >= interRight || interTop >= interBottom) return 0f
         val inter = (interRight - interLeft) * (interBottom - interTop)
         // Union = sum of areas minus the double-counted intersection.
@@ -64,6 +66,7 @@ data class NormBox(
      *
      * Note: for inverted boxes (right < left or bottom < top) the `..` range
      * is empty, so this is always false — matching empty-range semantics.
+     * NaN coordinates never satisfy a range check and yield false.
      */
     fun contains(px: Float, py: Float): Boolean =
         px in left..right && py in top..bottom
