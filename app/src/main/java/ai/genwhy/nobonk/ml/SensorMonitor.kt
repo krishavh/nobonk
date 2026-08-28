@@ -44,7 +44,13 @@ class SensorMonitor(context: Context) : SensorEventListener {
         sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) // fallback
 
-    /** Camera pitch in degrees, clamped to [-90, 90]. 0 until the first sensor event. */
+    /**
+     * Camera pitch in degrees, clamped to [-90, 90].
+     *
+     * Returns 0 until the first valid sensor event arrives; readings from a
+     * misbehaving driver (NaN/Inf, degenerate vectors) are ignored rather
+     * than propagated.
+     */
     var cameraPitchDegrees: Float = 0f
         private set
 
@@ -60,17 +66,17 @@ class SensorMonitor(context: Context) : SensorEventListener {
     /** Quality bucket derived from the current [cameraPitchDegrees]. */
     val angleQuality: AngleQuality
         get() = when {
-            cameraPitchDegrees <= 72f -> AngleQuality.OK       // everything up to almost-flat is fine
-            cameraPitchDegrees <= 82f -> AngleQuality.WARNING  // phone getting quite flat
-            else                      -> AngleQuality.BAD      // phone is flat, camera at ceiling
+            cameraPitchDegrees <= WARNING_THRESHOLD_DEGREES -> AngleQuality.OK
+            cameraPitchDegrees <= BAD_THRESHOLD_DEGREES -> AngleQuality.WARNING
+            else -> AngleQuality.BAD
         }
 
     /** Human-readable hint shown to the user. Empty when the angle is fine. */
     val angleHint: String
         get() = when {
-            cameraPitchDegrees > 82f -> "TILT PHONE DOWN — camera facing ceiling"
-            cameraPitchDegrees > 72f -> "Tilt phone down slightly for a better view"
-            else                     -> ""
+            cameraPitchDegrees > BAD_THRESHOLD_DEGREES -> "TILT PHONE DOWN — camera facing ceiling"
+            cameraPitchDegrees > WARNING_THRESHOLD_DEGREES -> "Tilt phone down slightly for a better view"
+            else -> ""
         }
 
     // ── Lifecycle ────────────────────────────────────────────────
@@ -126,4 +132,12 @@ class SensorMonitor(context: Context) : SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
+
+    private companion object {
+        /** Above this pitch the camera starts losing its forward view. */
+        const val WARNING_THRESHOLD_DEGREES = 72f
+
+        /** Above this pitch the phone is nearly horizontal, camera at the ceiling. */
+        const val BAD_THRESHOLD_DEGREES = 82f
+    }
 }
