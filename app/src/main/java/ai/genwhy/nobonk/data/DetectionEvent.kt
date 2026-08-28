@@ -67,8 +67,8 @@ data class DetectionEvent(
          * metrics into app state.
          *
          * @throws IllegalArgumentException if `alertLevel` or `className` is not a recognised
-         *   value, or if `distance` is negative (a NaN distance is also rejected, since the
-         *   non-negative check fails for NaN).
+         *   value, or if `distance` is negative or NaN (the non-negative check fails for NaN,
+         *   so NaN is rejected as a side effect).
          * @throws org.json.JSONException if any required key is missing or has the wrong type.
          */
         fun fromJson(json: JSONObject): DetectionEvent {
@@ -83,6 +83,7 @@ data class DetectionEvent(
             }
 
             val dist = json.getDouble("distance").toFloat()
+            // Also rejects NaN, since NaN >= 0f is false.
             require(dist >= 0f) { "distance must be non-negative, got $dist" }
 
             // Read GPS: treat JSON null OR the legacy 0.0/0.0 sentinel as "no fix".
