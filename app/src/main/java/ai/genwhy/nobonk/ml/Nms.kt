@@ -45,26 +45,36 @@ object Nms {
         return detections
             .groupBy { it.classId }
             .flatMapTo(ArrayList(detections.size)) { (_, group) ->
-                val sorted = group.sortedByDescending { it.confidence }
-                val keep = ArrayList<Detection>(sorted.size)
-                // suppressed[i] marks boxes already dropped by an earlier keep;
-                // skipping them keeps the inner loop O(n) per kept box.
-                val suppressed = BooleanArray(sorted.size)
-                for (i in sorted.indices) {
-                    if (suppressed[i]) continue
-                    val kept = sorted[i]
-                    keep.add(kept)
-                    // Suppress every remaining lower-confidence box that overlaps
-                    // the newly kept one. Strictly greater: a box exactly at the
-                    // threshold survives.
-                    val keptBox = kept.boundingBox
-                    for (j in i + 1 until sorted.size) {
-                        if (!suppressed[j] && keptBox.iou(sorted[j].boundingBox) > threshold) {
-                            suppressed[j] = true
-                        }
-                    }
-                }
-                keep
+                suppressWithinClass(group, threshold)
             }
+    }
+
+    /**
+     * Greedy NMS within a single class group: sort by descending confidence,
+     * then repeatedly keep the highest-confidence surviving box and suppress
+     * every remaining box whose IoU with it exceeds [threshold].
+     */
+    private fun suppressWithinClass(group: List<Detection>, threshold: Float): List<Detection> {
+        if (group.isEmpty()) return emptyList()
+        val sorted = group.sortedByDescending { it.confidence }
+        val keep = ArrayList<Detection>(sorted.size)
+        // suppressed[i] marks boxes already dropped by an earlier keep;
+        // skipping them keeps the inner loop O(n) per kept box.
+        val suppressed = BooleanArray(sorted.size)
+        for (i in sorted.indices) {
+            if (suppressed[i]) continue
+            val kept = sorted[i]
+            keep.add(kept)
+            // Suppress every remaining lower-confidence box that overlaps the
+            // newly kept one. Strictly greater: a box exactly at the threshold
+            // survives.
+            val keptBox = kept.boundingBox
+            for (j in i + 1 until sorted.size) {
+                if (!suppressed[j] && keptBox.iou(sorted[j].boundingBox) > threshold) {
+                    suppressed[j] = true
+                }
+            }
+        }
+        return keep
     }
 }
