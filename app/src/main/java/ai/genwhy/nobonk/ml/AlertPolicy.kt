@@ -23,6 +23,9 @@ import ai.genwhy.nobonk.model.NormBox
  *
  * `isApproaching` (from [ApproachTracker]) escalates one level, so a fast closer fires
  * an escalated warning before it fully fills the frame.
+ *
+ * All functions are pure and total: NaN/infinite inputs are normalized rather than
+ * propagated, so no caller path can produce a NaN threshold or an unhandled level.
  */
 object AlertPolicy {
 
@@ -31,14 +34,16 @@ object AlertPolicy {
 
     /**
      * Fill fractions (0‥1 of frame) for HIGH / MEDIUM / LOW at the reference preset.
-     * Must satisfy high > medium > low; [levelFor] re-clamps derived thresholds so
-     * a degenerate ladder still yields strictly ordered cut-offs.
+     *
+     * Callers should satisfy high > medium > low; [levelFor] re-clamps derived
+     * thresholds so even a degenerate ladder still yields strictly ordered cut-offs.
      */
     data class Ladder(val high: Float, val medium: Float, val low: Float)
 
     /**
-     * Base fill-fraction ladder for an object class. Unknown classes fall back to
-     * the person ladder (the most conservative default for a safety app).
+     * Base fill-fraction ladder for an object class. Unknown (including blank or
+     * misspelled) class names fall back to the person ladder — the most conservative
+     * default for a safety app: never silently under-alert on an unrecognized class.
      */
     fun ladderFor(className: String): Ladder = when (className) {
         // Round-2 calibration: fill-only HIGH backstop lowered 0.70 → 0.60 so a head-on
@@ -53,11 +58,12 @@ object AlertPolicy {
     }
 
     /**
-     * Fraction of the frame the object fills, clamped to 0‥1. For an upright person
-     * the box HEIGHT is the reliable proximity cue; wide objects (cars, bikes seen
-     * side-on) fill the frame horizontally as they close, so we take the max of
-     * height and width. The clamp guarantees a finite result in 0‥1 even if the
-     * detector emits out-of-range or NaN box components (NaN fails both comparison
+     * Fraction of the frame the object fills, clamped to 0‥1.
+     *
+     * For an upright person the box HEIGHT is the reliable proximity cue; wide objects
+     * (cars, bikes seen side-on) fill the frame horizontally as they close, so we take
+     * the max of height and width. The clamp guarantees a finite result in 0‥1 even if
+     * the detector emits out-of-range or NaN box components (NaN fails both comparison
      * branches of [Float.coerceIn], so it is normalized to 0 first).
      */
     fun fillFraction(box: NormBox, className: String): Float {
@@ -73,7 +79,8 @@ object AlertPolicy {
      *
      * @param thresholdMeters user preset in meters; values outside 0.25‥10 are clamped
      *        before use, so non-positive or absurd inputs cannot produce a zero or
-     *        negative multiplier. NaN input is treated as the reference preset (multiplier 1).
+     *        negative multiplier. NaN input is treated as the reference preset
+     *        (multiplier 1); ±Infinity collapses to the multiplier bounds (1.7 / 0.55).
      */
     fun sensitivity(thresholdMeters: Float): Float =
         (REFERENCE_THRESHOLD_M / thresholdMeters.saneMeters().coerceIn(0.25f, 10f)).coerceIn(0.55f, 1.7f)
@@ -143,7 +150,7 @@ object AlertPolicy {
 
     /**
      * Normalize a raw distance preset to a finite, positive meter value: NaN → the
-     * reference preset, non-finite infinities → clamped by the caller's bounds.
+     * reference preset; ±Infinity is left as-is and clamped by the caller's bounds.
      */
     private fun Float.saneMeters(): Float =
         if (isNaN()) REFERENCE_THRESHOLD_M else this
