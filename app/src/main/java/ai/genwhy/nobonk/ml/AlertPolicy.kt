@@ -56,7 +56,8 @@ object AlertPolicy {
      * Fraction of the frame the object fills, clamped to 0‥1. For an upright person
      * the box HEIGHT is the reliable proximity cue; wide objects (cars, bikes seen
      * side-on) fill the frame horizontally as they close, so we take the max of
-     * height and width. A null/NaN-free result is guaranteed by the clamp.
+     * height and width. The clamp guarantees a finite result in 0‥1 even if the
+     * detector emits out-of-range box components.
      */
     fun fillFraction(box: NormBox, className: String): Float {
         val h = box.height.coerceIn(0f, 1f)
@@ -79,16 +80,16 @@ object AlertPolicy {
     /**
      * Compute the alert level for one detection.
      *
-     * @param box            normalized bounding box
-     * @param className      object class
+     * @param box             normalized bounding box
+     * @param className       object class
      * @param thresholdMeters user's "alert at N m" preset (sensitivity knob)
-     * @param isApproaching  tracker verdict — escalates one level when true
-     * @param isImminent     tracker time-to-contact verdict (TTC ≤ 1.5 s, on-bearing).
-     *                       When true the alarm is FORCED to HIGH regardless of fill —
-     *                       this is what finally wires the previously-dead collision
-     *                       signal and gives head-on lead time (and is the ONLY way
-     *                       fast vehicles/bikes ever reach HIGH, since their fill never
-     *                       grows early enough at 5–10 m/s).
+     * @param isApproaching   tracker verdict — escalates one level when true
+     * @param isImminent      tracker time-to-contact verdict (TTC ≤ 1.5 s, on-bearing).
+     *                        When true the alarm is FORCED to HIGH regardless of fill —
+     *                        this is what finally wires the previously-dead collision
+     *                        signal and gives head-on lead time (and is the ONLY way
+     *                        fast vehicles/bikes ever reach HIGH, since their fill never
+     *                        grows early enough at 5–10 m/s).
      */
     fun levelFor(
         box: NormBox,
