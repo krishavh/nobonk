@@ -6,15 +6,18 @@ import java.util.UUID
 /**
  * A single recorded warning event captured during an active detection session.
  *
- * @param id            Unique identifier for deduplication
+ * Instances are produced on-device by the detection pipeline and persisted locally
+ * via [toJson]; nothing is ever transmitted off the device.
+ *
+ * @param id            Unique identifier (UUIDv4 by default) used for deduplication
  * @param sessionId     Groups events that happened in the same app session
  * @param timestamp     Unix milliseconds when the event was recorded
- * @param latitude      GPS latitude; null if no fix was available at the time of detection
- * @param longitude     GPS longitude; null if no fix was available at the time of detection
- * @param className     Detected object class ("person", "car", etc.)
+ * @param latitude      GPS latitude; `null` if no fix was available at the time of detection
+ * @param longitude     GPS longitude; `null` if no fix was available at the time of detection
+ * @param className     Detected object class ("person", "car", etc.); see [Companion.VALID_CLASS_NAMES]
  * @param distance      Estimated distance in metres; must be non-negative
  * @param alertLevel    Severity: "LOW", "MEDIUM", or "HIGH"
- * @param isApproaching Whether the object was closing distance
+ * @param isApproaching Whether the object was closing distance at the time of the event
  */
 data class DetectionEvent(
     val id: String = UUID.randomUUID().toString(),
@@ -32,14 +35,15 @@ data class DetectionEvent(
      *
      * GPS coordinates are stored as JSON null when no fix was available, so that
      * "no GPS fix" is distinguishable from a genuine coordinate near 0.0/0.0.
-     * Legacy records written with the 0.0/0.0 sentinel are normalised in [Companion.fromJson].
+     * Legacy records written with the 0.0/0.0 sentinel are normalised back to
+     * `null` coordinates in [Companion.fromJson].
      */
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
         put("sessionId", sessionId)
         put("timestamp", timestamp)
-        put("latitude", if (latitude != null) latitude else JSONObject.NULL)
-        put("longitude", if (longitude != null) longitude else JSONObject.NULL)
+        put("latitude", latitude ?: JSONObject.NULL)
+        put("longitude", longitude ?: JSONObject.NULL)
         put("className", className)
         put("distance", distance.toDouble())
         put("alertLevel", alertLevel)
@@ -47,7 +51,7 @@ data class DetectionEvent(
     }
 
     companion object {
-        /** Valid values for alertLevel — rejects any arbitrary string injected via a corrupt file. */
+        /** Valid values for [DetectionEvent.alertLevel] — rejects arbitrary strings injected via a corrupt file. */
         private val VALID_ALERT_LEVELS = setOf("LOW", "MEDIUM", "HIGH")
 
         /** Known COCO classes emitted by ObjectDetector.classNameFor (keep in sync). */
@@ -58,15 +62,18 @@ data class DetectionEvent(
         /**
          * Deserialises a [DetectionEvent] previously written by [toJson].
          *
+         * Unrecognised `alertLevel`/`className` values and negative distances are rejected
+         * so a corrupt or tampered JSON file cannot inject arbitrary strings or nonsense
+         * metrics into app state.
+         *
          * @throws IllegalArgumentException if `alertLevel` or `className` is not a recognised
-         *   value, or if `distance` is negative — this guards against corrupt or tampered files.
+         *   value, or if `distance` is negative.
+         * @throws org.json.JSONException if any required key is missing or has the wrong type.
          */
         fun fromJson(json: JSONObject): DetectionEvent {
             val rawAlert = json.getString("alertLevel")
             val rawClass = json.getString("className")
 
-            // Reject unrecognised values so a corrupt/tampered JSON file cannot
-            // inject arbitrary strings into app state or analytics.
             require(rawAlert in VALID_ALERT_LEVELS) {
                 "Invalid alertLevel '$rawAlert' — expected one of $VALID_ALERT_LEVELS"
             }
@@ -104,8 +111,14 @@ data class DetectionEvent(
 /**
  * Lightweight summary computed per session for the session list UI.
  *
- * @property durationMinutes Session length in whole minutes; never negative because
- *   [endTimestamp] is expected to be >= [startTimestamp] (clamped defensively to 0).
+ * @property sessionId       Identifier of the summarised session
+ * @property startTimestamp  Unix milliseconds when the session started
+ * @property endTimestamp    Unix milliseconds when the session ended
+ * @property totalEvents     Total number of [DetectionEvent]s recorded in the session
+ * @property highAlerts      Number of events whose alertLevel was "HIGH"
+ * @property topThreat       Most frequently detected className in the session
+ * @property startLatitude   GPS latitude at session start; `null` when no fix was available
+ * @property startLongitude  GPS longitude at session start; `null` when no fix was available
  */
 data class SessionSummary(
     val sessionId: String,
@@ -113,9 +126,17 @@ data class SessionSummary(
     val endTimestamp: Long,
     val totalEvents: Int,
     val highAlerts: Int,
-    val topThreat: String,              // most common className
-    val startLatitude: Double?,         // null when no GPS fix at session start
-    val startLongitude: Double?         // null when no GPS fix at session start
+    val topThreat: String,
+    val startLatitude: Double?,
+    val startLongitude: Double?
 ) {
-    val durationMinutes: Long get() = ((endTimestamp - startTimestamp).coerceAtLeast(0L)) / 60_000
+    /**
+     * Session length in whole minutes.
+     *
+     * A negative [SessionSummary.endTimestamp] minus [SessionSummary.startTimestamp]
+     * (e.g. from a clock adjustment mid-session) is clamped to zero so the UI never
+     * shows a negative duration.
+     */
+    val durationMinutes: Long
+        get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / 60_000L
 }
