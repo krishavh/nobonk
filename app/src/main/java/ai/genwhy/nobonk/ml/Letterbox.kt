@@ -10,17 +10,21 @@ import ai.genwhy.nobonk.model.NormBox
  * mis-placing boxes on the preview. Here we scale by the min factor, pad the short
  * axis, and record the transform so decoded boxes can be inverse-mapped back to the
  * ORIGINAL frame's normalized coordinates — which then line up on the PreviewView.
+ *
+ * All functions are pure (no allocation beyond the returned values) and safe to call
+ * from any thread.
  */
 object Letterbox {
     /**
      * Records the letterbox transform for one frame.
      *
-     * @property srcW source frame width in pixels (must be > 0)
-     * @property srcH source frame height in pixels (must be > 0)
-     * @property size model input edge length in pixels (must be > 0)
-     * @property scale factor applied to the source to fit inside [size]×[size]
-     * @property padX  left/right padding in model pixels
-     * @property padY  top/bottom padding in model pixels
+     * @property srcW source frame width in pixels (must be > 0 for a usable transform)
+     * @property srcH source frame height in pixels (must be > 0 for a usable transform)
+     * @property size model input edge length in pixels (must be > 0 for a usable transform)
+     * @property scale factor applied to the source to fit inside [size]×[size];
+     *   0 for degenerate (non-positive) inputs
+     * @property padX left/right padding in model pixels (half the leftover width each side)
+     * @property padY top/bottom padding in model pixels (half the leftover height each side)
      */
     data class Transform(
         val srcW: Int,
@@ -45,7 +49,8 @@ object Letterbox {
      * [size]×[size] model input, preserving aspect ratio and centering the content.
      *
      * Degenerate inputs (non-positive dimensions) fall back to a no-op transform
-     * (scale 0, full padding) rather than throwing or producing NaN.
+     * (scale 0, zero padding) rather than throwing or producing NaN; such transforms
+     * report [Transform.isUsable] == false and map boxes to all zeros.
      */
     fun compute(srcW: Int, srcH: Int, size: Int): Transform {
         if (srcW <= 0 || srcH <= 0 || size <= 0) {
@@ -54,6 +59,7 @@ object Letterbox {
         // min factor keeps the whole frame inside the square input (aspect preserved).
         val scale = minOf(size.toFloat() / srcW, size.toFloat() / srcH)
         // Center the scaled content: leftover space on each axis is split evenly.
+        // scale <= 1 guarantees the leftover (and thus padding) is non-negative.
         val padX = (size - srcW * scale) / 2f
         val padY = (size - srcH * scale) / 2f
         return Transform(srcW, srcH, size, scale, padX, padY)
@@ -83,6 +89,9 @@ object Letterbox {
     /**
      * Forward map: a normalized-original box → model pixel coords as
      * `[left, top, right, bottom]`. (For tests.)
+     *
+     * For a degenerate transform every coordinate collapses to the padding value
+     * (0 for the fallback transform produced by [compute]).
      */
     fun originalNormToModelPx(
         box: NormBox, t: Transform
