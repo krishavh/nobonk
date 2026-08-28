@@ -25,14 +25,15 @@ object Nms {
      *
      * @param detections detections to filter; may be empty
      * @param iouThreshold overlap above which a lower-confidence box is
-     *   suppressed; values outside 0..1 are clamped to that range
+     *   suppressed; values outside 0..1 (including NaN) are clamped to 0..1
      * @return the surviving detections, ordered by class group then descending
-     *   confidence
+     *   confidence; never null
      */
     fun apply(detections: List<Detection>, iouThreshold: Float = 0.45f): List<Detection> {
         if (detections.isEmpty()) return emptyList()
         // Clamp so a caller passing e.g. 1.5f or -0.1f can't silently disable NMS
-        // or suppress everything.
+        // or suppress everything. NaN coerces to the low bound (0f), which is the
+        // most conservative (most suppressive) behavior.
         val threshold = iouThreshold.coerceIn(0f, 1f)
         return detections
             .groupBy { it.classId }
