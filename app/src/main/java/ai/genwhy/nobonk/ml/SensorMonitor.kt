@@ -88,17 +88,20 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // Some drivers deliver fewer than 3 components; bail out rather than crash.
         if (values.size < 3) return
 
-        // Device axes (portrait):
-        //   y → up along phone     z → out of screen (toward user)
-        // Camera optical axis = -z direction.
-        // Pitch = angle of -z relative to the horizontal plane.
         val gy = values[1]
         val gz = values[2]
 
         // Degenerate reading (all-zero vector during sensor warm-up) — atan2(0,0)
         // is well-defined as 0 but the value is meaningless, so skip it.
         if (gy == 0f && gz == 0f) return
+        // Guard against NaN/Inf components from a misbehaving driver.
+        if (!gy.isFinite() || !gz.isFinite()) return
 
+        // Device axes (portrait):
+        //   y → up along phone     z → out of screen (toward user)
+        // Camera optical axis = -z direction.
+        // Pitch = angle of -z relative to the horizontal plane.
+        //
         // atan2(-gz, -gy):
         //   phone vertical (screen at user)  → (0, 9.8)  → 0°
         //   phone tilted back (camera up)    → (+, +)     → positive
