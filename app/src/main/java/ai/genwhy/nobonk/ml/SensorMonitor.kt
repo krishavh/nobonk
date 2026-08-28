@@ -6,7 +6,6 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import kotlin.math.atan2
-import kotlin.math.sqrt
 
 /**
  * Monitors phone orientation via the gravity sensor and exposes the camera
@@ -37,7 +36,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
     /** Gravity sensor, falling back to the raw accelerometer if unavailable. */
-    private val gravitySensor =
+    private val gravitySensor: Sensor? =
         sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) // fallback
 
