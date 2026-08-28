@@ -63,8 +63,9 @@ object Letterbox {
      * Map a box given in MODEL pixel coordinates (0‥size, as YOLO emits) back to the
      * original frame's normalized coordinates (0‥1), removing pad + scale.
      *
-     * Coordinates are clamped to 0‥1 and re-ordered so left ≤ right, top ≤ bottom.
-     * If the transform is degenerate (zero scaled extent), the result is all zeros.
+     * Coordinates are clamped to 0‥1 (NaN inputs are treated as 0) and re-ordered so
+     * left ≤ right, top ≤ bottom. If the transform is degenerate (zero scaled extent),
+     * the result is all zeros.
      */
     fun boxToOriginalNorm(
         left: Float, top: Float, right: Float, bottom: Float, t: Transform
@@ -72,10 +73,10 @@ object Letterbox {
         if (!t.isUsable) return NormBox(0f, 0f, 0f, 0f)
         val invW = 1f / t.scaledW
         val invH = 1f / t.scaledH
-        val ol = ((left - t.padX) * invW).coerceIn(0f, 1f)
-        val ot = ((top - t.padY) * invH).coerceIn(0f, 1f)
-        val or = ((right - t.padX) * invW).coerceIn(0f, 1f)
-        val ob = ((bottom - t.padY) * invH).coerceIn(0f, 1f)
+        val ol = clamp01((left - t.padX) * invW)
+        val ot = clamp01((top - t.padY) * invH)
+        val or = clamp01((right - t.padX) * invW)
+        val ob = clamp01((bottom - t.padY) * invH)
         return NormBox(minOf(ol, or), minOf(ot, ob), maxOf(ol, or), maxOf(ot, ob))
     }
 
@@ -91,4 +92,11 @@ object Letterbox {
         box.right * t.scaledW + t.padX,
         box.bottom * t.scaledH + t.padY
     )
+
+    /**
+     * Clamp to 0‥1, mapping NaN to 0. Plain [Float.coerceIn] would propagate NaN
+     * (its comparisons both fail), which would poison downstream box math.
+     */
+    private fun clamp01(v: Float): Float =
+        if (v.isNaN()) 0f else v.coerceIn(0f, 1f)
 }
