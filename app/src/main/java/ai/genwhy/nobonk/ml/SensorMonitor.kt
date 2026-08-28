@@ -40,14 +40,16 @@ class SensorMonitor(context: Context) : SensorEventListener {
         sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) // fallback
 
-    /** Camera pitch in degrees. Updated at UI rate; 0 until first sensor event. */
+    /** Camera pitch in degrees, clamped to [-90, 90]. 0 until the first sensor event. */
     var cameraPitchDegrees: Float = 0f
         private set
 
     /**
-     * OK      → any normal phone-holding posture, detection works well
-     * WARNING → phone getting too flat, camera losing its forward view
-     * BAD     → phone nearly horizontal, camera looking at ceiling
+     * Quality bucket derived from the current [cameraPitchDegrees].
+     *
+     *  [AngleQuality.OK]      → any normal phone-holding posture, detection works well
+     *  [AngleQuality.WARNING] → phone getting too flat, camera losing its forward view
+     *  [AngleQuality.BAD]     → phone nearly horizontal, camera looking at ceiling
      */
     enum class AngleQuality { OK, WARNING, BAD }
 
@@ -59,7 +61,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
             else                      -> AngleQuality.BAD      // phone is flat, camera at ceiling
         }
 
-    /** Human-readable hint shown to the user. Empty when angle is fine. */
+    /** Human-readable hint shown to the user. Empty when the angle is fine. */
     val angleHint: String
         get() = when {
             cameraPitchDegrees > 82f -> "TILT PHONE DOWN — camera facing ceiling"
@@ -91,11 +93,11 @@ class SensorMonitor(context: Context) : SensorEventListener {
         val gy = values[1]
         val gz = values[2]
 
+        // Guard against NaN/Inf components from a misbehaving driver.
+        if (!gy.isFinite() || !gz.isFinite()) return
         // Degenerate reading (all-zero vector during sensor warm-up) — atan2(0,0)
         // is well-defined as 0 but the value is meaningless, so skip it.
         if (gy == 0f && gz == 0f) return
-        // Guard against NaN/Inf components from a misbehaving driver.
-        if (!gy.isFinite() || !gz.isFinite()) return
 
         // Device axes (portrait):
         //   y → up along phone     z → out of screen (toward user)
@@ -108,10 +110,15 @@ class SensorMonitor(context: Context) : SensorEventListener {
         //   phone tilted forward (camera dn) → (-, +)     → negative
         val rawPitch = Math.toDegrees(atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
 
-        // Light EMA smoothing to avoid jitter; clamp guards against NaN/Inf
-        // from a misbehaving driver corrupting the running average.
+        // Light EMA smoothing to avoid jitter; the clamp keeps the running
+        // average inside the physically meaningful range even if a driver
+        // ever reports an out-of-range magnitude.
         val smoothed = cameraPitchDegrees * 0.7f + rawPitch * 0.3f
-        cameraPitchDegrees = if (smoothed.isFinite()) smoothed else cameraPitchDegrees
+        cameraPitchDegrees = if (smoothed.isFinite()) {
+            smoothed.coerceIn(-90f, 90f)
+        } else {
+            cameraPitchDegrees
+        }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
