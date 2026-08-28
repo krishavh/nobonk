@@ -44,8 +44,9 @@ object AlertPolicy {
      * Base fill-fraction ladder for an object class. Unknown (including blank or
      * misspelled) class names fall back to the person ladder — the most conservative
      * default for a safety app: never silently under-alert on an unrecognized class.
+     * Class matching is case-insensitive and ignores surrounding whitespace.
      */
-    fun ladderFor(className: String): Ladder = when (className) {
+    fun ladderFor(className: String): Ladder = when (className.normalizedClass()) {
         // Round-2 calibration: fill-only HIGH backstop lowered 0.70 → 0.60 so a head-on
         // person clears HIGH ~0.15 s earlier (fill-only fired at ~0.75 s to collision —
         // too late after pipeline latency). The 0.85 cap in levelFor keeps HIGH reachable.
@@ -69,7 +70,7 @@ object AlertPolicy {
     fun fillFraction(box: NormBox, className: String): Float {
         val h = box.height.saneFraction()
         val w = box.width.saneFraction()
-        return if (className == "person") h else maxOf(h, w)
+        return if (className.normalizedClass() == "person") h else maxOf(h, w)
     }
 
     /**
@@ -140,6 +141,13 @@ object AlertPolicy {
         AlertLevel.MEDIUM -> AlertLevel.HIGH
         AlertLevel.HIGH   -> AlertLevel.HIGH
     }
+
+    /**
+     * Canonical form of a detector class label: trimmed and lower-cased, so
+     * "Person" / " PERSON " match the ladders above. Unknown labels fall back to
+     * the person ladder in [ladderFor], the most conservative default.
+     */
+    private fun String.normalizedClass(): String = trim().lowercase()
 
     /**
      * Normalize a raw box dimension to a finite fraction in 0‥1: NaN → 0, then clamp.
