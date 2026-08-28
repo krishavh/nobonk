@@ -83,6 +83,7 @@ object Letterbox {
         val ot = clamp01((top - t.padY) * invH)
         val or = clamp01((right - t.padX) * invW)
         val ob = clamp01((bottom - t.padY) * invH)
+        // Re-order in case the detector emitted corners in an unexpected order.
         return NormBox(minOf(ol, or), minOf(ot, ob), maxOf(ol, or), maxOf(ot, ob))
     }
 
