@@ -56,7 +56,8 @@ object Letterbox {
         if (srcW <= 0 || srcH <= 0 || size <= 0) {
             return Transform(srcW, srcH, size, scale = 0f, padX = 0f, padY = 0f)
         }
-        // min factor keeps the whole frame inside the square input (aspect preserved).
+        // The min of the two per-axis factors keeps the whole frame inside the square
+        // input while preserving aspect ratio; the other axis is then padded.
         val scale = minOf(size.toFloat() / srcW, size.toFloat() / srcH)
         // Center the scaled content: leftover space on each axis is split evenly.
         // scale <= 1 guarantees the leftover (and thus padding) is non-negative.
@@ -77,6 +78,7 @@ object Letterbox {
         left: Float, top: Float, right: Float, bottom: Float, t: Transform
     ): NormBox {
         if (!t.isUsable) return NormBox(0f, 0f, 0f, 0f)
+        // Precompute reciprocals once: divide-by-scaled-extent undoes the forward scale.
         val invW = 1f / t.scaledW
         val invH = 1f / t.scaledH
         val ol = clamp01((left - t.padX) * invW)
