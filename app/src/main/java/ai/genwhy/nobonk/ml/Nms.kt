@@ -54,9 +54,10 @@ object Nms {
                     // Suppress every remaining lower-confidence box that overlaps
                     // the newly kept one. Strictly greater: a box exactly at the
                     // threshold survives.
+                    val keptBox = sorted[i].boundingBox
                     for (j in i + 1 until sorted.size) {
                         if (suppressed[j]) continue
-                        if (sorted[i].boundingBox.iou(sorted[j].boundingBox) > threshold) {
+                        if (keptBox.iou(sorted[j].boundingBox) > threshold) {
                             suppressed[j] = true
                         }
                     }
