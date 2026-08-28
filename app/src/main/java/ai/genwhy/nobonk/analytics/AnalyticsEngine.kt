@@ -26,6 +26,7 @@ object AnalyticsEngine {
      */
     fun warningsByHour(events: List<DetectionEvent>): IntArray {
         val counts = IntArray(24)
+        if (events.isEmpty()) return counts
         val cal = Calendar.getInstance()
         for (ev in events) {
             if (ev.timestamp <= 0L) continue
@@ -39,7 +40,8 @@ object AnalyticsEngine {
 
     /**
      * Returns the hour of day (0–23) with the highest event count.
-     * Ties resolve to the earliest hour. Returns -1 if there are no events.
+     * Ties resolve to the earliest hour. Returns -1 if there are no events
+     * (or all events were filtered out as timestamp-less).
      */
     fun peakDangerHour(events: List<DetectionEvent>): Int {
         if (events.isEmpty()) return -1
@@ -52,14 +54,17 @@ object AnalyticsEngine {
      * Formats an hour of day (0–23) as a human-readable 12-hour string,
      * e.g. 0 → "12 AM", 13 → "1 PM".
      * Returns "N/A" for negative sentinels (such as [peakDangerHour]'s no-data result).
+     * Hours above 23 are clamped into the valid range rather than producing
+     * nonsense output.
      */
     fun formatHour(hour: Int): String {
         if (hour < 0) return "N/A"
-        val suffix = if (hour < 12) "AM" else "PM"
+        val h24 = hour % 24
+        val suffix = if (h24 < 12) "AM" else "PM"
         val h = when {
-            hour == 0  -> 12   // midnight renders as "12 AM"
-            hour <= 12 -> hour
-            else       -> hour - 12
+            h24 == 0  -> 12   // midnight renders as "12 AM"
+            h24 <= 12 -> h24
+            else      -> h24 - 12
         }
         return "$h $suffix"
     }
@@ -97,10 +102,20 @@ object AnalyticsEngine {
      * [AlertStats.total] only.
      */
     fun alertStats(events: List<DetectionEvent>): AlertStats {
-        val low = events.count { it.alertLevel == "LOW" }
-        val medium = events.count { it.alertLevel == "MEDIUM" }
-        val high = events.count { it.alertLevel == "HIGH" }
-        val closeCalls = events.count { it.alertLevel == "HIGH" && it.isApproaching }
+        var low = 0
+        var medium = 0
+        var high = 0
+        var closeCalls = 0
+        for (ev in events) {
+            when (ev.alertLevel) {
+                "LOW"    -> low++
+                "MEDIUM" -> medium++
+                "HIGH"   -> {
+                    high++
+                    if (ev.isApproaching) closeCalls++
+                }
+            }
+        }
         return AlertStats(events.size, low, medium, high, closeCalls)
     }
 
@@ -138,8 +153,8 @@ object AnalyticsEngine {
      * Greedily clusters events by GPS position and returns hotspots sorted by
      * event count descending, up to [maxClusters].
      *
-     * Events without a GPS fix (null latitude/longitude) are excluded.
-     * A non-positive [maxClusters] yields an empty list.
+     * Events without a GPS fix (null latitude/longitude) are excluded, as are
+     * non-finite coordinates. A non-positive [maxClusters] yields an empty list.
      *
      * Clustering uses a Manhattan-style degree distance; ~0.0005° ≈ 55 m at the
      * equator, so points within that box of a cluster's running centroid join it.
