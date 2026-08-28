@@ -60,9 +60,10 @@ object Letterbox {
         // input while preserving aspect ratio; the other axis is then padded.
         val scale = minOf(size.toFloat() / srcW, size.toFloat() / srcH)
         // Center the scaled content: leftover space on each axis is split evenly.
-        // scale <= 1 guarantees the leftover (and thus padding) is non-negative.
-        val padX = (size - srcW * scale) / 2f
-        val padY = (size - srcH * scale) / 2f
+        // scale <= 1 guarantees the leftover (and thus padding) is non-negative;
+        // coerceAtLeast(0f) is a cheap belt-and-braces against float rounding.
+        val padX = ((size - srcW * scale) / 2f).coerceAtLeast(0f)
+        val padY = ((size - srcH * scale) / 2f).coerceAtLeast(0f)
         return Transform(srcW, srcH, size, scale, padX, padY)
     }
 
@@ -78,7 +79,8 @@ object Letterbox {
         left: Float, top: Float, right: Float, bottom: Float, t: Transform
     ): NormBox {
         if (!t.isUsable) return NormBox(0f, 0f, 0f, 0f)
-        // Precompute reciprocals once: divide-by-scaled-extent undoes the forward scale.
+        // Precompute reciprocals once: dividing by the scaled extent undoes the
+        // forward scale, and subtracting the pad removes the centering offset.
         val invW = 1f / t.scaledW
         val invH = 1f / t.scaledH
         val ol = clamp01((left - t.padX) * invW)
