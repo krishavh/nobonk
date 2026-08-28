@@ -34,7 +34,7 @@ data class NormBox(
     val centerY: Float get() = (top + bottom) * 0.5f
 
     /**
-     * Intersection-over-Union with [other], in [0f‥1f].
+     * Intersection-over-Union with [other], in 0f‥1f.
      *
      * Returns 0f when the boxes are disjoint, touch only at an edge/corner
      * (zero-area intersection), or when the union area is zero (both boxes
@@ -48,6 +48,7 @@ data class NormBox(
         // Empty overlap (touching edges count as no intersection).
         if (interLeft >= interRight || interTop >= interBottom) return 0f
         val inter = (interRight - interLeft) * (interBottom - interTop)
+        // Union = sum of areas minus the double-counted intersection.
         val union = area + other.area - inter
         // Union can only be ≤ 0 when both boxes are degenerate (zero area).
         return if (union > 0f) inter / union else 0f
