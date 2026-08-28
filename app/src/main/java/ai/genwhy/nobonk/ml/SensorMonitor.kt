@@ -122,7 +122,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
         // Light EMA smoothing (70% previous / 30% new) to avoid jitter; the clamp
         // keeps the running average inside the physically meaningful range even
-        // if a driver ever reports an out-of-range magnitude.
+        // if a driver ever reports an out-of-range magnitude. A non-finite raw
+        // pitch (impossible after the guards above, but cheap to defend) leaves
+        // the previous reading untouched.
         val smoothed = cameraPitchDegrees * 0.7f + rawPitch * 0.3f
         cameraPitchDegrees = if (smoothed.isFinite()) {
             smoothed.coerceIn(-90f, 90f)
