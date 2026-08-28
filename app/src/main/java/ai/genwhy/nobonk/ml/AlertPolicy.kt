@@ -29,9 +29,17 @@ object AlertPolicy {
     /** Preset at which the base ladder fractions below apply unscaled. */
     private const val REFERENCE_THRESHOLD_M = 2.0f
 
-    /** Fill fractions (0‥1 of frame) for HIGH / MEDIUM / LOW at the reference preset. */
+    /**
+     * Fill fractions (0‥1 of frame) for HIGH / MEDIUM / LOW at the reference preset.
+     * Must satisfy high > medium > low; [levelFor] re-clamps derived thresholds so
+     * a degenerate ladder still yields strictly ordered cut-offs.
+     */
     data class Ladder(val high: Float, val medium: Float, val low: Float)
 
+    /**
+     * Base fill-fraction ladder for an object class. Unknown classes fall back to
+     * the person ladder (the most conservative default for a safety app).
+     */
     fun ladderFor(className: String): Ladder = when (className) {
         // Round-2 calibration: fill-only HIGH backstop lowered 0.70 → 0.60 so a head-on
         // person clears HIGH ~0.15 s earlier (fill-only fired at ~0.75 s to collision —
@@ -45,9 +53,10 @@ object AlertPolicy {
     }
 
     /**
-     * Fraction of the frame the object fills. For an upright person the box HEIGHT is
-     * the reliable proximity cue; wide objects (cars, bikes seen side-on) fill the
-     * frame horizontally as they close, so we take the max of height and width.
+     * Fraction of the frame the object fills, clamped to 0‥1. For an upright person
+     * the box HEIGHT is the reliable proximity cue; wide objects (cars, bikes seen
+     * side-on) fill the frame horizontally as they close, so we take the max of
+     * height and width. A null/NaN-free result is guaranteed by the clamp.
      */
     fun fillFraction(box: NormBox, className: String): Float {
         val h = box.height.coerceIn(0f, 1f)
@@ -59,6 +68,10 @@ object AlertPolicy {
      * Sensitivity multiplier from the user's distance preset. A larger threshold means
      * "warn me from further away" → need LESS fill to trigger → scale thresholds DOWN.
      * Clamped so every preset stays sane and HIGH stays reachable.
+     *
+     * @param thresholdMeters user preset in meters; values outside 0.25‥10 are clamped
+     *        before use, so non-positive or absurd inputs cannot produce a zero or
+     *        negative multiplier.
      */
     fun sensitivity(thresholdMeters: Float): Float =
         (REFERENCE_THRESHOLD_M / thresholdMeters.coerceIn(0.25f, 10f)).coerceIn(0.55f, 1.7f)
@@ -92,6 +105,8 @@ object AlertPolicy {
         // Cap HIGH at 0.85 so a frame-filling object (fill up to 1.0) ALWAYS reaches it,
         // at every preset — this is what makes the alarm physically reachable.
         val high = (ladder.high * s).coerceIn(0.20f, 0.85f)
+        // Each lower threshold is clamped 0.02 below the one above, keeping the ladder
+        // strictly ordered even at extreme sensitivity settings.
         val med  = (ladder.medium * s).coerceIn(0.12f, high - 0.02f)
         val low  = (ladder.low * s).coerceIn(0.06f, med - 0.02f)
 
@@ -104,7 +119,10 @@ object AlertPolicy {
         return if (isApproaching) escalate(base) else base
     }
 
-    /** Bump one level. A closing object is more dangerous than a static one at the same size. */
+    /**
+     * Bump one level. A closing object is more dangerous than a static one at the
+     * same size; HIGH is idempotent (there is nothing louder).
+     */
     fun escalate(level: AlertLevel): AlertLevel = when (level) {
         AlertLevel.NONE   -> AlertLevel.LOW
         AlertLevel.LOW    -> AlertLevel.MEDIUM
