@@ -29,6 +29,10 @@ import kotlin.math.atan2
  * Warning thresholds:
  *   > 72° → phone getting too flat, camera losing forward view
  *   > 82° → phone nearly horizontal, camera faces ceiling
+ *
+ * Thread-safety: [onSensorChanged] is invoked on the main thread (the listener
+ * is registered with [SensorManager.SENSOR_DELAY_UI]), so the mutable pitch
+ * state is confined to that thread and needs no synchronization.
  */
 class SensorMonitor(context: Context) : SensorEventListener {
 
@@ -78,7 +82,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         }
     }
 
-    /** Unregisters this monitor; safe to call multiple times. */
+    /** Unregisters this monitor; safe to call multiple times, even without a prior [start]. */
     fun stop() {
         sensorManager.unregisterListener(this)
     }
@@ -110,9 +114,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
         //   phone tilted forward (camera dn) → (-, +)     → negative
         val rawPitch = Math.toDegrees(atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
 
-        // Light EMA smoothing to avoid jitter; the clamp keeps the running
-        // average inside the physically meaningful range even if a driver
-        // ever reports an out-of-range magnitude.
+        // Light EMA smoothing (70% previous / 30% new) to avoid jitter; the clamp
+        // keeps the running average inside the physically meaningful range even
+        // if a driver ever reports an out-of-range magnitude.
         val smoothed = cameraPitchDegrees * 0.7f + rawPitch * 0.3f
         cameraPitchDegrees = if (smoothed.isFinite()) {
             smoothed.coerceIn(-90f, 90f)
