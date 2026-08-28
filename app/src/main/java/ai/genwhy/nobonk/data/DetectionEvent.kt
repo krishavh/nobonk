@@ -12,7 +12,7 @@ import java.util.UUID
  * @param latitude      GPS latitude; null if no fix was available at the time of detection
  * @param longitude     GPS longitude; null if no fix was available at the time of detection
  * @param className     Detected object class ("person", "car", etc.)
- * @param distance      Estimated distance in metres
+ * @param distance      Estimated distance in metres; must be non-negative
  * @param alertLevel    Severity: "LOW", "MEDIUM", or "HIGH"
  * @param isApproaching Whether the object was closing distance
  */
@@ -27,14 +27,18 @@ data class DetectionEvent(
     val alertLevel: String,      // "LOW" | "MEDIUM" | "HIGH"
     val isApproaching: Boolean
 ) {
+    /**
+     * Serialises this event to a [JSONObject].
+     *
+     * GPS coordinates are stored as JSON null when no fix was available, so that
+     * "no GPS fix" is distinguishable from a genuine coordinate near 0.0/0.0.
+     * Legacy records written with the 0.0/0.0 sentinel are normalised in [Companion.fromJson].
+     */
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
         put("sessionId", sessionId)
         put("timestamp", timestamp)
-        // Store null as JSON null (JSONObject.NULL) so fromJson can distinguish
-        // "no GPS fix" from a genuine coordinate near 0.0/0.0.
-        // Legacy records written as 0.0/0.0 are handled in fromJson.
-        put("latitude",  if (latitude  != null) latitude  else JSONObject.NULL)
+        put("latitude", if (latitude != null) latitude else JSONObject.NULL)
         put("longitude", if (longitude != null) longitude else JSONObject.NULL)
         put("className", className)
         put("distance", distance.toDouble())
@@ -45,11 +49,18 @@ data class DetectionEvent(
     companion object {
         /** Valid values for alertLevel — rejects any arbitrary string injected via a corrupt file. */
         private val VALID_ALERT_LEVELS = setOf("LOW", "MEDIUM", "HIGH")
+
         /** Known COCO classes emitted by ObjectDetector.classNameFor (keep in sync). */
-        private val VALID_CLASS_NAMES  = setOf(
+        private val VALID_CLASS_NAMES = setOf(
             "person", "bicycle", "car", "motorcycle", "bus", "truck", "dog", "cat", "object"
         )
 
+        /**
+         * Deserialises a [DetectionEvent] previously written by [toJson].
+         *
+         * @throws IllegalArgumentException if `alertLevel` or `className` is not a recognised
+         *   value, or if `distance` is negative — this guards against corrupt or tampered files.
+         */
         fun fromJson(json: JSONObject): DetectionEvent {
             val rawAlert = json.getString("alertLevel")
             val rawClass = json.getString("className")
@@ -69,27 +80,33 @@ data class DetectionEvent(
             // Read GPS: treat JSON null OR the legacy 0.0/0.0 sentinel as "no fix".
             // The 0.0/0.0 sentinel was used in records written before this migration;
             // it maps to a point in the Gulf of Guinea which no user will ever visit.
-            val rawLat = if (json.isNull("latitude"))  null else json.getDouble("latitude")
+            val rawLat = if (json.isNull("latitude")) null else json.getDouble("latitude")
             val rawLng = if (json.isNull("longitude")) null else json.getDouble("longitude")
-            val lat = if (rawLat == 0.0 && rawLng == 0.0) null else rawLat
-            val lng = if (rawLat == 0.0 && rawLng == 0.0) null else rawLng
+            val hasLegacySentinel = rawLat == 0.0 && rawLng == 0.0
+            val lat = if (hasLegacySentinel) null else rawLat
+            val lng = if (hasLegacySentinel) null else rawLng
 
             return DetectionEvent(
-                id          = json.getString("id"),
-                sessionId   = json.getString("sessionId"),
-                timestamp   = json.getLong("timestamp"),
-                latitude    = lat,
-                longitude   = lng,
-                className   = rawClass,
-                distance    = dist,
-                alertLevel  = rawAlert,
+                id = json.getString("id"),
+                sessionId = json.getString("sessionId"),
+                timestamp = json.getLong("timestamp"),
+                latitude = lat,
+                longitude = lng,
+                className = rawClass,
+                distance = dist,
+                alertLevel = rawAlert,
                 isApproaching = json.getBoolean("isApproaching")
             )
         }
     }
 }
 
-/** Lightweight summary computed per session for the session list UI. */
+/**
+ * Lightweight summary computed per session for the session list UI.
+ *
+ * @property durationMinutes Session length in whole minutes; never negative because
+ *   [endTimestamp] is expected to be >= [startTimestamp] (clamped defensively to 0).
+ */
 data class SessionSummary(
     val sessionId: String,
     val startTimestamp: Long,
@@ -100,5 +117,5 @@ data class SessionSummary(
     val startLatitude: Double?,         // null when no GPS fix at session start
     val startLongitude: Double?         // null when no GPS fix at session start
 ) {
-    val durationMinutes: Long get() = (endTimestamp - startTimestamp) / 60_000
+    val durationMinutes: Long get() = ((endTimestamp - startTimestamp).coerceAtLeast(0L)) / 60_000
 }
