@@ -16,6 +16,11 @@ package ai.genwhy.nobonk.model
  * comparisons in the usual IEEE-754 way (e.g. [contains] returns false, and
  * [iou] returns 0f because the overlap checks fail). Infinities are not
  * specially handled and will propagate through arithmetic as usual.
+ *
+ * @property left   x-coordinate of the left edge (may exceed [right]; see [width]).
+ * @property top    y-coordinate of the top edge (may exceed [bottom]; see [height]).
+ * @property right  x-coordinate of the right edge.
+ * @property bottom y-coordinate of the bottom edge.
  */
 data class NormBox(
     val left: Float,
