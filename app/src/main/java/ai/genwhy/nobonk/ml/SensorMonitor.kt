@@ -6,6 +6,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import kotlin.math.atan2
+import kotlin.math.sqrt
 
 /**
  * Monitors phone orientation via the gravity sensor and exposes the camera
@@ -34,11 +35,13 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     private val sensorManager =
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
+    /** Gravity sensor, falling back to the raw accelerometer if unavailable. */
     private val gravitySensor =
         sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) // fallback
 
-    /** Camera pitch in degrees. Updated at UI rate. */
+    /** Camera pitch in degrees. Updated at UI rate; 0 until first sensor event. */
     var cameraPitchDegrees: Float = 0f
         private set
 
@@ -49,11 +52,12 @@ class SensorMonitor(context: Context) : SensorEventListener {
      */
     enum class AngleQuality { OK, WARNING, BAD }
 
+    /** Quality bucket derived from the current [cameraPitchDegrees]. */
     val angleQuality: AngleQuality
         get() = when {
             cameraPitchDegrees <= 72f -> AngleQuality.OK       // everything up to almost-flat is fine
-            cameraPitchDegrees <= 82f -> AngleQuality.WARNING   // phone getting quite flat
-            else                      -> AngleQuality.BAD       // phone is flat, camera at ceiling
+            cameraPitchDegrees <= 82f -> AngleQuality.WARNING  // phone getting quite flat
+            else                      -> AngleQuality.BAD      // phone is flat, camera at ceiling
         }
 
     /** Human-readable hint shown to the user. Empty when angle is fine. */
@@ -66,12 +70,14 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     // ── Lifecycle ────────────────────────────────────────────────
 
+    /** Registers this monitor for gravity/accelerometer updates. No-op if no sensor exists. */
     fun start() {
         gravitySensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
     }
 
+    /** Unregisters this monitor; safe to call multiple times. */
     fun stop() {
         sensorManager.unregisterListener(this)
     }
@@ -80,6 +86,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent?) {
         val values = event?.values ?: return
+        // Some drivers deliver fewer than 3 components; bail out rather than crash.
+        if (values.size < 3) return
+
         // Device axes (portrait):
         //   y → up along phone     z → out of screen (toward user)
         // Camera optical axis = -z direction.
@@ -87,14 +96,20 @@ class SensorMonitor(context: Context) : SensorEventListener {
         val gy = values[1]
         val gz = values[2]
 
+        // Degenerate reading (all-zero vector during sensor warm-up) — atan2(0,0)
+        // is well-defined as 0 but the value is meaningless, so skip it.
+        if (gy == 0f && gz == 0f) return
+
         // atan2(-gz, -gy):
         //   phone vertical (screen at user)  → (0, 9.8)  → 0°
         //   phone tilted back (camera up)    → (+, +)     → positive
         //   phone tilted forward (camera dn) → (-, +)     → negative
         val rawPitch = Math.toDegrees(atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
 
-        // Light EMA smoothing to avoid jitter
-        cameraPitchDegrees = cameraPitchDegrees * 0.7f + rawPitch * 0.3f
+        // Light EMA smoothing to avoid jitter; clamp guards against NaN/Inf
+        // from a misbehaving driver corrupting the running average.
+        val smoothed = cameraPitchDegrees * 0.7f + rawPitch * 0.3f
+        cameraPitchDegrees = if (smoothed.isFinite()) smoothed else cameraPitchDegrees
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
