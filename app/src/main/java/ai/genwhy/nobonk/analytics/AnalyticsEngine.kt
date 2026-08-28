@@ -193,7 +193,7 @@ object AnalyticsEngine {
                 abs(nearest.lat - ev.lat) < clusterRadius &&
                 abs(nearest.lng - ev.lng) < clusterRadius
             ) {
-                // Running-average centroid update.
+                // Running-average centroid update; count is always ≥ 1 here.
                 val newCount = nearest.count + 1
                 nearest.lat = (nearest.lat * nearest.count + ev.lat) / newCount
                 nearest.lng = (nearest.lng * nearest.count + ev.lng) / newCount
