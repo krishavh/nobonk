@@ -18,6 +18,15 @@ package ai.genwhy.nobonk.ml
  */
 object LowLight {
 
+    /** Default mean-luma threshold below which a frame counts as "dark". */
+    private const val DEFAULT_BRIGHTNESS_THRESHOLD = 35f
+
+    /** Default luma-variance threshold below which a frame counts as "flat". */
+    private const val DEFAULT_VARIANCE_THRESHOLD = 40f
+
+    /** Default mean-luma threshold below which a frame counts as "dim" (banner). */
+    private const val DEFAULT_LOW_LIGHT_THRESHOLD = 60f
+
     /**
      * Decides whether the camera lens is physically blocked (pocket, hand, case).
      *
@@ -26,8 +35,8 @@ object LowLight {
      * below [varianceThreshold]. A dim street scene fails the variance test and
      * keeps detection running.
      *
-     * Non-finite inputs ([Float.NaN], ±[Float.POSITIVE_INFINITY],
-     * ±[Float.NEGATIVE_INFINITY]) yield `false`. With IEEE-754 comparison semantics
+     * Non-finite inputs ([Float.NaN], [Float.POSITIVE_INFINITY],
+     * [Float.NEGATIVE_INFINITY]) yield `false`. With IEEE-754 comparison semantics
      * NaN already fails both `<` comparisons, but [Float.isFinite] makes that
      * guarantee explicit and also rejects infinite readings, which are treated as a
      * sensor glitch rather than a confident "blocked" — the caller should surface a
@@ -50,8 +59,8 @@ object LowLight {
     fun isBlocked(
         meanBrightness: Float,
         variance: Float,
-        brightnessThreshold: Float = 35f,
-        varianceThreshold: Float = 40f
+        brightnessThreshold: Float = DEFAULT_BRIGHTNESS_THRESHOLD,
+        varianceThreshold: Float = DEFAULT_VARIANCE_THRESHOLD
     ): Boolean =
         meanBrightness.isFinite() &&
             variance.isFinite() &&
@@ -82,7 +91,7 @@ object LowLight {
     fun isLowLight(
         meanBrightness: Float,
         blocked: Boolean,
-        lowLightThreshold: Float = 60f
+        lowLightThreshold: Float = DEFAULT_LOW_LIGHT_THRESHOLD
     ): Boolean =
         meanBrightness.isFinite() &&
             !blocked &&
