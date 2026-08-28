@@ -40,9 +40,13 @@ data class Detection(
     val alertLevel: AlertLevel = AlertLevel.NONE
 ) {
     /**
-     * True when no monocular distance estimate is available for this detection.
+     * True when a monocular distance estimate is available for this detection.
+     *
      * Preferred over raw [Float.isNaN] checks at call sites so the "missing"
-     * sentinel stays an implementation detail of this model type.
+     * sentinel ([Float.NaN]) stays an implementation detail of this model type.
+     * Note that any non-NaN value — including infinities — counts as "present";
+     * consumers needing a finite estimate should additionally check
+     * `distance.isFinite()`.
      */
     val hasDistanceEstimate: Boolean
         get() = !distance.isNaN()
@@ -74,8 +78,9 @@ enum class AlertLevel {
     /**
      * True when this level warrants user-visible interruption (sound / full-screen).
      *
-     * Implemented as an ordinal comparison so that inserting a future severity
-     * step between MEDIUM and HIGH keeps the "at least MEDIUM" semantics intact.
+     * Implemented as an ordinal comparison rather than an explicit
+     * `MEDIUM or HIGH` set so that inserting a future severity step between
+     * MEDIUM and HIGH keeps the "at least MEDIUM" semantics intact.
      */
     val requiresInterruption: Boolean
         get() = ordinal >= MEDIUM.ordinal
