@@ -46,16 +46,17 @@ object AnalyticsEngine {
     fun peakDangerHour(events: List<DetectionEvent>): Int {
         if (events.isEmpty()) return -1
         val counts = warningsByHour(events)
-        // maxByOrNull returns the first maximum encountered, i.e. the earliest hour on ties.
+        // maxByOrNull keeps the first maximum encountered, i.e. the earliest hour on ties.
         return counts.indices.maxByOrNull { counts[it] } ?: -1
     }
 
     /**
      * Formats an hour of day (0–23) as a human-readable 12-hour string,
      * e.g. 0 → "12 AM", 13 → "1 PM".
-     * Returns "N/A" for negative sentinels (such as [peakDangerHour]'s no-data result).
-     * Hours above 23 are clamped into the valid range rather than producing
-     * nonsense output.
+     *
+     * Returns "N/A" for negative sentinels (such as [peakDangerHour]'s no-data
+     * result). Hours above 23 wrap into the valid range via modulo rather than
+     * producing nonsense output.
      */
     fun formatHour(hour: Int): String {
         if (hour < 0) return "N/A"
@@ -73,7 +74,8 @@ object AnalyticsEngine {
 
     /**
      * Returns detected class name → event count, sorted descending by count.
-     * Ties keep an arbitrary but stable order. Empty input yields an empty list.
+     * Ties keep a stable order (the order in which class names were first seen).
+     * Empty input yields an empty list.
      */
     fun threatBreakdown(events: List<DetectionEvent>): List<Pair<String, Int>> =
         events.groupingBy { it.className }
@@ -167,7 +169,7 @@ object AnalyticsEngine {
         val validPoints: List<GpsEvent> = events.mapNotNull { ev ->
             val lat = ev.latitude ?: return@mapNotNull null
             val lng = ev.longitude ?: return@mapNotNull null
-            // Reject non-finite coordinates that would corrupt centroid math.
+            // Reject non-finite coordinates (NaN/±Inf) that would corrupt centroid math.
             if (!lat.isFinite() || !lng.isFinite()) return@mapNotNull null
             GpsEvent(lat, lng)
         }
@@ -180,7 +182,7 @@ object AnalyticsEngine {
 
         for (ev in validPoints) {
             var nearestIdx = -1
-            var nearestDist = Double.MAX_VALUE
+            var nearestDist = Double.POSITIVE_INFINITY
             // Linear scan for the closest cluster; Manhattan distance in degrees
             // is a cheap proxy for metres at city scale.
             for (i in clusterLats.indices) {
@@ -227,6 +229,9 @@ object AnalyticsEngine {
     /**
      * Formats a Unix epoch millisecond timestamp using [pattern] and the
      * device's default locale. Invalid (non-positive) timestamps yield "N/A".
+     *
+     * A new [SimpleDateFormat] is created per call, so this is safe to use
+     * from any thread.
      */
     fun formatTimestamp(timestamp: Long, pattern: String = "MMM d, h:mm a"): String {
         if (timestamp <= 0L) return "N/A"
