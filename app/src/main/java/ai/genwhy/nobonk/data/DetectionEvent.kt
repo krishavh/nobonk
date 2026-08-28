@@ -36,7 +36,8 @@ data class DetectionEvent(
      * GPS coordinates are stored as JSON null when no fix was available, so that
      * "no GPS fix" is distinguishable from a genuine coordinate near 0.0/0.0.
      * Legacy records written with the 0.0/0.0 sentinel are normalised back to
-     * `null` coordinates in [Companion.fromJson].
+     * `null` coordinates in [Companion.fromJson], so [toJson] / [Companion.fromJson]
+     * round-trip cleanly.
      */
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -45,15 +46,20 @@ data class DetectionEvent(
         put("latitude", latitude ?: JSONObject.NULL)
         put("longitude", longitude ?: JSONObject.NULL)
         put("className", className)
-        // Stored as a double because JSONObject has no float overload; the extra
-        // precision is harmless and round-trips exactly through getDouble().
+        // JSONObject has no float overload, so widen to double; the extra precision
+        // is harmless and round-trips exactly through getDouble().
         put("distance", distance.toDouble())
         put("alertLevel", alertLevel)
         put("isApproaching", isApproaching)
     }
 
     companion object {
-        /** Valid values for [DetectionEvent.alertLevel] — rejects arbitrary strings injected via a corrupt file. */
+        /**
+         * Valid values for [DetectionEvent.alertLevel].
+         *
+         * Kept private and enforced in [fromJson] so a corrupt or tampered file
+         * cannot inject arbitrary strings into app state.
+         */
         private val VALID_ALERT_LEVELS = setOf("LOW", "MEDIUM", "HIGH")
 
         /** Known COCO classes emitted by ObjectDetector.classNameFor (keep in sync). */
@@ -66,7 +72,8 @@ data class DetectionEvent(
          *
          * Unrecognised `alertLevel`/`className` values and negative distances are rejected
          * so a corrupt or tampered JSON file cannot inject arbitrary strings or nonsense
-         * metrics into app state.
+         * metrics into app state. A legacy 0.0/0.0 coordinate pair is normalised to
+         * `null` (no GPS fix).
          *
          * @throws IllegalArgumentException if `alertLevel` or `className` is not a recognised
          *   value, or if `distance` is negative or NaN (the non-negative check fails for NaN,
@@ -91,8 +98,8 @@ data class DetectionEvent(
             // Read GPS: treat JSON null OR the legacy 0.0/0.0 sentinel as "no fix".
             // The 0.0/0.0 sentinel was used in records written before this migration;
             // it maps to a point in the Gulf of Guinea which no user will ever visit.
-            // Note: the sentinel is only cleared when BOTH coordinates are exactly 0.0,
-            // so a genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved.
+            // The sentinel is only cleared when BOTH coordinates are exactly 0.0, so a
+            // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved.
             val rawLat = if (json.isNull("latitude")) null else json.getDouble("latitude")
             val rawLng = if (json.isNull("longitude")) null else json.getDouble("longitude")
             val hasLegacySentinel = rawLat == 0.0 && rawLng == 0.0
@@ -139,10 +146,9 @@ data class SessionSummary(
     /**
      * Session length in whole minutes, truncated toward zero.
      *
-     * A negative [SessionSummary.endTimestamp] minus [SessionSummary.startTimestamp]
-     * (e.g. from a clock adjustment mid-session) is clamped to zero so the UI never
-     * shows a negative duration. Integer division by 60,000 ms truncates any
-     * sub-minute remainder.
+     * A negative [endTimestamp] minus [startTimestamp] difference (e.g. from a clock
+     * adjustment mid-session) is clamped to zero so the UI never shows a negative
+     * duration. Integer division by 60,000 ms truncates any sub-minute remainder.
      */
     val durationMinutes: Long
         get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / 60_000L
