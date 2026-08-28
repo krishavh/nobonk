@@ -26,10 +26,17 @@ object LowLight {
      * below [varianceThreshold]. A dim street scene fails the variance test and
      * keeps detection running.
      *
-     * Non-finite inputs ([Float.NaN], ±[Float.Infinity]) yield `false`: with IEEE-754
-     * comparison semantics NaN already fails both comparisons, and an infinite
-     * reading is treated as a sensor glitch rather than a confident "blocked" —
-     * the caller should surface a separate quality indicator instead.
+     * Non-finite inputs ([Float.NaN], ±[Float.POSITIVE_INFINITY],
+     * ±[Float.NEGATIVE_INFINITY]) yield `false`. With IEEE-754 comparison semantics
+     * NaN already fails both `<` comparisons, but [Float.isFinite] makes that
+     * guarantee explicit and also rejects infinite readings, which are treated as a
+     * sensor glitch rather than a confident "blocked" — the caller should surface a
+     * separate quality indicator instead.
+     *
+     * Callers are expected to pass thresholds with [varianceThreshold] > 0 and
+     * [brightnessThreshold] within the 0‥255 luma range; degenerate thresholds
+     * (e.g. negative) simply make the corresponding test unsatisfiable, which is
+     * the safe outcome (never claims "blocked").
      *
      * @param meanBrightness      average luma over the sampled grid, 0‥255
      * @param variance            variance of luma across the sampled grid (spread of
@@ -56,7 +63,8 @@ object LowLight {
      * is at most risk. Not "blocked" (that would disable detection entirely, ML-06).
      *
      * Non-finite [meanBrightness] yields `false`: a glitchy reading should not
-     * trigger a user-facing "low light" banner.
+     * trigger a user-facing "low light" banner. Passing `blocked = true` also yields
+     * `false`, so the two verdicts are mutually exclusive by construction.
      *
      * @param meanBrightness     average luma over the sampled grid, 0‥255
      * @param blocked            the [isBlocked] verdict for this frame (never both at once)
