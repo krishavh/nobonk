@@ -57,11 +57,12 @@ object AlertPolicy {
      * the box HEIGHT is the reliable proximity cue; wide objects (cars, bikes seen
      * side-on) fill the frame horizontally as they close, so we take the max of
      * height and width. The clamp guarantees a finite result in 0‥1 even if the
-     * detector emits out-of-range box components.
+     * detector emits out-of-range or NaN box components (NaN fails both comparison
+     * branches of [Float.coerceIn], so it is normalized to 0 first).
      */
     fun fillFraction(box: NormBox, className: String): Float {
-        val h = box.height.coerceIn(0f, 1f)
-        val w = box.width.coerceIn(0f, 1f)
+        val h = box.height.saneFraction()
+        val w = box.width.saneFraction()
         return if (className == "person") h else maxOf(h, w)
     }
 
@@ -72,10 +73,10 @@ object AlertPolicy {
      *
      * @param thresholdMeters user preset in meters; values outside 0.25‥10 are clamped
      *        before use, so non-positive or absurd inputs cannot produce a zero or
-     *        negative multiplier.
+     *        negative multiplier. NaN input is treated as the reference preset (multiplier 1).
      */
     fun sensitivity(thresholdMeters: Float): Float =
-        (REFERENCE_THRESHOLD_M / thresholdMeters.coerceIn(0.25f, 10f)).coerceIn(0.55f, 1.7f)
+        (REFERENCE_THRESHOLD_M / thresholdMeters.saneMeters().coerceIn(0.25f, 10f)).coerceIn(0.55f, 1.7f)
 
     /**
      * Compute the alert level for one detection.
@@ -107,7 +108,9 @@ object AlertPolicy {
         // at every preset — this is what makes the alarm physically reachable.
         val high = (ladder.high * s).coerceIn(0.20f, 0.85f)
         // Each lower threshold is clamped 0.02 below the one above, keeping the ladder
-        // strictly ordered even at extreme sensitivity settings.
+        // strictly ordered even at extreme sensitivity settings. The fixed lower bounds
+        // (0.12, 0.06) are always below the derived upper bounds because `high ≥ 0.20`
+        // implies `high - 0.02 ≥ 0.18 > 0.12`, and likewise for `low`.
         val med  = (ladder.medium * s).coerceIn(0.12f, high - 0.02f)
         val low  = (ladder.low * s).coerceIn(0.06f, med - 0.02f)
 
@@ -130,4 +133,18 @@ object AlertPolicy {
         AlertLevel.MEDIUM -> AlertLevel.HIGH
         AlertLevel.HIGH   -> AlertLevel.HIGH
     }
+
+    /**
+     * Normalize a raw box dimension to a finite fraction in 0‥1: NaN → 0, then clamp.
+     * Needed because [Float.coerceIn] passes NaN through unchanged (both comparisons fail).
+     */
+    private fun Float.saneFraction(): Float =
+        if (isNaN()) 0f else coerceIn(0f, 1f)
+
+    /**
+     * Normalize a raw distance preset to a finite, positive meter value: NaN → the
+     * reference preset, non-finite infinities → clamped by the caller's bounds.
+     */
+    private fun Float.saneMeters(): Float =
+        if (isNaN()) REFERENCE_THRESHOLD_M else this
 }
