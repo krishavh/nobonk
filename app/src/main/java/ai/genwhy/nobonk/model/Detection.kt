@@ -4,19 +4,23 @@ package ai.genwhy.nobonk.model
  * A single object detection in normalized frame coordinates.
  *
  * Instances are immutable value objects produced by the on-device detector and
- * consumed by the tracker, alert policy, and UI layers.
+ * consumed by the tracker, alert policy, and UI layers. Because they flow across
+ * layers, they deliberately depend only on pure model types ([NormBox], [AlertLevel])
+ * — no Compose or Android framework types.
  *
  * @param id            Stable tracker-assigned identity for this object across
  *                      frames (not the raw class name; distinct objects of the
  *                      same class get distinct ids).
  * @param boundingBox   Normalized box (0‥1). Pure [NormBox] — no Compose dependency.
- * @param confidence    Model confidence 0‥1.
+ * @param confidence    Model confidence in the range 0‥1; values outside that range
+ *                      are treated as-is by consumers, so clamp at the detector
+ *                      boundary if the model can emit unnormalized scores.
  * @param distance      Rough monocular distance estimate in metres. **Informational
  *                      only** (shown in the label / logged). The alarm ladder is NOT
  *                      driven by this value — see [ai.genwhy.nobonk.ml.AlertPolicy]
  *                      — because monocular distance saturates once a person fills the
  *                      frame, which historically made HIGH alerts mathematically
- *                      unreachable.
+ *                      unreachable. May be [Float.NaN] when no estimate is available.
  * @param className     Human-readable class ("person", "car", …).
  * @param classId       Raw COCO class id (used for per-class NMS grouping).
  *                      Defaults to -1 when the raw id is unknown or irrelevant.
@@ -40,6 +44,9 @@ data class Detection(
  * Driven by how much of the frame the object fills (a proxy for proximity that,
  * unlike the saturating monocular-distance estimate, is actually reachable) plus
  * approach escalation. See [ai.genwhy.nobonk.ml.AlertPolicy].
+ *
+ * Ordered by severity, so consumers can compare levels directly
+ * (e.g. `level >= AlertLevel.MEDIUM`).
  */
 enum class AlertLevel {
     /** Nothing close; object is far away or absent. */
