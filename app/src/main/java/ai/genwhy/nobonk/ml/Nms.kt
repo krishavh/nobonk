@@ -10,6 +10,9 @@ import ai.genwhy.nobonk.model.Detection
  * lumped every unmapped COCO class into one bucket so distinct overlapping objects
  * suppressed each other. Here we group by the **true class id** and use a sane
  * `iouThreshold ≈ 0.45`.
+ *
+ * This object has no mutable state and performs no I/O, so it is safe to call from
+ * any thread, including the inference loop.
  */
 object Nms {
     /**
@@ -20,8 +23,12 @@ object Nms {
      * in descending confidence order; any later box whose IoU with an already
      * kept box exceeds [iouThreshold] is dropped.
      *
-     * The input list is not mutated. Ties in confidence keep their relative
-     * input order (stable sort), so results are deterministic.
+     * The input list is not mutated. [sortedByDescending] is a stable sort, so
+     * ties in confidence keep their relative input order and results are
+     * deterministic for a given input.
+     *
+     * Complexity is O(C · n²) worst case for n boxes in C class groups; typical
+     * per-frame detection counts (tens of boxes) make this negligible.
      *
      * @param detections detections to filter; may be empty
      * @param iouThreshold overlap above which a lower-confidence box is
@@ -44,9 +51,11 @@ object Nms {
                 for (i in sorted.indices) {
                     if (suppressed[i]) continue
                     keep.add(sorted[i])
+                    // Suppress every remaining lower-confidence box that overlaps
+                    // the newly kept one. Strictly greater: a box exactly at the
+                    // threshold survives.
                     for (j in i + 1 until sorted.size) {
                         if (suppressed[j]) continue
-                        // Strictly greater: a box exactly at the threshold survives.
                         if (sorted[i].boundingBox.iou(sorted[j].boundingBox) > threshold) {
                             suppressed[j] = true
                         }
