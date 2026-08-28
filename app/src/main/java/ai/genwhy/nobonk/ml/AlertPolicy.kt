@@ -32,6 +32,14 @@ object AlertPolicy {
     /** Preset at which the base ladder fractions below apply unscaled. */
     private const val REFERENCE_THRESHOLD_M = 2.0f
 
+    /** Widest user preset accepted by [sensitivity]; anything beyond is clamped here. */
+    private const val MIN_PRESET_M = 0.25f
+    private const val MAX_PRESET_M = 10f
+
+    /** Bounds of the derived sensitivity multiplier (see [sensitivity]). */
+    private const val MIN_SENSITIVITY = 0.55f
+    private const val MAX_SENSITIVITY = 1.7f
+
     /**
      * Fill fractions (0‥1 of frame) for HIGH / MEDIUM / LOW at the reference preset.
      *
@@ -55,6 +63,7 @@ object AlertPolicy {
         "car", "truck", "bus"          -> Ladder(high = 0.55f, medium = 0.36f, low = 0.22f)
         "motorcycle", "bicycle"        -> Ladder(high = 0.52f, medium = 0.34f, low = 0.20f)
         "dog", "cat", "horse"          -> Ladder(high = 0.55f, medium = 0.38f, low = 0.24f)
+        // Fallback == person ladder: conservative default for unrecognized classes.
         else                           -> Ladder(high = 0.60f, medium = 0.42f, low = 0.28f)
     }
 
@@ -84,7 +93,8 @@ object AlertPolicy {
      *        (multiplier 1); ±Infinity collapses to the multiplier bounds (1.7 / 0.55).
      */
     fun sensitivity(thresholdMeters: Float): Float =
-        (REFERENCE_THRESHOLD_M / thresholdMeters.saneMeters().coerceIn(0.25f, 10f)).coerceIn(0.55f, 1.7f)
+        (REFERENCE_THRESHOLD_M / thresholdMeters.saneMeters().coerceIn(MIN_PRESET_M, MAX_PRESET_M))
+            .coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY)
 
     /**
      * Compute the alert level for one detection.
