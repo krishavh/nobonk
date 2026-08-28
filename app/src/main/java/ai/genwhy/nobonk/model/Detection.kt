@@ -37,7 +37,15 @@ data class Detection(
     val classId: Int = -1,
     val isApproaching: Boolean = false,
     val alertLevel: AlertLevel = AlertLevel.NONE
-)
+) {
+    /**
+     * True when no monocular distance estimate is available for this detection.
+     * Preferred over raw [Float.isNaN] checks at call sites so the "missing"
+     * sentinel stays an implementation detail of this model type.
+     */
+    val hasDistanceEstimate: Boolean
+        get() = !distance.isNaN()
+}
 
 /**
  * Alert escalation ladder used by the engine for the current frame.
@@ -62,7 +70,12 @@ enum class AlertLevel {
     /** Imminent — full-screen LOOK UP + sound. */
     HIGH;
 
-    /** True when this level warrants user-visible interruption (sound / full-screen). */
+    /**
+     * True when this level warrants user-visible interruption (sound / full-screen).
+     *
+     * Implemented as an ordinal comparison so that inserting a future severity
+     * step between MEDIUM and HIGH keeps the "at least MEDIUM" semantics intact.
+     */
     val requiresInterruption: Boolean
-        get() = this >= MEDIUM
+        get() = ordinal >= MEDIUM.ordinal
 }
