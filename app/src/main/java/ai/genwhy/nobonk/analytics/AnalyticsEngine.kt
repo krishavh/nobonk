@@ -215,9 +215,15 @@ object AnalyticsEngine {
     /**
      * Returns the smallest recorded distance in metres across all events
      * (the "closest call"), or null if there are no events.
+     *
+     * Non-finite distances (NaN/±Inf) are ignored, since they indicate a bad
+     * sensor reading rather than a real measurement.
      */
     fun closestCallDistance(events: List<DetectionEvent>): Float? =
-        events.minOfOrNull { it.distance }
+        events.asSequence()
+            .map { it.distance }
+            .filter { it.isFinite() }
+            .minOfOrNull { it }
 
     // ── Time formatting helpers ───────────────────────────────────────────────
 
