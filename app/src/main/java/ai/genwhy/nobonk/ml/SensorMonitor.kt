@@ -48,8 +48,8 @@ class SensorMonitor(context: Context) : SensorEventListener {
      * Camera pitch in degrees, clamped to [-90, 90].
      *
      * Returns 0 until the first valid sensor event arrives; readings from a
-     * misbehaving driver (NaN/Inf, degenerate vectors) are ignored rather
-     * than propagated.
+     * misbehaving driver (NaN/Inf components, degenerate vectors) are ignored
+     * rather than propagated.
      */
     var cameraPitchDegrees: Float = 0f
         private set
@@ -71,7 +71,10 @@ class SensorMonitor(context: Context) : SensorEventListener {
             else -> AngleQuality.BAD
         }
 
-    /** Human-readable hint shown to the user. Empty when the angle is fine. */
+    /**
+     * Human-readable hint shown to the user, derived from the current
+     * [cameraPitchDegrees]. Empty when the angle is fine.
+     */
     val angleHint: String
         get() = when {
             cameraPitchDegrees > BAD_THRESHOLD_DEGREES -> "TILT PHONE DOWN — camera facing ceiling"
@@ -120,17 +123,15 @@ class SensorMonitor(context: Context) : SensorEventListener {
         //   phone tilted forward (camera dn) → (-, +)     → negative
         val rawPitch = Math.toDegrees(atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
 
+        // Reject a non-finite raw pitch (impossible after the guards above, but
+        // cheap to defend) so it can never poison the running average.
+        if (!rawPitch.isFinite()) return
+
         // Light EMA smoothing (70% previous / 30% new) to avoid jitter; the clamp
         // keeps the running average inside the physically meaningful range even
-        // if a driver ever reports an out-of-range magnitude. A non-finite raw
-        // pitch (impossible after the guards above, but cheap to defend) leaves
-        // the previous reading untouched.
+        // if a driver ever reports an out-of-range magnitude.
         val smoothed = cameraPitchDegrees * 0.7f + rawPitch * 0.3f
-        cameraPitchDegrees = if (smoothed.isFinite()) {
-            smoothed.coerceIn(-90f, 90f)
-        } else {
-            cameraPitchDegrees
-        }
+        cameraPitchDegrees = smoothed.coerceIn(-90f, 90f)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
