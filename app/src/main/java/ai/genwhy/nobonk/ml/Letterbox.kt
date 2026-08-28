@@ -35,6 +35,9 @@ object Letterbox {
 
         /** Source height after scaling (before padding); 0 if [scale] is 0. */
         val scaledH: Float get() = srcH * scale
+
+        /** True when this transform can map coordinates in both directions. */
+        val isUsable: Boolean get() = scaledW > 0f && scaledH > 0f
     }
 
     /**
@@ -48,6 +51,7 @@ object Letterbox {
         if (srcW <= 0 || srcH <= 0 || size <= 0) {
             return Transform(srcW, srcH, size, scale = 0f, padX = 0f, padY = 0f)
         }
+        // min factor keeps the whole frame inside the square input (aspect preserved).
         val scale = minOf(size.toFloat() / srcW, size.toFloat() / srcH)
         // Center the scaled content: leftover space on each axis is split evenly.
         val padX = (size - srcW * scale) / 2f
@@ -65,8 +69,9 @@ object Letterbox {
     fun boxToOriginalNorm(
         left: Float, top: Float, right: Float, bottom: Float, t: Transform
     ): NormBox {
-        val invW = if (t.scaledW > 0f) 1f / t.scaledW else 0f
-        val invH = if (t.scaledH > 0f) 1f / t.scaledH else 0f
+        if (!t.isUsable) return NormBox(0f, 0f, 0f, 0f)
+        val invW = 1f / t.scaledW
+        val invH = 1f / t.scaledH
         val ol = ((left - t.padX) * invW).coerceIn(0f, 1f)
         val ot = ((top - t.padY) * invH).coerceIn(0f, 1f)
         val or = ((right - t.padX) * invW).coerceIn(0f, 1f)
