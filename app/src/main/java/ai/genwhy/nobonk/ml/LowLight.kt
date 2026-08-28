@@ -41,8 +41,10 @@ object LowLight {
      * @param meanBrightness      average luma over the sampled grid, 0‥255
      * @param variance            variance of luma across the sampled grid (spread of
      *                            the grid-cell brightnesses); low = flat/featureless
-     * @param brightnessThreshold mean luma below which the scene counts as "dark"
-     * @param varianceThreshold   luma variance below which the scene counts as "flat"
+     * @param brightnessThreshold mean luma below which the scene counts as "dark";
+     *                            default 35f
+     * @param varianceThreshold   luma variance below which the scene counts as "flat";
+     *                            default 40f
      * @return `true` only when the frame is both dark and flat, i.e. plausibly covered
      */
     fun isBlocked(
@@ -66,9 +68,15 @@ object LowLight {
      * trigger a user-facing "low light" banner. Passing `blocked = true` also yields
      * `false`, so the two verdicts are mutually exclusive by construction.
      *
+     * Callers should keep [lowLightThreshold] above [isBlocked]'s
+     * `brightnessThreshold` so "blocked" frames are a strict subset of the dark
+     * range; a lower value would only narrow the banner, never widen the blocked
+     * verdict, so misconfiguration degrades gracefully.
+     *
      * @param meanBrightness     average luma over the sampled grid, 0‥255
      * @param blocked            the [isBlocked] verdict for this frame (never both at once)
-     * @param lowLightThreshold  mean luma below which the scene counts as "dim"
+     * @param lowLightThreshold  mean luma below which the scene counts as "dim";
+     *                           default 60f
      * @return `true` when the frame is dim enough to warn about but not blocked
      */
     fun isLowLight(
