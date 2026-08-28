@@ -116,6 +116,8 @@ object AnalyticsEngine {
                     high++
                     if (ev.isApproaching) closeCalls++
                 }
+                // Unknown levels contribute to total only.
+                else     -> Unit
             }
         }
         return AlertStats(events.size, low, medium, high, closeCalls)
@@ -176,43 +178,35 @@ object AnalyticsEngine {
         if (validPoints.isEmpty()) return emptyList()
 
         val clusterRadius = 0.0005
-        val clusterLats = mutableListOf<Double>()
-        val clusterLngs = mutableListOf<Double>()
-        val clusterCounts = mutableListOf<Int>()
+
+        // Mutable running-centroid cluster; count ≥ 1 always, so centroid math
+        // never divides by zero.
+        class Cluster(var lat: Double, var lng: Double, var count: Int)
+
+        val clusters = mutableListOf<Cluster>()
 
         for (ev in validPoints) {
-            var nearestIdx = -1
-            var nearestDist = Double.POSITIVE_INFINITY
             // Linear scan for the closest cluster; Manhattan distance in degrees
             // is a cheap proxy for metres at city scale.
-            for (i in clusterLats.indices) {
-                val d = abs(clusterLats[i] - ev.lat) + abs(clusterLngs[i] - ev.lng)
-                if (d < nearestDist) {
-                    nearestDist = d
-                    nearestIdx = i
-                }
-            }
-            if (nearestIdx >= 0 &&
-                abs(clusterLats[nearestIdx] - ev.lat) < clusterRadius &&
-                abs(clusterLngs[nearestIdx] - ev.lng) < clusterRadius
+            val nearest = clusters.minByOrNull { abs(it.lat - ev.lat) + abs(it.lng - ev.lng) }
+            if (nearest != null &&
+                abs(nearest.lat - ev.lat) < clusterRadius &&
+                abs(nearest.lng - ev.lng) < clusterRadius
             ) {
-                // Running-average centroid update; count ≥ 1 so no div-by-zero.
-                val cnt = clusterCounts[nearestIdx]
-                val newCnt = cnt + 1
-                clusterLats[nearestIdx] = (clusterLats[nearestIdx] * cnt + ev.lat) / newCnt
-                clusterLngs[nearestIdx] = (clusterLngs[nearestIdx] * cnt + ev.lng) / newCnt
-                clusterCounts[nearestIdx] = newCnt
+                // Running-average centroid update.
+                val newCount = nearest.count + 1
+                nearest.lat = (nearest.lat * nearest.count + ev.lat) / newCount
+                nearest.lng = (nearest.lng * nearest.count + ev.lng) / newCount
+                nearest.count = newCount
             } else {
-                clusterLats.add(ev.lat)
-                clusterLngs.add(ev.lng)
-                clusterCounts.add(1)
+                clusters.add(Cluster(ev.lat, ev.lng, 1))
             }
         }
 
-        return clusterCounts.indices
-            .sortedByDescending { clusterCounts[it] }
+        return clusters
+            .sortedByDescending { it.count }
             .take(maxClusters)
-            .map { i -> Hotspot(clusterLats[i], clusterLngs[i], clusterCounts[i]) }
+            .map { Hotspot(it.lat, it.lng, it.count) }
     }
 
     // ── Distance insights ─────────────────────────────────────────────────────
