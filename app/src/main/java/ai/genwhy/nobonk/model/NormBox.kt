@@ -11,6 +11,9 @@ package ai.genwhy.nobonk.model
  * All derived properties ([width], [height], [area]) are non-negative and safe
  * for degenerate (inverted or zero-size) inputs; [iou] guards against
  * division by zero when both boxes are degenerate.
+ *
+ * Note: inputs are expected to be finite; NaN coordinates propagate through
+ * comparisons in the usual IEEE-754 way (e.g. [contains] returns false).
  */
 data class NormBox(
     val left: Float,
