@@ -47,6 +47,8 @@ object Nms {
             .flatMap { (_, group) ->
                 val sorted = group.sortedByDescending { it.confidence }
                 val keep = ArrayList<Detection>(sorted.size)
+                // suppressed[i] marks boxes already dropped by an earlier keep;
+                // skipping them keeps the inner loop O(n) per kept box.
                 val suppressed = BooleanArray(sorted.size)
                 for (i in sorted.indices) {
                     if (suppressed[i]) continue
@@ -56,8 +58,7 @@ object Nms {
                     // threshold survives.
                     val keptBox = sorted[i].boundingBox
                     for (j in i + 1 until sorted.size) {
-                        if (suppressed[j]) continue
-                        if (keptBox.iou(sorted[j].boundingBox) > threshold) {
+                        if (!suppressed[j] && keptBox.iou(sorted[j].boundingBox) > threshold) {
                             suppressed[j] = true
                         }
                     }
