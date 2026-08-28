@@ -45,6 +45,8 @@ data class DetectionEvent(
         put("latitude", latitude ?: JSONObject.NULL)
         put("longitude", longitude ?: JSONObject.NULL)
         put("className", className)
+        // Stored as a double because JSONObject has no float overload; the extra
+        // precision is harmless and round-trips exactly through getDouble().
         put("distance", distance.toDouble())
         put("alertLevel", alertLevel)
         put("isApproaching", isApproaching)
@@ -89,6 +91,8 @@ data class DetectionEvent(
             // Read GPS: treat JSON null OR the legacy 0.0/0.0 sentinel as "no fix".
             // The 0.0/0.0 sentinel was used in records written before this migration;
             // it maps to a point in the Gulf of Guinea which no user will ever visit.
+            // Note: the sentinel is only cleared when BOTH coordinates are exactly 0.0,
+            // so a genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved.
             val rawLat = if (json.isNull("latitude")) null else json.getDouble("latitude")
             val rawLng = if (json.isNull("longitude")) null else json.getDouble("longitude")
             val hasLegacySentinel = rawLat == 0.0 && rawLng == 0.0
@@ -137,7 +141,8 @@ data class SessionSummary(
      *
      * A negative [SessionSummary.endTimestamp] minus [SessionSummary.startTimestamp]
      * (e.g. from a clock adjustment mid-session) is clamped to zero so the UI never
-     * shows a negative duration.
+     * shows a negative duration. Integer division by 60,000 ms truncates any
+     * sub-minute remainder.
      */
     val durationMinutes: Long
         get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / 60_000L
