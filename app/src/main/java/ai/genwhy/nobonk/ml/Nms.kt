@@ -44,7 +44,7 @@ object Nms {
         val threshold = iouThreshold.coerceIn(0f, 1f)
         return detections
             .groupBy { it.classId }
-            .flatMap { (_, group) ->
+            .flatMapTo(ArrayList(detections.size)) { (_, group) ->
                 val sorted = group.sortedByDescending { it.confidence }
                 val keep = ArrayList<Detection>(sorted.size)
                 // suppressed[i] marks boxes already dropped by an earlier keep;
@@ -52,11 +52,12 @@ object Nms {
                 val suppressed = BooleanArray(sorted.size)
                 for (i in sorted.indices) {
                     if (suppressed[i]) continue
-                    keep.add(sorted[i])
+                    val kept = sorted[i]
+                    keep.add(kept)
                     // Suppress every remaining lower-confidence box that overlaps
                     // the newly kept one. Strictly greater: a box exactly at the
                     // threshold survives.
-                    val keptBox = sorted[i].boundingBox
+                    val keptBox = kept.boundingBox
                     for (j in i + 1 until sorted.size) {
                         if (!suppressed[j] && keptBox.iou(sorted[j].boundingBox) > threshold) {
                             suppressed[j] = true
