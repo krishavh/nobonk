@@ -118,7 +118,8 @@ object AlertPolicy {
         // Each lower threshold is clamped 0.02 below the one above, keeping the ladder
         // strictly ordered even at extreme sensitivity settings. The fixed lower bounds
         // (0.12, 0.06) are always below the derived upper bounds because `high ≥ 0.20`
-        // implies `high - 0.02 ≥ 0.18 > 0.12`, and likewise for `low`.
+        // implies `high - 0.02 ≥ 0.18 > 0.12`, and likewise for `low` (med ≥ 0.12
+        // implies `med - 0.02 ≥ 0.10 > 0.06`).
         val med  = (ladder.medium * s).coerceIn(0.12f, high - 0.02f)
         val low  = (ladder.low * s).coerceIn(0.06f, med - 0.02f)
 
@@ -143,11 +144,12 @@ object AlertPolicy {
     }
 
     /**
-     * Canonical form of a detector class label: trimmed and lower-cased, so
-     * "Person" / " PERSON " match the ladders above. Unknown labels fall back to
+     * Canonical form of a detector class label: trimmed and lower-cased (locale-
+     * independent, so a device set to e.g. Turkish cannot break ASCII matching),
+     * so "Person" / " PERSON " match the ladders above. Unknown labels fall back to
      * the person ladder in [ladderFor], the most conservative default.
      */
-    private fun String.normalizedClass(): String = trim().lowercase()
+    private fun String.normalizedClass(): String = trim().lowercase(java.util.Locale.ROOT)
 
     /**
      * Normalize a raw box dimension to a finite fraction in 0‥1: NaN → 0, then clamp.
