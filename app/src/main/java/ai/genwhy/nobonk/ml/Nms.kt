@@ -45,6 +45,7 @@ object Nms {
                     keep.add(sorted[i])
                     for (j in i + 1 until sorted.size) {
                         if (suppressed[j]) continue
+                        // Strictly greater: a box exactly at the threshold survives.
                         if (sorted[i].boundingBox.iou(sorted[j].boundingBox) > threshold) {
                             suppressed[j] = true
                         }
