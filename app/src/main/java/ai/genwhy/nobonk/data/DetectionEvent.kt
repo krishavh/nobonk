@@ -67,7 +67,8 @@ data class DetectionEvent(
          * metrics into app state.
          *
          * @throws IllegalArgumentException if `alertLevel` or `className` is not a recognised
-         *   value, or if `distance` is negative.
+         *   value, or if `distance` is negative (a NaN distance is also rejected, since the
+         *   non-negative check fails for NaN).
          * @throws org.json.JSONException if any required key is missing or has the wrong type.
          */
         fun fromJson(json: JSONObject): DetectionEvent {
@@ -131,7 +132,7 @@ data class SessionSummary(
     val startLongitude: Double?
 ) {
     /**
-     * Session length in whole minutes.
+     * Session length in whole minutes, truncated toward zero.
      *
      * A negative [SessionSummary.endTimestamp] minus [SessionSummary.startTimestamp]
      * (e.g. from a clock adjustment mid-session) is clamped to zero so the UI never
