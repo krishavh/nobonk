@@ -98,6 +98,13 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     // ── SensorEventListener ─────────────────────────────────────
 
+    /**
+     * Updates [cameraPitchDegrees] from the latest gravity/accelerometer reading.
+     *
+     * Malformed events (null, fewer than 3 components, non-finite or degenerate
+     * vectors) are silently ignored so a misbehaving driver can never crash the
+     * app or poison the smoothed value.
+     */
     override fun onSensorChanged(event: SensorEvent?) {
         val values = event?.values ?: return
         // Some drivers deliver fewer than 3 components; bail out rather than crash.
@@ -135,6 +142,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         cameraPitchDegrees = smoothed.coerceIn(PITCH_CLAMP_MIN, PITCH_CLAMP_MAX)
     }
 
+    /** Not used; pitch quality does not depend on sensor accuracy reporting. */
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
 
     private companion object {
