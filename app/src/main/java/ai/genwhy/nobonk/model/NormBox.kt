@@ -27,16 +27,18 @@ data class NormBox(
     /** [width] × [height]; always non-negative. */
     val area: Float get() = width * height
 
-    /** Midpoint of the horizontal edges. */
+    /** Midpoint of the horizontal edges; well-defined even for inverted boxes. */
     val centerX: Float get() = (left + right) * 0.5f
 
-    /** Midpoint of the vertical edges. */
+    /** Midpoint of the vertical edges; well-defined even for inverted boxes. */
     val centerY: Float get() = (top + bottom) * 0.5f
 
     /**
-     * Intersection-over-Union with [other]. Returns 0f when the boxes are
-     * disjoint, touch only at an edge/corner, or when the union area is zero
-     * (both boxes degenerate).
+     * Intersection-over-Union with [other], in [0f‥1f].
+     *
+     * Returns 0f when the boxes are disjoint, touch only at an edge/corner
+     * (zero-area intersection), or when the union area is zero (both boxes
+     * degenerate) — avoiding division by zero in the last case.
      */
     fun iou(other: NormBox): Float {
         val interLeft = maxOf(left, other.left)
@@ -53,8 +55,9 @@ data class NormBox(
 
     /**
      * True when ([px], [py]) falls inside this box, inclusive of the edges.
-     * Note: for inverted boxes (right < left) this is always false, matching
-     * the empty range semantics of `in`.
+     *
+     * Note: for inverted boxes (right < left or bottom < top) the `..` range
+     * is empty, so this is always false — matching empty-range semantics.
      */
     fun contains(px: Float, py: Float): Boolean =
         px in left..right && py in top..bottom
@@ -66,8 +69,8 @@ data class NormBox(
          * edges; use [width]/[height] (which clamp to 0) for extents.
          */
         fun fromCenter(cx: Float, cy: Float, w: Float, h: Float): NormBox {
-            val halfW = w / 2f
-            val halfH = h / 2f
+            val halfW = w * 0.5f
+            val halfH = h * 0.5f
             return NormBox(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
         }
     }
