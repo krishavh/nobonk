@@ -16,7 +16,7 @@ import java.util.UUID
  * @param longitude     GPS longitude; `null` if no fix was available at the time of detection
  * @param className     Detected object class ("person", "car", etc.); see [Companion.VALID_CLASS_NAMES]
  * @param distance      Estimated distance in metres; must be non-negative and finite
- * @param alertLevel    Severity: "LOW", "MEDIUM", or "HIGH"
+ * @param alertLevel    Severity: "LOW", "MEDIUM", or "HIGH"; see [Companion.VALID_ALERT_LEVELS]
  * @param isApproaching Whether the object was closing distance at the time of the event
  */
 data class DetectionEvent(
