@@ -66,7 +66,11 @@ class SensorMonitor(context: Context) : SensorEventListener {
      */
     enum class AngleQuality { OK, WARNING, BAD }
 
-    /** Quality bucket derived from the current [cameraPitchDegrees]. */
+    /**
+     * Quality bucket for the current [cameraPitchDegrees]:
+     * pitch ≤ 72° is [AngleQuality.OK], ≤ 82° is [AngleQuality.WARNING],
+     * anything above is [AngleQuality.BAD].
+     */
     val angleQuality: AngleQuality
         get() = when {
             cameraPitchDegrees <= WARNING_THRESHOLD_DEGREES -> AngleQuality.OK
