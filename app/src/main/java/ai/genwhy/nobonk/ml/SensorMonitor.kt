@@ -132,7 +132,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // average inside the physically meaningful range even if a driver ever
         // reports an out-of-range magnitude.
         val smoothed = cameraPitchDegrees * PREVIOUS_SAMPLE_WEIGHT +
-            rawPitch * (1f - PREVIOUS_SAMPLE_WEIGHT)
+            rawPitch * NEW_SAMPLE_WEIGHT
         cameraPitchDegrees = smoothed.coerceIn(PITCH_CLAMP_MIN, PITCH_CLAMP_MAX)
     }
 
@@ -162,11 +162,11 @@ class SensorMonitor(context: Context) : SensorEventListener {
         /** Above this pitch the phone is nearly horizontal, camera at the ceiling. */
         const val BAD_THRESHOLD_DEGREES = 82f
 
-        /**
-         * Weight of the previous sample in the EMA smoothing
-         * (the new sample gets the complement, i.e. 30%).
-         */
+        /** Weight of the previous sample in the EMA smoothing (new sample gets 30%). */
         const val PREVIOUS_SAMPLE_WEIGHT = 0.7f
+
+        /** Complement of [PREVIOUS_SAMPLE_WEIGHT]; weight applied to the new sample. */
+        const val NEW_SAMPLE_WEIGHT = 1f - PREVIOUS_SAMPLE_WEIGHT
 
         /** Physically meaningful pitch range in degrees, used to clamp the smoothed value. */
         const val PITCH_CLAMP_MIN = -90f
