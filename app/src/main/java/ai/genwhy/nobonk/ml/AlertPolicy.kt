@@ -49,6 +49,10 @@ object AlertPolicy {
     /** Minimum gap between adjacent ladder thresholds, keeping the ladder strictly ordered. */
     private const val THRESHOLD_GAP = 0.02f
 
+    /** Fixed lower bounds for the derived MEDIUM / LOW thresholds (see [levelFor]). */
+    private const val MIN_MEDIUM_THRESHOLD = 0.12f
+    private const val MIN_LOW_THRESHOLD = 0.06f
+
     /**
      * Fill fractions (0‥1 of frame) for HIGH / MEDIUM / LOW at the reference preset.
      *
@@ -103,7 +107,8 @@ object AlertPolicy {
      * @param thresholdMeters user preset in meters; values outside 0.25‥10 are clamped
      *        before use, so non-positive or absurd inputs cannot produce a zero or
      *        negative multiplier. NaN input is treated as the reference preset
-     *        (multiplier 1); ±Infinity collapses to the multiplier bounds (1.7 / 0.55).
+     *        (multiplier 1); ±Infinity collapses to [MIN_SENSITIVITY] (0.55), since
+     *        reference/±Infinity is ±0 and both clamp to the lower multiplier bound.
      */
     fun sensitivity(thresholdMeters: Float): Float =
         (REFERENCE_THRESHOLD_M / thresholdMeters.saneMeters().coerceIn(MIN_PRESET_M, MAX_PRESET_M))
@@ -140,11 +145,11 @@ object AlertPolicy {
         val high = (ladder.high * s).coerceIn(MIN_HIGH_THRESHOLD, MAX_HIGH_THRESHOLD)
         // Each lower threshold is clamped [THRESHOLD_GAP] below the one above, keeping the
         // ladder strictly ordered even at extreme sensitivity settings. The fixed lower
-        // bounds (0.12, 0.06) are always below the derived upper bounds because
-        // `high ≥ 0.20` implies `high - 0.02 ≥ 0.18 > 0.12`, and likewise for `low`
-        // (med ≥ 0.12 implies `med - 0.02 ≥ 0.10 > 0.06`).
-        val med  = (ladder.medium * s).coerceIn(0.12f, high - THRESHOLD_GAP)
-        val low  = (ladder.low * s).coerceIn(0.06f, med - THRESHOLD_GAP)
+        // bounds are always below the derived upper bounds because `high ≥ 0.20` implies
+        // `high - 0.02 ≥ 0.18 > 0.12`, and `med ≥ 0.12` implies `med - 0.02 ≥ 0.10 > 0.06`
+        // — so [Float.coerceIn] can never see min > max here.
+        val med = (ladder.medium * s).coerceIn(MIN_MEDIUM_THRESHOLD, high - THRESHOLD_GAP)
+        val low = (ladder.low * s).coerceIn(MIN_LOW_THRESHOLD, med - THRESHOLD_GAP)
 
         val base = when {
             fill >= high -> AlertLevel.HIGH
