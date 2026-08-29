@@ -126,6 +126,9 @@ data class DetectionEvent(
 /**
  * Lightweight summary computed per session for the session list UI.
  *
+ * Instances are derived from already-validated [DetectionEvent]s; no I/O or
+ * parsing happens here, so all fields are trusted as supplied by the caller.
+ *
  * @property sessionId       Identifier of the summarised session
  * @property startTimestamp  Unix milliseconds when the session started
  * @property endTimestamp    Unix milliseconds when the session ended
