@@ -61,11 +61,12 @@ object LowLight {
         variance: Float,
         brightnessThreshold: Float = DEFAULT_BRIGHTNESS_THRESHOLD,
         varianceThreshold: Float = DEFAULT_VARIANCE_THRESHOLD
-    ): Boolean =
-        meanBrightness.isFinite() &&
-            variance.isFinite() &&
-            meanBrightness < brightnessThreshold &&
-            variance < varianceThreshold
+    ): Boolean {
+        // Reject sensor glitches outright; NaN would already fail the `<` checks
+        // under IEEE-754, but infinities would not, so the finite check is load-bearing.
+        if (!meanBrightness.isFinite() || !variance.isFinite()) return false
+        return meanBrightness < brightnessThreshold && variance < varianceThreshold
+    }
 
     /**
      * Dim-but-not-blocked scene → detection still runs but recall/accuracy degrade
@@ -92,8 +93,10 @@ object LowLight {
         meanBrightness: Float,
         blocked: Boolean,
         lowLightThreshold: Float = DEFAULT_LOW_LIGHT_THRESHOLD
-    ): Boolean =
-        meanBrightness.isFinite() &&
-            !blocked &&
-            meanBrightness < lowLightThreshold
+    ): Boolean {
+        // A glitchy reading must not raise a user-facing banner; NaN already fails
+        // the `<` check, but the explicit finite test also rejects infinities.
+        if (!meanBrightness.isFinite()) return false
+        return !blocked && meanBrightness < lowLightThreshold
+    }
 }
