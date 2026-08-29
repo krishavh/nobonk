@@ -45,7 +45,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
     /**
      * Gravity sensor, falling back to the raw accelerometer if the fused
      * gravity sensor is unavailable on this device. Null when the device has
-     * neither, in which case [start] is a no-op and pitch stays 0.
+     * neither, in which case [start] is a no-op and [cameraPitchDegrees] stays 0.
      */
     private val gravitySensor: Sensor? =
         sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
@@ -123,6 +123,8 @@ class SensorMonitor(context: Context) : SensorEventListener {
     override fun onSensorChanged(event: SensorEvent?) {
         // `takeIf` folds the null and short-event checks into one guard; some
         // drivers deliver fewer than 3 components, in which case we bail out.
+        // Note: `values` is reused by the system across events, but we only read
+        // the components synchronously here, so no copy is needed.
         val values = event?.values?.takeIf { it.size >= 3 } ?: return
 
         // Only the y (along phone) and z (out of screen) components matter for
