@@ -42,7 +42,11 @@ class SensorMonitor(context: Context) : SensorEventListener {
     private val sensorManager: SensorManager? =
         context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
 
-    /** Gravity sensor, falling back to the raw accelerometer if unavailable. */
+    /**
+     * Gravity sensor, falling back to the raw accelerometer if the fused
+     * gravity sensor is unavailable on this device. Null when the device has
+     * neither, in which case [start] is a no-op and pitch stays 0.
+     */
     private val gravitySensor: Sensor? =
         sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -91,7 +95,11 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     // ── Lifecycle ────────────────────────────────────────────────
 
-    /** Registers this monitor for gravity/accelerometer updates. No-op if no sensor exists. */
+    /**
+     * Registers this monitor for gravity/accelerometer updates at UI rate.
+     * No-op if the sensor service or sensor is unavailable, or if already
+     * registered (re-registering is harmless but wasteful).
+     */
     fun start() {
         val manager = sensorManager ?: return
         val sensor = gravitySensor ?: return
@@ -140,7 +148,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
         cameraPitchDegrees = smoothed.coerceIn(PITCH_CLAMP_MIN, PITCH_CLAMP_MAX)
     }
 
-    /** Not used; pitch quality does not depend on sensor accuracy reporting. */
+    /**
+     * Not used; pitch quality does not depend on sensor accuracy reporting.
+     */
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // No-op: accuracy changes don't affect the pitch estimate.
     }
