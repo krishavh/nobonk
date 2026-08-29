@@ -34,6 +34,11 @@ object Nms {
      * ties in confidence keep their relative input order and results are
      * deterministic for a given input.
      *
+     * Degenerate boxes (zero or negative width/height) contribute an IoU of 0
+     * by convention (see [ai.genwhy.nobonk.model.Detection.boundingBox]'s IoU
+     * implementation), so they can never suppress another box but may still be
+     * kept if no higher-confidence overlapping box precedes them.
+     *
      * Complexity is O(C · n²) worst case for n boxes in C class groups; typical
      * per-frame detection counts (tens of boxes) make this negligible.
      *
