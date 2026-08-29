@@ -42,6 +42,8 @@ object Nms {
         // or suppress everything. NaN coerces to the low bound (0f), which is the
         // most conservative (most suppressive) behavior.
         val threshold = iouThreshold.coerceIn(0f, 1f)
+        // Pre-size the sink to the input size: the result can never exceed it,
+        // so the backing array is never grown mid-flatMap.
         return detections
             .groupBy { it.classId }
             .flatMapTo(ArrayList(detections.size)) { (_, group) ->
