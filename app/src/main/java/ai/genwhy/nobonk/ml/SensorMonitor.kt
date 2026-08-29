@@ -45,7 +45,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
     /** Gravity sensor, falling back to the raw accelerometer if unavailable. */
     private val gravitySensor: Sensor? =
         sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
-            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) // fallback
+            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
     /**
      * Camera pitch in degrees, clamped to [-90, 90].
