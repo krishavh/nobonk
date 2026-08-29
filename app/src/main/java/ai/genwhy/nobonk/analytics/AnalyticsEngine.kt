@@ -186,29 +186,20 @@ object AnalyticsEngine {
         val clusters = mutableListOf<Cluster>()
 
         for (ev in validPoints) {
-            // Linear scan for the closest cluster; Manhattan distance in degrees
-            // is a cheap proxy for metres at city scale. Strict `<` keeps the
-            // first minimum on ties, matching insertion order.
-            var nearest: Cluster? = null
-            var nearestDist = Double.POSITIVE_INFINITY
-            for (c in clusters) {
-                val d = abs(c.lat - ev.lat) + abs(c.lng - ev.lng)
-                if (d < nearestDist) {
-                    nearest = c
-                    nearestDist = d
-                }
-            }
-            val c = nearest
-            if (c != null &&
-                abs(c.lat - ev.lat) < clusterRadius &&
-                abs(c.lng - ev.lng) < clusterRadius
+            // Manhattan distance in degrees is a cheap proxy for metres at city
+            // scale. minByOrNull keeps the first minimum on ties, matching
+            // insertion order.
+            val nearest = clusters.minByOrNull { c -> abs(c.lat - ev.lat) + abs(c.lng - ev.lng) }
+            if (nearest != null &&
+                abs(nearest.lat - ev.lat) < clusterRadius &&
+                abs(nearest.lng - ev.lng) < clusterRadius
             ) {
                 // Running-average centroid update; count is always ≥ 1 here,
                 // so newCount is ≥ 2 and the division is safe.
-                val newCount = c.count + 1
-                c.lat = (c.lat * c.count + ev.lat) / newCount
-                c.lng = (c.lng * c.count + ev.lng) / newCount
-                c.count = newCount
+                val newCount = nearest.count + 1
+                nearest.lat = (nearest.lat * nearest.count + ev.lat) / newCount
+                nearest.lng = (nearest.lng * nearest.count + ev.lng) / newCount
+                nearest.count = newCount
             } else {
                 clusters.add(Cluster(ev.lat, ev.lng, 1))
             }
@@ -269,7 +260,7 @@ object AnalyticsEngine {
      * 59 → "59 mins", 125 → "2h 5m". Negative inputs are treated as zero.
      */
     fun formatDuration(minutes: Long): String {
-        val m = if (minutes < 0) 0L else minutes
+        val m = minutes.coerceAtLeast(0L)
         return when {
             m < 1L  -> "< 1 min"
             m == 1L -> "1 min"
