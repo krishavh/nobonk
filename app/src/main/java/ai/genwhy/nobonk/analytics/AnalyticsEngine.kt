@@ -26,7 +26,6 @@ object AnalyticsEngine {
      */
     fun warningsByHour(events: List<DetectionEvent>): IntArray {
         val counts = IntArray(24)
-        if (events.isEmpty()) return counts
         val cal = Calendar.getInstance()
         for (ev in events) {
             if (ev.timestamp <= 0L) continue
@@ -142,16 +141,12 @@ object AnalyticsEngine {
      * Summarises the given events: distinct session count, total event count,
      * close-call count, and the peak danger hour (-1 when there are no events).
      */
-    fun overallStats(events: List<DetectionEvent>): OverallStats {
-        val totalSessions = events.asSequence().map { it.sessionId }.distinct().count()
-        val closeCalls = events.count { it.alertLevel == "HIGH" && it.isApproaching }
-        return OverallStats(
-            totalSessions = totalSessions,
-            totalEvents = events.size,
-            closeCalls = closeCalls,
-            peakHour = peakDangerHour(events)
-        )
-    }
+    fun overallStats(events: List<DetectionEvent>): OverallStats = OverallStats(
+        totalSessions = events.asSequence().map { it.sessionId }.distinct().count(),
+        totalEvents = events.size,
+        closeCalls = events.count { it.alertLevel == "HIGH" && it.isApproaching },
+        peakHour = peakDangerHour(events)
+    )
 
     // ── GPS hotspots ──────────────────────────────────────────────────────────
 
