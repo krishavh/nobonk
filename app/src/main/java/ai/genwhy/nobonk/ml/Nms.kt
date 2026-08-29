@@ -49,9 +49,10 @@ object Nms {
     ): List<Detection> {
         if (detections.isEmpty()) return emptyList()
         // Clamp so a caller passing e.g. 1.5f or -0.1f can't silently disable NMS
-        // or suppress everything. NaN coerces to the low bound (0f), which is the
-        // most conservative (most suppressive) behavior.
-        val threshold = iouThreshold.coerceIn(0f, 1f)
+        // or suppress everything. [Float.coerceIn] does NOT map NaN to a bound
+        // (all comparisons against NaN are false), so handle it explicitly: NaN
+        // is treated as 0f, the most conservative (most suppressive) choice.
+        val threshold = if (iouThreshold.isNaN()) 0f else iouThreshold.coerceIn(0f, 1f)
         // Pre-size the sink to the input size: the result can never exceed it,
         // so the backing array is never grown mid-flatMap.
         return detections
