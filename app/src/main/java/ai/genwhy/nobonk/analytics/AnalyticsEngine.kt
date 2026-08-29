@@ -249,7 +249,10 @@ object AnalyticsEngine {
      */
     fun formatTimestamp(timestamp: Long, pattern: String = "MMM d, h:mm a"): String {
         if (timestamp <= 0L) return "N/A"
-        return SimpleDateFormat(pattern, Locale.getDefault()).format(timestamp)
+        // Fall back to the default pattern if the caller passes a blank one,
+        // which would otherwise produce empty output.
+        val effectivePattern = pattern.ifBlank { "MMM d, h:mm a" }
+        return SimpleDateFormat(effectivePattern, Locale.getDefault()).format(timestamp)
     }
 
     /**
