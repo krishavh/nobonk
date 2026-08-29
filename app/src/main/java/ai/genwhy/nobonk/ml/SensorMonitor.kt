@@ -141,7 +141,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
     }
 
     /** Not used; pitch quality does not depend on sensor accuracy reporting. */
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // No-op: accuracy changes don't affect the pitch estimate.
+    }
 
     /**
      * Camera pitch from the device's y/z gravity components, in degrees.
