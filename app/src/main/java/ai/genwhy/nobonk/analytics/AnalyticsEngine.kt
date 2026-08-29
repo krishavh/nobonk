@@ -189,26 +189,22 @@ object AnalyticsEngine {
         for (ev in validPoints) {
             // Linear scan for the closest cluster; Manhattan distance in degrees
             // is a cheap proxy for metres at city scale.
-            var nearest: Cluster? = null
-            var nearestDist = Double.POSITIVE_INFINITY
-            for (c in clusters) {
+            val (nearest, nearestDist) = clusters.fold(
+                null as Cluster? to Double.POSITIVE_INFINITY
+            ) { (best, bestDist), c ->
                 val d = abs(c.lat - ev.lat) + abs(c.lng - ev.lng)
-                if (d < nearestDist) {
-                    nearestDist = d
-                    nearest = c
-                }
+                if (d < bestDist) c to d else best to bestDist
             }
-            val target = nearest
-            if (target != null &&
-                abs(target.lat - ev.lat) < clusterRadius &&
-                abs(target.lng - ev.lng) < clusterRadius
+            if (nearest != null &&
+                abs(nearest.lat - ev.lat) < clusterRadius &&
+                abs(nearest.lng - ev.lng) < clusterRadius
             ) {
                 // Running-average centroid update; count is always ≥ 1 here,
                 // so newCount is ≥ 2 and the division is safe.
-                val newCount = target.count + 1
-                target.lat = (target.lat * target.count + ev.lat) / newCount
-                target.lng = (target.lng * target.count + ev.lng) / newCount
-                target.count = newCount
+                val newCount = nearest.count + 1
+                nearest.lat = (nearest.lat * nearest.count + ev.lat) / newCount
+                nearest.lng = (nearest.lng * nearest.count + ev.lng) / newCount
+                nearest.count = newCount
             } else {
                 clusters.add(Cluster(ev.lat, ev.lng, 1))
             }
