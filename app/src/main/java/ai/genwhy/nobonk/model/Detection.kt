@@ -93,8 +93,12 @@ data class Detection(
     override fun toString(): String = buildString {
         append(className).append('#').append(id)
         append(' ').append((confidence * 100).toInt()).append('%')
-        if (hasDistanceEstimate) append(" ~").append(distance).append('m')
-        if (isAlerting) append(' ').append(alertLevel.name)
+        if (hasDistanceEstimate) {
+            append(" ~").append(distance).append('m')
+        }
+        if (isAlerting) {
+            append(' ').append(alertLevel.name)
+        }
     }
 }
 
