@@ -66,6 +66,10 @@ object AlertPolicy {
      */
     data class Ladder(val high: Float, val medium: Float, val low: Float)
 
+    // Person ladder, shared by the "person" case and the unknown-class fallback so the
+    // two can never drift apart.
+    private val PERSON_LADDER = Ladder(high = 0.60f, medium = 0.42f, low = 0.28f)
+
     /**
      * Base fill-fraction ladder for an object class. Unknown (including blank or
      * misspelled) class names fall back to the person ladder — the most conservative
@@ -76,13 +80,13 @@ object AlertPolicy {
         // Round-2 calibration: fill-only HIGH backstop lowered 0.70 → 0.60 so a head-on
         // person clears HIGH ~0.15 s earlier (fill-only fired at ~0.75 s to collision —
         // too late after pipeline latency). The 0.85 cap in baseLevel keeps HIGH reachable.
-        "person"                       -> Ladder(high = 0.60f, medium = 0.42f, low = 0.28f)
+        "person"                       -> PERSON_LADDER
         // Vehicles are large and fast — warn earlier (a lower fill already means danger).
         "car", "truck", "bus"          -> Ladder(high = 0.55f, medium = 0.36f, low = 0.22f)
         "motorcycle", "bicycle"        -> Ladder(high = 0.52f, medium = 0.34f, low = 0.20f)
         "dog", "cat", "horse"          -> Ladder(high = 0.55f, medium = 0.38f, low = 0.24f)
         // Fallback == person ladder: conservative default for unrecognized classes.
-        else                           -> Ladder(high = 0.60f, medium = 0.42f, low = 0.28f)
+        else                           -> PERSON_LADDER
     }
 
     /**
