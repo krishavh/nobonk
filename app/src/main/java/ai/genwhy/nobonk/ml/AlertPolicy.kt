@@ -40,8 +40,21 @@ object AlertPolicy {
     private const val MIN_SENSITIVITY = 0.55f
     private const val MAX_SENSITIVITY = 1.7f
 
+    /** Floor for the derived HIGH threshold in [levelFor]; keeps HIGH reachable early. */
+    private const val MIN_HIGH_THRESHOLD = 0.20f
+
+    /** Ceiling for the derived HIGH threshold; a frame-filling object always clears it. */
+    private const val MAX_HIGH_THRESHOLD = 0.85f
+
+    /** Minimum gap between adjacent ladder thresholds, keeping the ladder strictly ordered. */
+    private const val THRESHOLD_GAP = 0.02f
+
     /**
      * Fill fractions (0‥1 of frame) for HIGH / MEDIUM / LOW at the reference preset.
+     *
+     * @property high   fill at or above which the alarm is HIGH
+     * @property medium fill at or above which the alarm is MEDIUM
+     * @property low    fill at or above which the alarm is LOW
      *
      * Callers should satisfy high > medium > low; [levelFor] re-clamps derived
      * thresholds so even a degenerate ladder still yields strictly ordered cut-offs.
@@ -124,14 +137,14 @@ object AlertPolicy {
 
         // Cap HIGH at 0.85 so a frame-filling object (fill up to 1.0) ALWAYS reaches it,
         // at every preset — this is what makes the alarm physically reachable.
-        val high = (ladder.high * s).coerceIn(0.20f, 0.85f)
-        // Each lower threshold is clamped 0.02 below the one above, keeping the ladder
-        // strictly ordered even at extreme sensitivity settings. The fixed lower bounds
-        // (0.12, 0.06) are always below the derived upper bounds because `high ≥ 0.20`
-        // implies `high - 0.02 ≥ 0.18 > 0.12`, and likewise for `low` (med ≥ 0.12
-        // implies `med - 0.02 ≥ 0.10 > 0.06`).
-        val med  = (ladder.medium * s).coerceIn(0.12f, high - 0.02f)
-        val low  = (ladder.low * s).coerceIn(0.06f, med - 0.02f)
+        val high = (ladder.high * s).coerceIn(MIN_HIGH_THRESHOLD, MAX_HIGH_THRESHOLD)
+        // Each lower threshold is clamped [THRESHOLD_GAP] below the one above, keeping the
+        // ladder strictly ordered even at extreme sensitivity settings. The fixed lower
+        // bounds (0.12, 0.06) are always below the derived upper bounds because
+        // `high ≥ 0.20` implies `high - 0.02 ≥ 0.18 > 0.12`, and likewise for `low`
+        // (med ≥ 0.12 implies `med - 0.02 ≥ 0.10 > 0.06`).
+        val med  = (ladder.medium * s).coerceIn(0.12f, high - THRESHOLD_GAP)
+        val low  = (ladder.low * s).coerceIn(0.06f, med - THRESHOLD_GAP)
 
         val base = when {
             fill >= high -> AlertLevel.HIGH
