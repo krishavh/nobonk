@@ -77,16 +77,18 @@ object Nms {
         // suppressed[i] marks boxes already dropped by an earlier keep;
         // skipping them keeps the inner loop O(n) per kept box.
         val suppressed = BooleanArray(sorted.size)
+        // Cache bounding boxes once: the IoU inner loop reads each box many
+        // times, and this avoids repeated property access on every comparison.
+        val boxes = Array(sorted.size) { sorted[it].boundingBox }
         for (i in sorted.indices) {
             if (suppressed[i]) continue
-            val kept = sorted[i]
-            keep.add(kept)
+            keep.add(sorted[i])
             // Suppress every remaining lower-confidence box that overlaps the
             // newly kept one. Strictly greater: a box exactly at the threshold
             // survives.
-            val keptBox = kept.boundingBox
+            val keptBox = boxes[i]
             for (j in i + 1 until sorted.size) {
-                if (!suppressed[j] && keptBox.iou(sorted[j].boundingBox) > threshold) {
+                if (!suppressed[j] && keptBox.iou(boxes[j]) > threshold) {
                     suppressed[j] = true
                 }
             }
