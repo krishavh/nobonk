@@ -187,8 +187,7 @@ object AlertPolicy {
         AlertLevel.NONE   -> AlertLevel.LOW
         AlertLevel.LOW    -> AlertLevel.MEDIUM
         AlertLevel.MEDIUM -> AlertLevel.HIGH
-        // `when` over an enum is exhaustive; HIGH (and any future level) is a no-op.
-        else              -> AlertLevel.HIGH
+        AlertLevel.HIGH   -> AlertLevel.HIGH
     }
 
     /**
