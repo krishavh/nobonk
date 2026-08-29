@@ -115,8 +115,8 @@ data class DetectionEvent(
             val rawLat = json.optCoordinate("latitude")
             val rawLng = json.optCoordinate("longitude")
             val hasLegacySentinel = rawLat == 0.0 && rawLng == 0.0
-            val lat = if (hasLegacySentinel) null else rawLat
-            val lng = if (hasLegacySentinel) null else rawLng
+            val lat = rawLat.takeUnless { hasLegacySentinel }
+            val lng = rawLng.takeUnless { hasLegacySentinel }
 
             return DetectionEvent(
                 id = json.getString("id"),
