@@ -187,6 +187,7 @@ object AlertPolicy {
         AlertLevel.NONE   -> AlertLevel.LOW
         AlertLevel.LOW    -> AlertLevel.MEDIUM
         AlertLevel.MEDIUM -> AlertLevel.HIGH
+        AlertLevel.HIGH   -> AlertLevel.HIGH
         // Exhaustive `else` keeps this total if AlertLevel ever gains a new constant.
         else              -> AlertLevel.HIGH
     }
