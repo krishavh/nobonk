@@ -61,9 +61,10 @@ object Letterbox {
             return Transform(srcW, srcH, size, scale = 0f, padX = 0f, padY = 0f)
         }
         val sizeF = size.toFloat()
-        // The min of the two per-axis factors keeps the whole frame inside the square
-        // input while preserving aspect ratio; the other axis is then padded.
-        val scale = minOf(sizeF / srcW, sizeF / srcH)
+        // Scaling by size / max(srcW, srcH) is the min of the two per-axis factors:
+        // it keeps the whole frame inside the square input while preserving aspect
+        // ratio; the other axis is then padded.
+        val scale = sizeF / maxOf(srcW, srcH).toFloat()
         // Center the scaled content: leftover space on each axis is split evenly.
         // scale <= 1 guarantees the leftover (and thus padding) is non-negative;
         // coerceAtLeast(0f) is a cheap belt-and-braces against float rounding.
