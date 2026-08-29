@@ -59,6 +59,15 @@ data class Detection(
      */
     val isAlerting: Boolean
         get() = alertLevel != AlertLevel.NONE
+
+    /**
+     * True when this detection has reached the top of the alert ladder.
+     *
+     * Reads better than `alertLevel == AlertLevel.HIGH` at call sites that
+     * trigger the full-screen interruption path.
+     */
+    val isHighAlert: Boolean
+        get() = alertLevel == AlertLevel.HIGH
 }
 
 /**
