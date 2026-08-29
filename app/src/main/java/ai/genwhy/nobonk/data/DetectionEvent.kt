@@ -27,7 +27,7 @@ data class DetectionEvent(
     val longitude: Double? = null,
     val className: String,
     val distance: Float,
-    val alertLevel: String,      // "LOW" | "MEDIUM" | "HIGH"
+    val alertLevel: String,
     val isApproaching: Boolean
 ) {
     /**
