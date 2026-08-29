@@ -113,9 +113,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
      * app or poison the smoothed value.
      */
     override fun onSensorChanged(event: SensorEvent?) {
-        val values = event?.values ?: return
-        // Some drivers deliver fewer than 3 components; bail out rather than crash.
-        if (values.size < 3) return
+        // `takeIf` folds the null and short-event checks into one guard; some
+        // drivers deliver fewer than 3 components, in which case we bail out.
+        val values = event?.values?.takeIf { it.size >= 3 } ?: return
 
         // Only the y (along phone) and z (out of screen) components matter for pitch.
         val gy = values[1]
