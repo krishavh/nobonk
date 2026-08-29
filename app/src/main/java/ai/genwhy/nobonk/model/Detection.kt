@@ -77,9 +77,9 @@ data class Detection(
      */
     val boxCenter: Pair<Float, Float>
         get() = with(boundingBox) {
-            // Midpoint of the normalized edges; safe for empty/degenerate boxes
-            // (zero width or height just collapses to the shared edge position —
-            // pure averaging, no division, so no div-by-zero risk).
+            // Midpoint of the normalized edges. Safe for empty/degenerate boxes:
+            // zero width or height just collapses to the shared edge position —
+            // pure averaging, no division, so no div-by-zero risk.
             (left + right) / 2f to (top + bottom) / 2f
         }
 
