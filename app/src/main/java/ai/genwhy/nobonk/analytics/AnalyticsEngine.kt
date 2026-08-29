@@ -259,9 +259,9 @@ object AnalyticsEngine {
     fun formatDuration(minutes: Long): String {
         val m = if (minutes < 0) 0L else minutes
         return when {
-            m < 1   -> "< 1 min"
+            m < 1L  -> "< 1 min"
             m == 1L -> "1 min"
-            m < 60  -> "$m mins"
+            m < 60L -> "$m mins"
             else    -> "${m / 60}h ${m % 60}m"
         }
     }
