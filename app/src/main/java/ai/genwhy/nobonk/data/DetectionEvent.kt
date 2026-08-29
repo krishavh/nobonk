@@ -144,14 +144,18 @@ data class SessionSummary(
     val startLatitude: Double?,
     val startLongitude: Double?
 ) {
+    companion object {
+        /** Milliseconds per minute; a compile-time constant, so no division-by-zero risk. */
+        private const val MILLIS_PER_MINUTE = 60_000L
+    }
+
     /**
      * Session length in whole minutes, truncated toward zero.
      *
      * A negative [endTimestamp] minus [startTimestamp] difference (e.g. from a clock
      * adjustment mid-session) is clamped to zero so the UI never shows a negative
-     * duration. Integer division by 60,000 ms truncates any sub-minute remainder;
-     * the divisor is a compile-time constant, so no division-by-zero is possible.
+     * duration. Integer division by [MILLIS_PER_MINUTE] truncates any sub-minute remainder.
      */
     val durationMinutes: Long
-        get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / 60_000L
+        get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / MILLIS_PER_MINUTE
 }
