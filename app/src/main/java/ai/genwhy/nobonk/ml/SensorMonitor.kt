@@ -39,7 +39,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
     // `as?` instead of a hard cast: on the rare device/robolectric setup where
     // SENSOR_SERVICE is missing or of an unexpected type, degrade gracefully
     // (no sensor, pitch stays 0) rather than crashing in the constructor.
-    private val sensorManager =
+    private val sensorManager: SensorManager? =
         context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
 
     /** Gravity sensor, falling back to the raw accelerometer if unavailable. */
@@ -89,11 +89,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     /** Registers this monitor for gravity/accelerometer updates. No-op if no sensor exists. */
     fun start() {
-        val manager = sensorManager
-        val sensor = gravitySensor
-        if (manager != null && sensor != null) {
-            manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
-        }
+        val manager = sensorManager ?: return
+        val sensor = gravitySensor ?: return
+        manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
     }
 
     /** Unregisters this monitor; safe to call multiple times, even without a prior [start]. */
@@ -115,6 +113,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // Some drivers deliver fewer than 3 components; bail out rather than crash.
         if (values.size < 3) return
 
+        // Only the y (along phone) and z (out of screen) components matter for pitch.
         val gy = values[1]
         val gz = values[2]
 
@@ -124,17 +123,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // is well-defined as 0 but the value is meaningless, so skip it.
         if (gy == 0f && gz == 0f) return
 
-        // Device axes (portrait):
-        //   y → up along phone     z → out of screen (toward user)
-        // Camera optical axis = -z direction.
-        // Pitch = angle of -z relative to the horizontal plane.
-        //
-        // atan2(-gz, -gy):
-        //   phone vertical (screen at user)  → (0, 9.8)  → 0°
-        //   phone tilted back (camera up)    → (+, +)     → positive
-        //   phone tilted forward (camera dn) → (-, +)     → negative
-        val rawPitch = Math.toDegrees(atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
-
+        val rawPitch = computePitch(gy, gz)
         // Reject a non-finite raw pitch (impossible after the guards above, but
         // cheap to defend) so it can never poison the running average.
         if (!rawPitch.isFinite()) return
@@ -149,6 +138,22 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     /** Not used; pitch quality does not depend on sensor accuracy reporting. */
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) { /* no-op */ }
+
+    /**
+     * Camera pitch from the device's y/z gravity components, in degrees.
+     *
+     * Device axes (portrait):
+     *   y → up along phone     z → out of screen (toward user)
+     * Camera optical axis = -z direction.
+     * Pitch = angle of -z relative to the horizontal plane.
+     *
+     * atan2(-gz, -gy):
+     *   phone vertical (screen at user)  → (0, 9.8)  → 0°
+     *   phone tilted back (camera up)    → (+, +)     → positive
+     *   phone tilted forward (camera dn) → (-, +)     → negative
+     */
+    private fun computePitch(gy: Float, gz: Float): Float =
+        Math.toDegrees(atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
 
     private companion object {
         /** Above this pitch the camera starts losing its forward view. */
