@@ -50,7 +50,7 @@ object AlertPolicy {
     /** Minimum gap between adjacent ladder thresholds, keeping the ladder strictly ordered. */
     private const val THRESHOLD_GAP = 0.02f
 
-    /** Fixed lower bounds for the derived MEDIUM / LOW thresholds (see [levelFor]). */
+    /** Fixed lower bounds for the derived MEDIUM / LOW thresholds (see [baseLevel]). */
     private const val MIN_MEDIUM_THRESHOLD = 0.12f
     private const val MIN_LOW_THRESHOLD = 0.06f
 
@@ -61,7 +61,7 @@ object AlertPolicy {
      * @property medium fill at or above which the alarm is MEDIUM
      * @property low    fill at or above which the alarm is LOW
      *
-     * Callers should satisfy high > medium > low; [levelFor] re-clamps derived
+     * Callers should satisfy high > medium > low; [baseLevel] re-clamps derived
      * thresholds so even a degenerate ladder still yields strictly ordered cut-offs.
      */
     data class Ladder(val high: Float, val medium: Float, val low: Float)
@@ -75,7 +75,7 @@ object AlertPolicy {
     fun ladderFor(className: String): Ladder = when (className.normalizedClass()) {
         // Round-2 calibration: fill-only HIGH backstop lowered 0.70 → 0.60 so a head-on
         // person clears HIGH ~0.15 s earlier (fill-only fired at ~0.75 s to collision —
-        // too late after pipeline latency). The 0.85 cap in levelFor keeps HIGH reachable.
+        // too late after pipeline latency). The 0.85 cap in baseLevel keeps HIGH reachable.
         "person"                       -> Ladder(high = 0.60f, medium = 0.42f, low = 0.28f)
         // Vehicles are large and fast — warn earlier (a lower fill already means danger).
         "car", "truck", "bus"          -> Ladder(high = 0.55f, medium = 0.36f, low = 0.22f)
