@@ -36,13 +36,16 @@ import kotlin.math.atan2
  */
 class SensorMonitor(context: Context) : SensorEventListener {
 
+    // `as?` instead of a hard cast: on the rare device/robolectric setup where
+    // SENSOR_SERVICE is missing or of an unexpected type, degrade gracefully
+    // (no sensor, pitch stays 0) rather than crashing in the constructor.
     private val sensorManager =
-        context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
 
     /** Gravity sensor, falling back to the raw accelerometer if unavailable. */
     private val gravitySensor: Sensor? =
-        sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
-            ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) // fallback
+        sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
+            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) // fallback
 
     /**
      * Camera pitch in degrees, clamped to [-90, 90].
@@ -86,14 +89,16 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     /** Registers this monitor for gravity/accelerometer updates. No-op if no sensor exists. */
     fun start() {
-        gravitySensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        val manager = sensorManager
+        val sensor = gravitySensor
+        if (manager != null && sensor != null) {
+            manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
         }
     }
 
     /** Unregisters this monitor; safe to call multiple times, even without a prior [start]. */
     fun stop() {
-        sensorManager.unregisterListener(this)
+        sensorManager?.unregisterListener(this)
     }
 
     // ── SensorEventListener ─────────────────────────────────────
