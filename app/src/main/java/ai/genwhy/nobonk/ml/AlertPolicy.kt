@@ -137,6 +137,20 @@ object AlertPolicy {
         isImminent: Boolean = false
     ): AlertLevel {
         if (isImminent) return AlertLevel.HIGH
+        val base = baseLevel(box, className, thresholdMeters)
+        return if (isApproaching) escalate(base) else base
+    }
+
+    /**
+     * Fill-only ladder lookup: derives strictly ordered HIGH/MEDIUM/LOW thresholds from
+     * the class ladder scaled by the sensitivity multiplier, then compares the object's
+     * fill fraction against them.
+     */
+    private fun baseLevel(
+        box: NormBox,
+        className: String,
+        thresholdMeters: Float
+    ): AlertLevel {
         val fill = fillFraction(box, className)
         val s = sensitivity(thresholdMeters)
         val ladder = ladderFor(className)
@@ -152,13 +166,12 @@ object AlertPolicy {
         val med = (ladder.medium * s).coerceIn(MIN_MEDIUM_THRESHOLD, high - THRESHOLD_GAP)
         val low = (ladder.low * s).coerceIn(MIN_LOW_THRESHOLD, med - THRESHOLD_GAP)
 
-        val base = when {
+        return when {
             fill >= high -> AlertLevel.HIGH
             fill >= med  -> AlertLevel.MEDIUM
             fill >= low  -> AlertLevel.LOW
             else         -> AlertLevel.NONE
         }
-        return if (isApproaching) escalate(base) else base
     }
 
     /**
