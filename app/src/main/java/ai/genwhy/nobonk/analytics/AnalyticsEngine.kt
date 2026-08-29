@@ -188,12 +188,16 @@ object AnalyticsEngine {
 
         for (ev in validPoints) {
             // Linear scan for the closest cluster; Manhattan distance in degrees
-            // is a cheap proxy for metres at city scale.
-            val (nearest, nearestDist) = clusters.fold(
-                null as Cluster? to Double.POSITIVE_INFINITY
-            ) { (best, bestDist), c ->
+            // is a cheap proxy for metres at city scale. minByOrNull keeps the
+            // first minimum on ties, matching insertion order.
+            var nearest: Cluster? = null
+            var nearestDist = Double.POSITIVE_INFINITY
+            for (c in clusters) {
                 val d = abs(c.lat - ev.lat) + abs(c.lng - ev.lng)
-                if (d < bestDist) c to d else best to bestDist
+                if (d < nearestDist) {
+                    nearest = c
+                    nearestDist = d
+                }
             }
             if (nearest != null &&
                 abs(nearest.lat - ev.lat) < clusterRadius &&
