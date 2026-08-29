@@ -110,6 +110,7 @@ object Letterbox {
     /**
      * Clamp to 0‥1, mapping NaN to 0. Plain [Float.coerceIn] would propagate NaN
      * (its comparisons both fail), which would poison downstream box math.
+     * Infinities clamp to the nearest bound, which is the desired saturation.
      */
     private fun clamp01(v: Float): Float =
         if (v.isNaN()) 0f else v.coerceIn(0f, 1f)
