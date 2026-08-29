@@ -111,7 +111,9 @@ data class DetectionEvent(
             // The 0.0/0.0 sentinel was used in records written before this migration;
             // it maps to a point in the Gulf of Guinea which no user will ever visit.
             // The sentinel is only cleared when BOTH coordinates are exactly 0.0, so a
-            // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved.
+            // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved. Note that
+            // `rawLat == 0.0` is false for a null coordinate, so a lone null never
+            // triggers the sentinel path.
             val rawLat = json.optCoordinate("latitude")
             val rawLng = json.optCoordinate("longitude")
             val hasLegacySentinel = rawLat == 0.0 && rawLng == 0.0
