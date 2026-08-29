@@ -188,7 +188,7 @@ object AnalyticsEngine {
 
         for (ev in validPoints) {
             // Linear scan for the closest cluster; Manhattan distance in degrees
-            // is a cheap proxy for metres at city scale. minByOrNull keeps the
+            // is a cheap proxy for metres at city scale. Strict `<` keeps the
             // first minimum on ties, matching insertion order.
             var nearest: Cluster? = null
             var nearestDist = Double.POSITIVE_INFINITY
