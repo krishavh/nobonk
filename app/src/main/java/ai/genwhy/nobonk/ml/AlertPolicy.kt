@@ -30,10 +30,10 @@ import java.util.Locale
  */
 object AlertPolicy {
 
-    /** Preset at which the base ladder fractions below apply unscaled. */
+    /** User preset at which the base ladder fractions below apply unscaled. */
     private const val REFERENCE_THRESHOLD_M = 2.0f
 
-    /** Widest user preset accepted by [sensitivity]; anything beyond is clamped here. */
+    /** Widest bounds of the user preset accepted by [sensitivity]; anything beyond is clamped. */
     private const val MIN_PRESET_M = 0.25f
     private const val MAX_PRESET_M = 10f
 
@@ -41,7 +41,7 @@ object AlertPolicy {
     private const val MIN_SENSITIVITY = 0.55f
     private const val MAX_SENSITIVITY = 1.7f
 
-    /** Floor for the derived HIGH threshold in [levelFor]; keeps HIGH reachable early. */
+    /** Floor for the derived HIGH threshold in [baseLevel]; keeps HIGH reachable early. */
     private const val MIN_HIGH_THRESHOLD = 0.20f
 
     /** Ceiling for the derived HIGH threshold; a frame-filling object always clears it. */
