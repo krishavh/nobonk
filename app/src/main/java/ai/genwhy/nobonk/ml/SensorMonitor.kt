@@ -126,7 +126,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // drivers deliver fewer than 3 components, in which case we bail out.
         // Note: `values` is reused by the system across events, but we only read
         // the components synchronously here, so no copy is needed.
-        val values = event?.values?.takeIf { it.size >= 3 } ?: return
+        val values = event?.values?.takeIf { it.size >= AXIS_COUNT } ?: return
 
         // Only the y (along phone) and z (out of screen) components matter for
         // pitch; values[0] (x, across phone) is intentionally ignored.
@@ -191,5 +191,8 @@ class SensorMonitor(context: Context) : SensorEventListener {
         /** Physically meaningful pitch range in degrees, used to clamp the smoothed value. */
         const val PITCH_CLAMP_MIN = -90f
         const val PITCH_CLAMP_MAX = 90f
+
+        /** Minimum number of components a usable sensor event must carry (x, y, z). */
+        const val AXIS_COUNT = 3
     }
 }
