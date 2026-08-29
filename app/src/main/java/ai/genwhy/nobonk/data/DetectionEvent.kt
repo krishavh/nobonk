@@ -46,8 +46,9 @@ data class DetectionEvent(
         put("latitude", latitude ?: JSONObject.NULL)
         put("longitude", longitude ?: JSONObject.NULL)
         put("className", className)
-        // JSONObject has no float overload, so widen to double; Float -> Double is
-        // exact, and getDouble() -> toFloat() round-trips the original value.
+        // JSONObject has no float overload, so widen to double. Float -> Double is
+        // exact (every Float is representable as a Double), and getDouble() -> toFloat()
+        // round-trips the original value bit-for-bit.
         put("distance", distance.toDouble())
         put("alertLevel", alertLevel)
         put("isApproaching", isApproaching)
@@ -66,6 +67,15 @@ data class DetectionEvent(
         private val VALID_CLASS_NAMES = setOf(
             "person", "bicycle", "car", "motorcycle", "bus", "truck", "dog", "cat", "object"
         )
+
+        /**
+         * Reads an optional double-valued coordinate from [json].
+         *
+         * @return the stored value, or `null` when the key is absent or JSON null.
+         * @throws org.json.JSONException if the key is present but not a number.
+         */
+        private fun JSONObject.optCoordinate(name: String): Double? =
+            if (isNull(name)) null else getDouble(name)
 
         /**
          * Deserialises a [DetectionEvent] previously written by [toJson].
@@ -102,8 +112,8 @@ data class DetectionEvent(
             // it maps to a point in the Gulf of Guinea which no user will ever visit.
             // The sentinel is only cleared when BOTH coordinates are exactly 0.0, so a
             // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved.
-            val rawLat = if (json.isNull("latitude")) null else json.getDouble("latitude")
-            val rawLng = if (json.isNull("longitude")) null else json.getDouble("longitude")
+            val rawLat = json.optCoordinate("latitude")
+            val rawLng = json.optCoordinate("longitude")
             val hasLegacySentinel = rawLat == 0.0 && rawLng == 0.0
             val lat = if (hasLegacySentinel) null else rawLat
             val lng = if (hasLegacySentinel) null else rawLng
