@@ -68,6 +68,19 @@ data class Detection(
      */
     val isHighAlert: Boolean
         get() = alertLevel == AlertLevel.HIGH
+
+    /**
+     * Center point of [boundingBox] in normalized coordinates, as `(x, y)` each
+     * in 0‥1. Convenience for "is the object near the frame center / edge"
+     * checks in the UI and policy layers; delegates to [NormBox] so any
+     * degenerate-box handling stays in one place.
+     */
+    val boxCenter: Pair<Float, Float>
+        get() = boundingBox.let { box ->
+            // Midpoint of the normalized edges; safe for empty boxes (just
+            // returns the shared edge position).
+            (box.left + box.right) / 2f to (box.top + box.bottom) / 2f
+        }
 }
 
 /**
