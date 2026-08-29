@@ -53,6 +53,10 @@ object Nms {
      * Greedy NMS within a single class group: sort by descending confidence,
      * then repeatedly keep the highest-confidence surviving box and suppress
      * every remaining box whose IoU with it exceeds [threshold].
+     *
+     * @param group detections of a single class; may be empty
+     * @param threshold already-clamped IoU threshold in 0..1
+     * @return the surviving detections in descending confidence order
      */
     private fun suppressWithinClass(group: List<Detection>, threshold: Float): List<Detection> {
         if (group.isEmpty()) return emptyList()
