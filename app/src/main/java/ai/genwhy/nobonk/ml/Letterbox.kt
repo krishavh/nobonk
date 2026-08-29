@@ -40,7 +40,11 @@ object Letterbox {
         /** Source height after scaling (before padding); 0 if [scale] is 0. */
         val scaledH: Float get() = srcH * scale
 
-        /** True when this transform can map coordinates in both directions. */
+        /**
+         * True when this transform can map coordinates in both directions, i.e. the
+         * scaled source has positive extent on both axes (guards division by zero in
+         * the inverse map).
+         */
         val isUsable: Boolean get() = scaledW > 0f && scaledH > 0f
     }
 
