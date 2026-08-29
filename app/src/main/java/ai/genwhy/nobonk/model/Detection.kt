@@ -76,10 +76,10 @@ data class Detection(
      * degenerate-box handling stays in one place.
      */
     val boxCenter: Pair<Float, Float>
-        get() = boundingBox.let { box ->
+        get() = with(boundingBox) {
             // Midpoint of the normalized edges; safe for empty boxes (just
             // returns the shared edge position).
-            (box.left + box.right) / 2f to (box.top + box.bottom) / 2f
+            (left + right) / 2f to (top + bottom) / 2f
         }
 }
 
