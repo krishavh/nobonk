@@ -96,8 +96,8 @@ data class NormBox(
          * edges; use [width]/[height] (which clamp to 0) for extents.
          */
         fun fromCenter(cx: Float, cy: Float, w: Float, h: Float): NormBox {
-            // Halve first, then offset — keeps the center exactly at (cx, cy)
-            // and avoids recomputing the same offset twice per axis.
+            // Halve once per axis, then offset symmetrically — keeps the
+            // center exactly at (cx, cy) and avoids recomputing the offset.
             val halfW = w * 0.5f
             val halfH = h * 0.5f
             return NormBox(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
