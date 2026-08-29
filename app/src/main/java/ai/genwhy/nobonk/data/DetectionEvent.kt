@@ -148,11 +148,6 @@ data class SessionSummary(
     val startLatitude: Double?,
     val startLongitude: Double?
 ) {
-    companion object {
-        /** Milliseconds per minute; a compile-time constant, so no division-by-zero risk. */
-        private const val MILLIS_PER_MINUTE = 60_000L
-    }
-
     /**
      * Session length in whole minutes, truncated toward zero.
      *
@@ -162,4 +157,9 @@ data class SessionSummary(
      */
     val durationMinutes: Long
         get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / MILLIS_PER_MINUTE
+
+    companion object {
+        /** Milliseconds per minute; a compile-time constant, so no division-by-zero risk. */
+        private const val MILLIS_PER_MINUTE = 60_000L
+    }
 }
