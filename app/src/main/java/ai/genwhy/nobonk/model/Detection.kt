@@ -92,6 +92,8 @@ data class Detection(
      */
     override fun toString(): String = buildString {
         append(className).append('#').append(id)
+        // Truncate toward zero via toInt(); out-of-range confidences render as-is
+        // (clamping is the detector boundary's responsibility, not the label's).
         append(' ').append((confidence * 100).toInt()).append('%')
         if (hasDistanceEstimate) {
             append(" ~").append(distance).append('m')
