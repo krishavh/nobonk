@@ -125,7 +125,8 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // drivers deliver fewer than 3 components, in which case we bail out.
         val values = event?.values?.takeIf { it.size >= 3 } ?: return
 
-        // Only the y (along phone) and z (out of screen) components matter for pitch.
+        // Only the y (along phone) and z (out of screen) components matter for
+        // pitch; values[0] (x, across phone) is intentionally ignored.
         val gy = values[1]
         val gz = values[2]
 
