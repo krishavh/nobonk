@@ -41,11 +41,14 @@ object AnalyticsEngine {
     /**
      * Returns the hour of day (0–23) with the highest event count.
      * Ties resolve to the earliest hour. Returns -1 if there are no events
-     * (or all events were filtered out as timestamp-less).
+     * (or all events were filtered out as timestamp-less, leaving every hour
+     * at zero).
      */
     fun peakDangerHour(events: List<DetectionEvent>): Int {
         if (events.isEmpty()) return -1
         val counts = warningsByHour(events)
+        // If every hour is zero, no event had a usable timestamp — no peak exists.
+        if (counts.all { it == 0 }) return -1
         // maxByOrNull keeps the first maximum encountered, i.e. the earliest hour on ties.
         return counts.indices.maxByOrNull { counts[it] } ?: -1
     }
@@ -245,14 +248,23 @@ object AnalyticsEngine {
      * device's default locale. Invalid (non-positive) timestamps yield "N/A".
      *
      * A new [SimpleDateFormat] is created per call, so this is safe to use
-     * from any thread.
+     * from any thread. A malformed pattern also yields "N/A" rather than
+     * propagating an exception.
      */
     fun formatTimestamp(timestamp: Long, pattern: String = "MMM d, h:mm a"): String {
         if (timestamp <= 0L) return "N/A"
         // Fall back to the default pattern if the caller passes a blank one,
         // which would otherwise produce empty output.
         val effectivePattern = pattern.ifBlank { "MMM d, h:mm a" }
-        return SimpleDateFormat(effectivePattern, Locale.getDefault()).format(timestamp)
+        return try {
+            SimpleDateFormat(effectivePattern, Locale.getDefault()).format(timestamp)
+        } catch (_: IllegalArgumentException) {
+            // Malformed pattern (e.g. unbalanced quotes) — degrade gracefully.
+            "N/A"
+        } catch (_: NullPointerException) {
+            // Defensive: some JDK builds throw NPE for null-adjacent pattern content.
+            "N/A"
+        }
     }
 
     /**
