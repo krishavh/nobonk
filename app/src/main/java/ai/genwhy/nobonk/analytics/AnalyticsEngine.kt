@@ -81,6 +81,7 @@ object AnalyticsEngine {
         events.groupingBy { it.className }
             .eachCount()
             .entries
+            // sortedByDescending is stable, preserving first-seen order on ties.
             .sortedByDescending { it.value }
             .map { it.key to it.value }
 
@@ -214,6 +215,7 @@ object AnalyticsEngine {
         }
 
         return clusters
+            // sortedByDescending is stable, so equal counts keep insertion order.
             .sortedByDescending { it.count }
             .take(maxClusters)
             .map { Hotspot(it.lat, it.lng, it.count) }
