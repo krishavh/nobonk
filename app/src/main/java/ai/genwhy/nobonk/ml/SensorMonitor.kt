@@ -171,6 +171,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
      *   phone vertical (screen at user)  → (0, 9.8)  → 0°
      *   phone tilted back (camera up)    → (+, +)     → positive
      *   phone tilted forward (camera dn) → (-, +)     → negative
+     *
+     * Both inputs are guaranteed finite and not both zero by the caller, so
+     * the result is always well-defined.
      */
     private fun computePitch(gy: Float, gz: Float): Float =
         Math.toDegrees(atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
