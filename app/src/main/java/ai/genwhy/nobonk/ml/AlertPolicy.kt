@@ -108,8 +108,9 @@ object AlertPolicy {
      * @param thresholdMeters user preset in meters; values outside 0.25‥10 are clamped
      *        before use, so non-positive or absurd inputs cannot produce a zero or
      *        negative multiplier. NaN input is treated as the reference preset
-     *        (multiplier 1); ±Infinity collapses to [MIN_SENSITIVITY] (0.55), since
-     *        reference/±Infinity is ±0 and both clamp to the lower multiplier bound.
+     *        (multiplier 1); ±Infinity collapses to ±0 after division, which clamps to
+     *        [MIN_PRESET_M] (0.25) and thus yields the maximum sensitivity
+     *        ([MAX_SENSITIVITY], 1.7) — the "warn me as early as possible" extreme.
      */
     fun sensitivity(thresholdMeters: Float): Float =
         (REFERENCE_THRESHOLD_M / thresholdMeters.saneMeters().coerceIn(MIN_PRESET_M, MAX_PRESET_M))
