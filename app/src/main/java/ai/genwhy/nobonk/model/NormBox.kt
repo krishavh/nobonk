@@ -76,6 +76,13 @@ data class NormBox(
     fun contains(px: Float, py: Float): Boolean =
         px in left..right && py in top..bottom
 
+    /**
+     * True when this box overlaps [other] with a positive-area intersection,
+     * i.e. when [iou] would be strictly greater than zero. Boxes that only
+     * touch at an edge or corner are not considered intersecting.
+     */
+    fun intersects(other: NormBox): Boolean = iou(other) > 0f
+
     companion object {
         /**
          * Build a box from its center ([cx], [cy]) and size ([w], [h]),
