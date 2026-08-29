@@ -86,8 +86,9 @@ data class Detection(
     /**
      * Compact debug/label rendering, e.g. `person#3 92% HIGH`.
      *
-     * Confidence is formatted as a whole percentage; a missing distance estimate
-     * ([Float.NaN]) is omitted rather than rendered as "NaN".
+     * Confidence is formatted as a whole percentage (truncating, so 99.9% → 99%);
+     * a missing distance estimate ([Float.NaN]) is omitted rather than rendered
+     * as "NaN".
      */
     override fun toString(): String =
         buildString {
