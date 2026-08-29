@@ -2,6 +2,7 @@ package ai.genwhy.nobonk.ml
 
 import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.model.NormBox
+import java.util.Locale
 
 /**
  * Pure alarm-ladder policy — the fix for the audit's Critical findings ML-01/ML-02.
@@ -173,11 +174,12 @@ object AlertPolicy {
 
     /**
      * Canonical form of a detector class label: trimmed and lower-cased (locale-
-     * independent, so a device set to e.g. Turkish cannot break ASCII matching),
-     * so "Person" / " PERSON " match the ladders above. Unknown labels fall back to
-     * the person ladder in [ladderFor], the most conservative default.
+     * independent via [Locale.ROOT], so a device set to e.g. Turkish cannot break
+     * ASCII matching), so "Person" / " PERSON " match the ladders above. Unknown
+     * labels fall back to the person ladder in [ladderFor], the most conservative
+     * default.
      */
-    private fun String.normalizedClass(): String = trim().lowercase(java.util.Locale.ROOT)
+    private fun String.normalizedClass(): String = trim().lowercase(Locale.ROOT)
 
     /**
      * Normalize a raw box dimension to a finite fraction in 0‥1: NaN → 0, then clamp.
