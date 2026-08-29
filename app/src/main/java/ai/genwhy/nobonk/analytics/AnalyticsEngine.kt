@@ -90,6 +90,7 @@ object AnalyticsEngine {
     /**
      * Aggregate counts by alert level.
      *
+     * @property total Total number of events, including those with unknown levels.
      * @property closeCalls HIGH alerts where the object was approaching the user.
      */
     data class AlertStats(
