@@ -139,7 +139,7 @@ object AnalyticsEngine {
      * close-call count, and the peak danger hour (-1 when there are no events).
      */
     fun overallStats(events: List<DetectionEvent>): OverallStats {
-        val totalSessions = events.map { it.sessionId }.distinct().size
+        val totalSessions = events.asSequence().map { it.sessionId }.distinct().count()
         val closeCalls = events.count { it.alertLevel == "HIGH" && it.isApproaching }
         return OverallStats(
             totalSessions = totalSessions,
