@@ -82,6 +82,20 @@ data class Detection(
             // pure averaging, no division, so no div-by-zero risk).
             (left + right) / 2f to (top + bottom) / 2f
         }
+
+    /**
+     * Compact debug/label rendering, e.g. `person#3 92% HIGH`.
+     *
+     * Confidence is formatted as a whole percentage; a missing distance estimate
+     * ([Float.NaN]) is omitted rather than rendered as "NaN".
+     */
+    override fun toString(): String =
+        buildString {
+            append(className).append('#').append(id)
+            append(' ').append((confidence * 100).toInt()).append('%')
+            if (hasDistanceEstimate) append(" ~").append(distance).append('m')
+            if (isAlerting) append(' ').append(alertLevel.name)
+        }
 }
 
 /**
