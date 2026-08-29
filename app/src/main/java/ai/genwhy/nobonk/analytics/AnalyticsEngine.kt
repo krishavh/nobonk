@@ -203,13 +203,13 @@ object AnalyticsEngine {
                     nearestDist = d
                 }
             }
-            if (nearest != null &&
-                abs(nearest.lat - ev.lat) < clusterRadius &&
-                abs(nearest.lng - ev.lng) < clusterRadius
+            val c = nearest
+            if (c != null &&
+                abs(c.lat - ev.lat) < clusterRadius &&
+                abs(c.lng - ev.lng) < clusterRadius
             ) {
                 // Running-average centroid update; count is always ≥ 1 here,
                 // so newCount is ≥ 2 and the division is safe.
-                val c = nearest
                 val newCount = c.count + 1
                 c.lat = (c.lat * c.count + ev.lat) / newCount
                 c.lng = (c.lng * c.count + ev.lng) / newCount
