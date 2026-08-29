@@ -16,6 +16,13 @@ import ai.genwhy.nobonk.model.Detection
  */
 object Nms {
     /**
+     * Default IoU overlap above which a lower-confidence box is suppressed.
+     * Chosen as a middle ground: loose enough that genuinely distinct objects
+     * survive, tight enough that duplicate boxes on the same object collapse.
+     */
+    private const val DEFAULT_IOU_THRESHOLD = 0.45f
+
+    /**
      * Greedy class-aware NMS.
      *
      * Detections are partitioned by [Detection.classId] so boxes of different
@@ -36,7 +43,10 @@ object Nms {
      * @return the surviving detections, ordered by class group then descending
      *   confidence; never null
      */
-    fun apply(detections: List<Detection>, iouThreshold: Float = 0.45f): List<Detection> {
+    fun apply(
+        detections: List<Detection>,
+        iouThreshold: Float = DEFAULT_IOU_THRESHOLD,
+    ): List<Detection> {
         if (detections.isEmpty()) return emptyList()
         // Clamp so a caller passing e.g. 1.5f or -0.1f can't silently disable NMS
         // or suppress everything. NaN coerces to the low bound (0f), which is the
