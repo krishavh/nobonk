@@ -243,6 +243,8 @@ object AnalyticsEngine {
 
     // ── Time formatting helpers ───────────────────────────────────────────────
 
+    private const val DEFAULT_TIMESTAMP_PATTERN = "MMM d, h:mm a"
+
     /**
      * Formats a Unix epoch millisecond timestamp using [pattern] and the
      * device's default locale. Invalid (non-positive) timestamps yield "N/A".
@@ -251,11 +253,11 @@ object AnalyticsEngine {
      * from any thread. A malformed pattern also yields "N/A" rather than
      * propagating an exception.
      */
-    fun formatTimestamp(timestamp: Long, pattern: String = "MMM d, h:mm a"): String {
+    fun formatTimestamp(timestamp: Long, pattern: String = DEFAULT_TIMESTAMP_PATTERN): String {
         if (timestamp <= 0L) return "N/A"
         // Fall back to the default pattern if the caller passes a blank one,
         // which would otherwise produce empty output.
-        val effectivePattern = pattern.ifBlank { "MMM d, h:mm a" }
+        val effectivePattern = pattern.ifBlank { DEFAULT_TIMESTAMP_PATTERN }
         return try {
             SimpleDateFormat(effectivePattern, Locale.getDefault()).format(timestamp)
         } catch (_: IllegalArgumentException) {
