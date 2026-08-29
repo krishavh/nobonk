@@ -179,8 +179,8 @@ object AnalyticsEngine {
 
         val clusterRadius = 0.0005
 
-        // Mutable running-centroid cluster; count ≥ 1 always, so centroid math
-        // never divides by zero.
+        // Mutable running-centroid cluster; count is always ≥ 1, so the
+        // centroid update below never divides by zero.
         class Cluster(var lat: Double, var lng: Double, var count: Int)
 
         val clusters = mutableListOf<Cluster>()
