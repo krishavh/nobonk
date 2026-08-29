@@ -73,6 +73,9 @@ object Nms {
     private fun suppressWithinClass(group: List<Detection>, threshold: Float): List<Detection> {
         if (group.isEmpty()) return emptyList()
         val sorted = group.sortedByDescending { it.confidence }
+        // A single candidate can never be suppressed by anything, so skip the
+        // bookkeeping entirely (also avoids allocating the BooleanArray/boxes).
+        if (sorted.size == 1) return sorted
         val keep = ArrayList<Detection>(sorted.size)
         // suppressed[i] marks boxes already dropped by an earlier keep;
         // skipping them keeps the inner loop O(n) per kept box.
