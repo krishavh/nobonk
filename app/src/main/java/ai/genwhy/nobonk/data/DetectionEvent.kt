@@ -57,8 +57,8 @@ data class DetectionEvent(
         /**
          * Valid values for [DetectionEvent.alertLevel].
          *
-         * Kept private and enforced in [fromJson] so a corrupt or tampered file
-         * cannot inject arbitrary strings into app state.
+         * Enforced in [fromJson] so a corrupt or tampered file cannot inject
+         * arbitrary strings into app state.
          */
         private val VALID_ALERT_LEVELS = setOf("LOW", "MEDIUM", "HIGH")
 
