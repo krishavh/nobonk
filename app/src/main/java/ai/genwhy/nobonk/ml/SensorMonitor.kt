@@ -97,8 +97,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     /**
      * Registers this monitor for gravity/accelerometer updates at UI rate.
-     * No-op if the sensor service or sensor is unavailable, or if already
-     * registered (re-registering is harmless but wasteful).
+     * No-op if the sensor service or sensor is unavailable. Registering an
+     * already-registered listener is harmless (the system deduplicates it),
+     * so no extra bookkeeping is needed here.
      */
     fun start() {
         val manager = sensorManager ?: return
