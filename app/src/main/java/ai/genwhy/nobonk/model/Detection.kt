@@ -90,13 +90,12 @@ data class Detection(
      * 99.9% → 99%); a missing distance estimate ([Float.NaN]) is omitted rather
      * than rendered as "NaN".
      */
-    override fun toString(): String =
-        buildString {
-            append(className).append('#').append(id)
-            append(' ').append((confidence * 100).toInt()).append('%')
-            if (hasDistanceEstimate) append(" ~").append(distance).append('m')
-            if (isAlerting) append(' ').append(alertLevel.name)
-        }
+    override fun toString(): String = buildString {
+        append(className).append('#').append(id)
+        append(' ').append((confidence * 100).toInt()).append('%')
+        if (hasDistanceEstimate) append(" ~").append(distance).append('m')
+        if (isAlerting) append(' ').append(alertLevel.name)
+    }
 }
 
 /**
