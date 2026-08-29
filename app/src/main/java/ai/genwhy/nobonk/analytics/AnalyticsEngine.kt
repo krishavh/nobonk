@@ -190,7 +190,7 @@ object AnalyticsEngine {
             // Linear scan for the closest cluster; Manhattan distance in degrees
             // is a cheap proxy for metres at city scale.
             var nearest: Cluster? = null
-            var nearestDist = Double.MAX_VALUE
+            var nearestDist = Double.POSITIVE_INFINITY
             for (c in clusters) {
                 val d = abs(c.lat - ev.lat) + abs(c.lng - ev.lng)
                 if (d < nearestDist) {
