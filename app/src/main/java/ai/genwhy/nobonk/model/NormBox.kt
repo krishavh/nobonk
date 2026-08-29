@@ -55,6 +55,9 @@ data class NormBox(
      * Returns 0f when the boxes are disjoint, touch only at an edge/corner
      * (zero-area intersection), or when the union area is zero (both boxes
      * degenerate) — avoiding division by zero in the last case.
+     *
+     * @return the IoU ratio clamped to the 0f‥1f domain by construction,
+     *   or 0f for degenerate/NaN inputs.
      */
     fun iou(other: NormBox): Float {
         val interLeft = maxOf(left, other.left)
@@ -78,6 +81,9 @@ data class NormBox(
      * Note: for inverted boxes (right < left or bottom < top) the `..` range
      * is empty, so this is always false — matching empty-range semantics.
      * NaN coordinates never satisfy a range check and yield false.
+     *
+     * @return true only when both coordinates lie within the (possibly empty)
+     *   closed ranges spanned by the box edges.
      */
     fun contains(px: Float, py: Float): Boolean =
         px in left..right && py in top..bottom
@@ -86,6 +92,8 @@ data class NormBox(
      * True when this box overlaps [other] with a positive-area intersection,
      * i.e. when [iou] would be strictly greater than zero. Boxes that only
      * touch at an edge or corner are not considered intersecting.
+     *
+     * @return true iff the intersection has strictly positive area.
      */
     fun intersects(other: NormBox): Boolean = iou(other) > 0f
 
@@ -94,6 +102,8 @@ data class NormBox(
          * Build a box from its center ([cx], [cy]) and size ([w], [h]),
          * all in normalized coordinates. Negative sizes produce inverted
          * edges; use [width]/[height] (which clamp to 0) for extents.
+         *
+         * @return a box whose edge midpoints are exactly ([cx], [cy]).
          */
         fun fromCenter(cx: Float, cy: Float, w: Float, h: Float): NormBox {
             // Halve once per axis, then offset symmetrically — keeps the
