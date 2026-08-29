@@ -69,7 +69,7 @@ data class DetectionEvent(
         )
 
         /**
-         * Reads an optional double-valued coordinate from [json].
+         * Reads an optional double-valued coordinate from this [JSONObject].
          *
          * @return the stored value, or `null` when the key is absent or JSON null.
          * @throws org.json.JSONException if the key is present but not a number.
@@ -78,7 +78,7 @@ data class DetectionEvent(
             if (isNull(name)) null else getDouble(name)
 
         /**
-         * Deserialises a [DetectionEvent] previously written by [toJson].
+         * Deserialises a [DetectionEvent] previously written by [DetectionEvent.toJson].
          *
          * Unrecognised `alertLevel`/`className` values and non-finite or negative distances
          * are rejected so a corrupt or tampered JSON file cannot inject arbitrary strings
