@@ -50,6 +50,15 @@ data class Detection(
      */
     val hasDistanceEstimate: Boolean
         get() = !distance.isNaN()
+
+    /**
+     * True when this detection is actionable for the alert pipeline, i.e. the
+     * engine escalated it beyond [AlertLevel.NONE].
+     *
+     * Convenience guard so call sites don't repeat the `!= NONE` comparison.
+     */
+    val isAlerting: Boolean
+        get() = alertLevel != AlertLevel.NONE
 }
 
 /**
