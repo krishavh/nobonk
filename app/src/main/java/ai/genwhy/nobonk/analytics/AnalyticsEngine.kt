@@ -206,10 +206,11 @@ object AnalyticsEngine {
             ) {
                 // Running-average centroid update; count is always ≥ 1 here,
                 // so newCount is ≥ 2 and the division is safe.
-                val newCount = nearest.count + 1
-                nearest.lat = (nearest.lat * nearest.count + ev.lat) / newCount
-                nearest.lng = (nearest.lng * nearest.count + ev.lng) / newCount
-                nearest.count = newCount
+                val c = nearest
+                val newCount = c.count + 1
+                c.lat = (c.lat * c.count + ev.lat) / newCount
+                c.lng = (c.lng * c.count + ev.lng) / newCount
+                c.count = newCount
             } else {
                 clusters.add(Cluster(ev.lat, ev.lng, 1))
             }
