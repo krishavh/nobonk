@@ -187,8 +187,7 @@ object AlertPolicy {
         AlertLevel.NONE   -> AlertLevel.LOW
         AlertLevel.LOW    -> AlertLevel.MEDIUM
         AlertLevel.MEDIUM -> AlertLevel.HIGH
-        AlertLevel.HIGH   -> AlertLevel.HIGH
-        // Exhaustive `else` keeps this total if AlertLevel ever gains a new constant.
+        // HIGH and any future constant: already at (or past) the top of the ladder.
         else              -> AlertLevel.HIGH
     }
 
