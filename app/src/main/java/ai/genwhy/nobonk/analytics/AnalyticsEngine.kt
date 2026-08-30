@@ -190,19 +190,20 @@ object AnalyticsEngine {
             // scale. minByOrNull keeps the first minimum on ties, matching
             // insertion order.
             val nearest = clusters.minByOrNull { c -> abs(c.lat - ev.lat) + abs(c.lng - ev.lng) }
-            if (nearest != null &&
-                abs(nearest.lat - ev.lat) < CLUSTER_RADIUS_DEGREES &&
-                abs(nearest.lng - ev.lng) < CLUSTER_RADIUS_DEGREES
-            ) {
-                // Running-average centroid update; count is always ≥ 1 here,
-                // so newCount is ≥ 2 and the division is safe.
-                val newCount = nearest.count + 1
-                nearest.lat = (nearest.lat * nearest.count + ev.lat) / newCount
-                nearest.lng = (nearest.lng * nearest.count + ev.lng) / newCount
-                nearest.count = newCount
-            } else {
-                clusters.add(Cluster(ev.lat, ev.lng, 1))
+            if (nearest != null) {
+                val dLat = abs(nearest.lat - ev.lat)
+                val dLng = abs(nearest.lng - ev.lng)
+                if (dLat < CLUSTER_RADIUS_DEGREES && dLng < CLUSTER_RADIUS_DEGREES) {
+                    // Running-average centroid update; count is always ≥ 1 here,
+                    // so newCount is ≥ 2 and the division is safe.
+                    val newCount = nearest.count + 1
+                    nearest.lat = (nearest.lat * nearest.count + ev.lat) / newCount
+                    nearest.lng = (nearest.lng * nearest.count + ev.lng) / newCount
+                    nearest.count = newCount
+                    continue
+                }
             }
+            clusters.add(Cluster(ev.lat, ev.lng, 1))
         }
 
         return clusters
