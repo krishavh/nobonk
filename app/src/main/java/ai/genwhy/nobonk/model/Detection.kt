@@ -97,6 +97,8 @@ data class Detection(
      */
     val boxArea: Float
         get() = with(boundingBox) {
+            // Plain span product: no division, so degenerate boxes are safe.
+            // Inverted edges intentionally propagate a negative sign (see KDoc).
             (right - left) * (bottom - top)
         }
 
