@@ -168,14 +168,13 @@ object AnalyticsEngine {
     fun hotspots(events: List<DetectionEvent>, maxClusters: Int = 20): List<Hotspot> {
         if (maxClusters <= 0 || events.isEmpty()) return emptyList()
 
-        data class GpsEvent(val lat: Double, val lng: Double)
-
-        val validPoints: List<GpsEvent> = events.mapNotNull { ev ->
-            val lat = ev.latitude ?: return@mapNotNull null
-            val lng = ev.longitude ?: return@mapNotNull null
-            // Reject non-finite coordinates (NaN/±Inf) that would corrupt centroid math.
-            if (!lat.isFinite() || !lng.isFinite()) return@mapNotNull null
-            GpsEvent(lat, lng)
+        val validPoints = buildList {
+            for (ev in events) {
+                val lat = ev.latitude ?: continue
+                val lng = ev.longitude ?: continue
+                // Reject non-finite coordinates (NaN/±Inf) that would corrupt centroid math.
+                if (lat.isFinite() && lng.isFinite()) add(lat to lng)
+            }
         }
         if (validPoints.isEmpty()) return emptyList()
 
@@ -185,23 +184,23 @@ object AnalyticsEngine {
 
         val clusters = mutableListOf<Cluster>()
 
-        for (ev in validPoints) {
+        for ((lat, lng) in validPoints) {
             // Manhattan distance in degrees is a cheap proxy for metres at city
             // scale. minByOrNull keeps the first minimum on ties, matching
             // insertion order.
-            val nearest = clusters.minByOrNull { c -> abs(c.lat - ev.lat) + abs(c.lng - ev.lng) }
+            val nearest = clusters.minByOrNull { c -> abs(c.lat - lat) + abs(c.lng - lng) }
             if (nearest != null &&
-                abs(nearest.lat - ev.lat) < CLUSTER_RADIUS_DEGREES &&
-                abs(nearest.lng - ev.lng) < CLUSTER_RADIUS_DEGREES
+                abs(nearest.lat - lat) < CLUSTER_RADIUS_DEGREES &&
+                abs(nearest.lng - lng) < CLUSTER_RADIUS_DEGREES
             ) {
                 // Running-average centroid update; count is always ≥ 1 here,
                 // so newCount is ≥ 2 and the division is safe.
                 val newCount = nearest.count + 1
-                nearest.lat = (nearest.lat * nearest.count + ev.lat) / newCount
-                nearest.lng = (nearest.lng * nearest.count + ev.lng) / newCount
+                nearest.lat = (nearest.lat * nearest.count + lat) / newCount
+                nearest.lng = (nearest.lng * nearest.count + lng) / newCount
                 nearest.count = newCount
             } else {
-                clusters.add(Cluster(ev.lat, ev.lng, 1))
+                clusters.add(Cluster(lat, lng, 1))
             }
         }
 
