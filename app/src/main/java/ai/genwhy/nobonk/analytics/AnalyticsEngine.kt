@@ -178,8 +178,6 @@ object AnalyticsEngine {
         }
         if (validPoints.isEmpty()) return emptyList()
 
-        val clusterRadius = CLUSTER_RADIUS_DEGREES
-
         // Mutable running-centroid cluster; count is always ≥ 1, so the
         // centroid update below never divides by zero.
         class Cluster(var lat: Double, var lng: Double, var count: Int)
@@ -192,8 +190,8 @@ object AnalyticsEngine {
             // insertion order.
             val nearest = clusters.minByOrNull { c -> abs(c.lat - ev.lat) + abs(c.lng - ev.lng) }
             if (nearest != null &&
-                abs(nearest.lat - ev.lat) < clusterRadius &&
-                abs(nearest.lng - ev.lng) < clusterRadius
+                abs(nearest.lat - ev.lat) < CLUSTER_RADIUS_DEGREES &&
+                abs(nearest.lng - ev.lng) < CLUSTER_RADIUS_DEGREES
             ) {
                 // Running-average centroid update; count is always ≥ 1 here,
                 // so newCount is ≥ 2 and the division is safe.
