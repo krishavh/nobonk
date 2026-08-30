@@ -47,7 +47,7 @@ data class NormBox(
      * True when this box has zero extent in either dimension, i.e. [area] == 0f.
      * Inverted boxes count as empty because [width]/[height] clamp to 0.
      */
-    val isEmpty: Boolean get() = width <= 0f || height <= 0f
+    val isEmpty: Boolean get() = width == 0f || height == 0f
 
     /**
      * Intersection-over-Union with [other], in 0f‥1f.
