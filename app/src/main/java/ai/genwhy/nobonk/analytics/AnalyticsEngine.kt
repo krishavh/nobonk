@@ -45,9 +45,9 @@ object AnalyticsEngine {
      * at zero).
      */
     fun peakDangerHour(events: List<DetectionEvent>): Int {
-        if (events.isEmpty()) return -1
         val counts = warningsByHour(events)
-        // If every hour is zero, no event had a usable timestamp — no peak exists.
+        // If every hour is zero, there were no events with usable timestamps —
+        // no peak exists.
         if (counts.all { it == 0 }) return -1
         // maxByOrNull keeps the first maximum encountered, i.e. the earliest hour on ties.
         return counts.withIndex().maxByOrNull { it.value }?.index ?: -1
