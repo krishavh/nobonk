@@ -38,6 +38,8 @@ data class DetectionEvent(
      * Legacy records written with the 0.0/0.0 sentinel are normalised back to
      * `null` coordinates in [Companion.fromJson], so [toJson] / [Companion.fromJson]
      * round-trip cleanly.
+     *
+     * @return a fresh [JSONObject] with one key per [DetectionEvent] property.
      */
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -46,9 +48,9 @@ data class DetectionEvent(
         put("latitude", latitude ?: JSONObject.NULL)
         put("longitude", longitude ?: JSONObject.NULL)
         put("className", className)
-        // JSONObject has no float overload, so widen to double. Float -> Double is
-        // exact (every Float is representable as a Double), and getDouble() -> toFloat()
-        // round-trips the original value bit-for-bit.
+        // JSONObject has no float overload, so widen to double. Every Float value is
+        // exactly representable as a Double, and getDouble() -> toFloat() narrows back
+        // to the identical bits, so the round-trip is lossless.
         put("distance", distance.toDouble())
         put("alertLevel", alertLevel)
         put("isApproaching", isApproaching)
@@ -163,7 +165,7 @@ data class SessionSummary(
     /**
      * Session length in whole minutes, truncated toward zero.
      *
-     * A negative [endTimestamp] minus [startTimestamp] difference (e.g. from a clock
+     * A negative [endTimestamp] − [startTimestamp] difference (e.g. from a clock
      * adjustment mid-session) is clamped to zero so the UI never shows a negative
      * duration. Integer division by [MILLIS_PER_MINUTE] truncates any sub-minute remainder.
      */
