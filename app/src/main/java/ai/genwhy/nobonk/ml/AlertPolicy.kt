@@ -101,6 +101,7 @@ object AlertPolicy {
     fun fillFraction(box: NormBox, className: String): Float {
         val h = box.height.saneFraction()
         val w = box.width.saneFraction()
+        // maxOf is safe: both operands are guaranteed finite by saneFraction().
         return if (className.normalizedClass() == "person") h else maxOf(h, w)
     }
 
