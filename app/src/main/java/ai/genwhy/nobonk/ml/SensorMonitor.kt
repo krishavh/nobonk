@@ -73,7 +73,8 @@ class SensorMonitor(context: Context) : SensorEventListener {
     /**
      * Quality bucket for the current [cameraPitchDegrees]:
      * pitch ≤ 72° is [AngleQuality.OK], ≤ 82° is [AngleQuality.WARNING],
-     * anything above is [AngleQuality.BAD].
+     * anything above is [AngleQuality.BAD]. Negative pitches (camera pointing
+     * down) are always [AngleQuality.OK] — see the class KDoc for why.
      */
     val angleQuality: AngleQuality
         get() = when {
