@@ -26,6 +26,7 @@ object AnalyticsEngine {
      */
     fun warningsByHour(events: List<DetectionEvent>): IntArray {
         val counts = IntArray(24)
+        if (events.isEmpty()) return counts
         val cal = Calendar.getInstance()
         for (ev in events) {
             if (ev.timestamp <= 0L) continue
@@ -164,7 +165,7 @@ object AnalyticsEngine {
      * equator, so points within that box of a cluster's running centroid join it.
      */
     fun hotspots(events: List<DetectionEvent>, maxClusters: Int = 20): List<Hotspot> {
-        if (maxClusters <= 0) return emptyList()
+        if (maxClusters <= 0 || events.isEmpty()) return emptyList()
 
         data class GpsEvent(val lat: Double, val lng: Double)
 
@@ -177,7 +178,7 @@ object AnalyticsEngine {
         }
         if (validPoints.isEmpty()) return emptyList()
 
-        val clusterRadius = 0.0005
+        val clusterRadius = CLUSTER_RADIUS_DEGREES
 
         // Mutable running-centroid cluster; count is always ≥ 1, so the
         // centroid update below never divides by zero.
@@ -230,6 +231,9 @@ object AnalyticsEngine {
     // ── Time formatting helpers ───────────────────────────────────────────────
 
     private const val DEFAULT_TIMESTAMP_PATTERN = "MMM d, h:mm a"
+
+    /** Cluster join threshold in degrees of latitude/longitude (~55 m at the equator). */
+    private const val CLUSTER_RADIUS_DEGREES = 0.0005
 
     /**
      * Formats a Unix epoch millisecond timestamp using [pattern] and the
