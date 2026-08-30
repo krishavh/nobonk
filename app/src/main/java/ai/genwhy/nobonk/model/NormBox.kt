@@ -46,6 +46,8 @@ data class NormBox(
     /**
      * True when this box has zero extent in either dimension, i.e. [area] == 0f.
      * Inverted boxes count as empty because [width]/[height] clamp to 0.
+     * NaN edges yield false (comparisons with NaN are false), consistent with
+     * [contains] and [iou] treating NaN as "no usable geometry".
      */
     val isEmpty: Boolean get() = width == 0f || height == 0f
 
