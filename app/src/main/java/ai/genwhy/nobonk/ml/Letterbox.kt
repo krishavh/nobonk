@@ -43,9 +43,12 @@ object Letterbox {
         /**
          * True when this transform can map coordinates in both directions, i.e. the
          * scaled source has positive extent on both axes (guards division by zero in
-         * the inverse map).
+         * the inverse map). Non-finite extents also count as unusable, since any
+         * comparison against NaN fails and would silently poison the inverse map.
          */
-        val isUsable: Boolean get() = scaledW > 0f && scaledH > 0f
+        val isUsable: Boolean
+            get() = scaledW > 0f && scaledW.isFinite() &&
+                scaledH > 0f && scaledH.isFinite()
     }
 
     /**
