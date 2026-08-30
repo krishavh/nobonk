@@ -34,7 +34,7 @@ data class NormBox(
     /** Non-negative vertical extent; 0 when [bottom] ≤ [top]. */
     val height: Float get() = (bottom - top).coerceAtLeast(0f)
 
-    /** [width] × [height]; always non-negative. */
+    /** [width] × [height]; always non-negative (0f for degenerate boxes). */
     val area: Float get() = width * height
 
     /** Midpoint of the horizontal edges; well-defined even for inverted boxes. */
