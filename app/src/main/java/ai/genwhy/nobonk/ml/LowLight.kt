@@ -65,6 +65,8 @@ object LowLight {
         // Reject sensor glitches outright; NaN would already fail the `<` checks
         // under IEEE-754, but infinities would not, so the finite check is load-bearing.
         if (!meanBrightness.isFinite() || !variance.isFinite()) return false
+        // Strict `<` on both axes: a frame exactly at either threshold is treated as
+        // usable, biasing toward "keep detection running" (the safer failure mode).
         return meanBrightness < brightnessThreshold && variance < varianceThreshold
     }
 
