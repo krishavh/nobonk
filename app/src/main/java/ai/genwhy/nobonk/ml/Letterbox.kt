@@ -102,7 +102,9 @@ object Letterbox {
      * `[left, top, right, bottom]`. (For tests.)
      *
      * For a degenerate transform every coordinate collapses to the padding value
-     * (0 for the fallback transform produced by [compute]).
+     * (0 for the fallback transform produced by [compute]). NaN inputs propagate
+     * as NaN — callers feeding detector output should prefer [boxToOriginalNorm],
+     * which sanitizes.
      */
     fun originalNormToModelPx(
         box: NormBox, t: Transform
