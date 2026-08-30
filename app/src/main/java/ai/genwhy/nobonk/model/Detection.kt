@@ -84,6 +84,21 @@ data class Detection(
         }
 
     /**
+     * Fraction of the frame covered by [boundingBox], in 0‥1 (values may exceed 1
+     * only if the underlying box itself is out of range, which the detector is
+     * responsible for clamping).
+     *
+     * This is the primary proximity proxy used by the alert ladder — see
+     * [ai.genwhy.nobonk.ml.AlertPolicy]. Computed as a plain product of the edge
+     * spans, so degenerate (zero-width or zero-height) boxes simply yield 0
+     * without any division.
+     */
+    val boxArea: Float
+        get() = with(boundingBox) {
+            (right - left) * (bottom - top)
+        }
+
+    /**
      * Compact debug/label rendering, e.g. `person#3 92% HIGH`.
      *
      * Confidence is formatted as a whole percentage (truncating toward zero, so
