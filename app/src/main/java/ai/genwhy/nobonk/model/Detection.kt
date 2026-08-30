@@ -91,7 +91,9 @@ data class Detection(
      * This is the primary proximity proxy used by the alert ladder — see
      * [ai.genwhy.nobonk.ml.AlertPolicy]. Computed as a plain product of the edge
      * spans, so degenerate (zero-width or zero-height) boxes simply yield 0
-     * without any division.
+     * without any division. A box whose edges are inverted (right < left, etc.)
+     * yields a negative area; consumers comparing against thresholds are
+     * unaffected, but use [kotlin.math.abs] if a magnitude is required.
      */
     val boxArea: Float
         get() = with(boundingBox) {
