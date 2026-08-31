@@ -120,13 +120,14 @@ data class DetectionEvent(
 
             // Read GPS: treat JSON null OR the legacy 0.0/0.0 sentinel as "no fix".
             // The sentinel is only cleared when BOTH coordinates are exactly 0.0, so a
-            // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved. Note that
-            // `rawLat == 0.0` is false for a null coordinate (and for NaN), so neither a
-            // lone null nor a NaN ever triggers the sentinel path.
+            // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved. The explicit
+            // null checks are redundant for the == 0.0 comparison (null == 0.0 is false,
+            // as is NaN == 0.0) but make the "both coordinates present" intent obvious.
             val rawLat = json.optCoordinate("latitude")
             val rawLng = json.optCoordinate("longitude")
             val hasLegacySentinel =
-                rawLat == LEGACY_SENTINEL_COORD && rawLng == LEGACY_SENTINEL_COORD
+                rawLat != null && rawLng != null &&
+                    rawLat == LEGACY_SENTINEL_COORD && rawLng == LEGACY_SENTINEL_COORD
             val lat = if (hasLegacySentinel) null else rawLat
             val lng = if (hasLegacySentinel) null else rawLng
 
@@ -176,6 +177,10 @@ data class SessionSummary(
      * A negative [endTimestamp] − [startTimestamp] difference (e.g. from a clock
      * adjustment mid-session) is clamped to zero so the UI never shows a negative
      * duration. Integer division by [MILLIS_PER_MINUTE] truncates any sub-minute remainder.
+     *
+     * Note: the subtraction could in principle overflow for pathological inputs
+     * (near [Long.MIN_VALUE]/[Long.MAX_VALUE] timestamps), but real wall-clock
+     * millisecond values are many orders of magnitude away from that range.
      */
     val durationMinutes: Long
         get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / MILLIS_PER_MINUTE
