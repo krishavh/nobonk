@@ -48,9 +48,10 @@ data class DetectionEvent(
         put("latitude", latitude ?: JSONObject.NULL)
         put("longitude", longitude ?: JSONObject.NULL)
         put("className", className)
-        // JSONObject has no float overload, so widen to double. Every Float value is
-        // exactly representable as a Double, and getDouble() -> toFloat() narrows back
-        // to the identical bits, so the round-trip is lossless.
+        // JSONObject has no float overload, so widen to double. Every finite Float
+        // value is exactly representable as a Double, and getDouble() -> toFloat()
+        // narrows back to the identical bits, so the round-trip is lossless.
+        // (NaN/Infinite distances cannot occur for validated events.)
         put("distance", distance.toDouble())
         put("alertLevel", alertLevel)
         put("isApproaching", isApproaching)
@@ -185,7 +186,7 @@ data class SessionSummary(
         get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / MILLIS_PER_MINUTE
 
     companion object {
-        /** Milliseconds per minute; a compile-time constant, so no division-by-zero risk. */
+        /** Milliseconds per minute; a non-zero compile-time constant, so no division-by-zero risk. */
         private const val MILLIS_PER_MINUTE = 60_000L
     }
 }
