@@ -120,14 +120,13 @@ data class DetectionEvent(
 
             // Read GPS: treat JSON null OR the legacy 0.0/0.0 sentinel as "no fix".
             // The sentinel is only cleared when BOTH coordinates are exactly 0.0, so a
-            // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved. The explicit
-            // null checks are redundant for the == 0.0 comparison (null == 0.0 is false,
-            // as is NaN == 0.0) but make the "both coordinates present" intent obvious.
+            // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved. The null
+            // comparisons are null-safe (null == 0.0 is false, as is NaN == 0.0), so
+            // missing coordinates never trigger the sentinel path.
             val rawLat = json.optCoordinate("latitude")
             val rawLng = json.optCoordinate("longitude")
             val hasLegacySentinel =
-                rawLat != null && rawLng != null &&
-                    rawLat == LEGACY_SENTINEL_COORD && rawLng == LEGACY_SENTINEL_COORD
+                rawLat == LEGACY_SENTINEL_COORD && rawLng == LEGACY_SENTINEL_COORD
             val lat = if (hasLegacySentinel) null else rawLat
             val lng = if (hasLegacySentinel) null else rawLng
 
