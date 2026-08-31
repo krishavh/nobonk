@@ -66,11 +66,8 @@ object AnalyticsEngine {
         val h24 = hour % 24
         val suffix = if (h24 < 12) "AM" else "PM"
         // 0 renders as "12 AM"; 12 stays as "12 PM"; 13–23 map to 1–11 PM.
-        val h = when (h24) {
-            0 -> 12
-            in 1..12 -> h24
-            else -> h24 - 12
-        }
+        // ((h24 + 11) % 12) + 1 maps 0→12, 1–11→1–11, 12→12, 13–23→1–11.
+        val h = (h24 + 11) % 12 + 1
         return "$h $suffix"
     }
 
