@@ -71,6 +71,12 @@ data class DetectionEvent(
         )
 
         /**
+         * Legacy "no GPS fix" sentinel written by older app versions: an exact
+         * 0.0/0.0 coordinate pair (a point in the Gulf of Guinea no user will visit).
+         */
+        private const val LEGACY_SENTINEL_COORD = 0.0
+
+        /**
          * Reads an optional double-valued coordinate from this [JSONObject].
          *
          * @return the stored value, or `null` when the key is absent or JSON null.
@@ -110,15 +116,14 @@ data class DetectionEvent(
             }
 
             // Read GPS: treat JSON null OR the legacy 0.0/0.0 sentinel as "no fix".
-            // The 0.0/0.0 sentinel was used in records written before this migration;
-            // it maps to a point in the Gulf of Guinea which no user will ever visit.
             // The sentinel is only cleared when BOTH coordinates are exactly 0.0, so a
             // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved. Note that
             // `rawLat == 0.0` is false for a null coordinate (and for NaN), so neither a
             // lone null nor a NaN ever triggers the sentinel path.
             val rawLat = json.optCoordinate("latitude")
             val rawLng = json.optCoordinate("longitude")
-            val hasLegacySentinel = rawLat == 0.0 && rawLng == 0.0
+            val hasLegacySentinel =
+                rawLat == LEGACY_SENTINEL_COORD && rawLng == LEGACY_SENTINEL_COORD
             val lat = rawLat.takeUnless { hasLegacySentinel }
             val lng = rawLng.takeUnless { hasLegacySentinel }
 
