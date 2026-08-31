@@ -26,7 +26,6 @@ object AnalyticsEngine {
      */
     fun warningsByHour(events: List<DetectionEvent>): IntArray {
         val counts = IntArray(24)
-        if (events.isEmpty()) return counts
         val cal = Calendar.getInstance()
         for (ev in events) {
             if (ev.timestamp <= 0L) continue
@@ -65,7 +64,6 @@ object AnalyticsEngine {
         if (hour < 0) return "N/A"
         val h24 = hour % 24
         val suffix = if (h24 < 12) "AM" else "PM"
-        // 0 renders as "12 AM"; 12 stays as "12 PM"; 13–23 map to 1–11 PM.
         // ((h24 + 11) % 12) + 1 maps 0→12, 1–11→1–11, 12→12, 13–23→1–11.
         val h = (h24 + 11) % 12 + 1
         return "$h $suffix"
@@ -165,13 +163,11 @@ object AnalyticsEngine {
     fun hotspots(events: List<DetectionEvent>, maxClusters: Int = 20): List<Hotspot> {
         if (maxClusters <= 0 || events.isEmpty()) return emptyList()
 
-        val validPoints = buildList {
-            for (ev in events) {
-                val lat = ev.latitude ?: continue
-                val lng = ev.longitude ?: continue
-                // Reject non-finite coordinates (NaN/±Inf) that would corrupt centroid math.
-                if (lat.isFinite() && lng.isFinite()) add(lat to lng)
-            }
+        // Reject null and non-finite (NaN/±Inf) coordinates that would corrupt centroid math.
+        val validPoints = events.mapNotNull { ev ->
+            val lat = ev.latitude
+            val lng = ev.longitude
+            if (lat != null && lng != null && lat.isFinite() && lng.isFinite()) lat to lng else null
         }
         if (validPoints.isEmpty()) return emptyList()
 
