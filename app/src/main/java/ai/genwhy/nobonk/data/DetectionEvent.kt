@@ -65,7 +65,10 @@ data class DetectionEvent(
          */
         private val VALID_ALERT_LEVELS = setOf("LOW", "MEDIUM", "HIGH")
 
-        /** Known COCO classes emitted by ObjectDetector.classNameFor (keep in sync). */
+        /**
+         * Known COCO classes emitted by ObjectDetector.classNameFor (keep in sync).
+         * "object" is the catch-all bucket for detections outside the curated classes.
+         */
         private val VALID_CLASS_NAMES = setOf(
             "person", "bicycle", "car", "motorcycle", "bus", "truck", "dog", "cat", "object"
         )
@@ -124,8 +127,8 @@ data class DetectionEvent(
             val rawLng = json.optCoordinate("longitude")
             val hasLegacySentinel =
                 rawLat == LEGACY_SENTINEL_COORD && rawLng == LEGACY_SENTINEL_COORD
-            val lat = rawLat.takeUnless { hasLegacySentinel }
-            val lng = rawLng.takeUnless { hasLegacySentinel }
+            val lat = if (hasLegacySentinel) null else rawLat
+            val lng = if (hasLegacySentinel) null else rawLng
 
             return DetectionEvent(
                 id = json.getString("id"),
