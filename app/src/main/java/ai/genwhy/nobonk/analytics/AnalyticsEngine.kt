@@ -48,7 +48,7 @@ object AnalyticsEngine {
         val counts = warningsByHour(events)
         // If every hour is zero, there were no events with usable timestamps —
         // no peak exists.
-        if (counts.sum() == 0) return -1
+        if (counts.all { it == 0 }) return -1
         // maxByOrNull keeps the first maximum encountered, i.e. the earliest hour on ties.
         return counts.withIndex().maxByOrNull { it.value }?.index ?: -1
     }
