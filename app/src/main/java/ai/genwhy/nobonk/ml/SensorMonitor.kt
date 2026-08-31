@@ -175,7 +175,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
      *
      * Both inputs are guaranteed finite and not both zero by the caller, so
      * the result is always well-defined. Computed in Double to preserve the
-     * full precision of [Math.toDegrees] before truncating to Float.
+     * full precision of the degree conversion before truncating to Float.
      */
     private fun computePitch(gy: Float, gz: Float): Float =
         Math.toDegrees(atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
