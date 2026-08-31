@@ -51,7 +51,7 @@ data class DetectionEvent(
         // JSONObject has no float overload, so widen to double. Every finite Float
         // value is exactly representable as a Double, and getDouble() -> toFloat()
         // narrows back to the identical bits, so the round-trip is lossless.
-        // (NaN/Infinite distances cannot occur for validated events.)
+        // (NaN/Infinite distances cannot occur for validated events; see fromJson.)
         put("distance", distance.toDouble())
         put("alertLevel", alertLevel)
         put("isApproaching", isApproaching)
