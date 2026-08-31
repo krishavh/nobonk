@@ -79,24 +79,25 @@ object Nms {
     private fun suppressWithinClass(group: List<Detection>, threshold: Float): List<Detection> {
         if (group.isEmpty()) return emptyList()
         val sorted = group.sortedByDescending { it.confidence }
+        val size = sorted.size
         // A single candidate can never be suppressed by anything, so skip the
         // bookkeeping entirely (also avoids allocating the BooleanArray/boxes).
-        if (sorted.size == 1) return sorted
-        val keep = ArrayList<Detection>(sorted.size)
+        if (size == 1) return sorted
+        val keep = ArrayList<Detection>(size)
         // suppressed[i] marks boxes already dropped by an earlier keep;
         // skipping them keeps the inner loop O(n) per kept box.
-        val suppressed = BooleanArray(sorted.size)
+        val suppressed = BooleanArray(size)
         // Cache bounding boxes once: the IoU inner loop reads each box many
         // times, and this avoids repeated property access on every comparison.
-        val boxes = Array(sorted.size) { sorted[it].boundingBox }
-        for (i in sorted.indices) {
+        val boxes = Array(size) { sorted[it].boundingBox }
+        for (i in 0 until size) {
             if (suppressed[i]) continue
             keep.add(sorted[i])
             // Suppress every remaining lower-confidence box that overlaps the
             // newly kept one. Strictly greater: a box exactly at the threshold
             // survives.
             val keptBox = boxes[i]
-            for (j in i + 1 until sorted.size) {
+            for (j in i + 1 until size) {
                 if (!suppressed[j] && keptBox.iou(boxes[j]) > threshold) {
                     suppressed[j] = true
                 }
