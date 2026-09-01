@@ -105,13 +105,13 @@ data class Detection(
     /**
      * Compact debug/label rendering, e.g. `person#3 92% HIGH`.
      *
-     * Confidence is formatted as a whole percentage (truncating toward zero, so
-     * 99.9% → 99%); a missing distance estimate ([Float.NaN]) is omitted rather
-     * than rendered as "NaN".
+     * Confidence is formatted as a whole percentage (truncating toward zero via
+     * [Float.toInt], so 99.9% → 99%); a missing distance estimate ([Float.NaN])
+     * is omitted rather than rendered as "NaN".
      */
     override fun toString(): String = buildString {
         append(className).append('#').append(id)
-        // Truncate toward zero via toInt(); out-of-range confidences render as-is
+        // toInt() truncates toward zero; out-of-range confidences render as-is
         // (clamping is the detector boundary's responsibility, not the label's).
         append(' ').append((confidence * 100).toInt()).append('%')
         if (hasDistanceEstimate) {
