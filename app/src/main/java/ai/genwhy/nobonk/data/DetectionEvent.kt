@@ -90,6 +90,17 @@ data class DetectionEvent(
             if (isNull(name)) null else getDouble(name)
 
         /**
+         * True when both coordinates are exactly the legacy 0.0/0.0 "no fix" sentinel.
+         *
+         * The sentinel is only cleared when BOTH coordinates are exactly 0.0, so a
+         * genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved. The equality
+         * checks are null-safe (`null == 0.0` is false, as is `NaN == 0.0`), so missing
+         * or NaN coordinates never trigger the sentinel path.
+         */
+        private fun isLegacySentinel(lat: Double?, lng: Double?): Boolean =
+            lat == LEGACY_SENTINEL_COORD && lng == LEGACY_SENTINEL_COORD
+
+        /**
          * Deserialises a [DetectionEvent] previously written by [DetectionEvent.toJson].
          *
          * Unrecognised `alertLevel`/`className` values and non-finite or negative distances
@@ -119,24 +130,17 @@ data class DetectionEvent(
                 "distance must be finite and non-negative, got $dist"
             }
 
-            // Read GPS: treat JSON null OR the legacy 0.0/0.0 sentinel as "no fix".
-            // The sentinel is only cleared when BOTH coordinates are exactly 0.0, so a
-            // genuine fix at (0.0, non-zero) or (non-zero, 0.0) is preserved. The null
-            // comparisons are null-safe (null == 0.0 is false, as is NaN == 0.0), so
-            // missing coordinates never trigger the sentinel path.
+            // Treat JSON null OR the legacy 0.0/0.0 sentinel as "no GPS fix".
             val rawLat = json.optCoordinate("latitude")
             val rawLng = json.optCoordinate("longitude")
-            val hasLegacySentinel =
-                rawLat == LEGACY_SENTINEL_COORD && rawLng == LEGACY_SENTINEL_COORD
-            val lat = if (hasLegacySentinel) null else rawLat
-            val lng = if (hasLegacySentinel) null else rawLng
+            val noFix = isLegacySentinel(rawLat, rawLng)
 
             return DetectionEvent(
                 id = json.getString("id"),
                 sessionId = json.getString("sessionId"),
                 timestamp = json.getLong("timestamp"),
-                latitude = lat,
-                longitude = lng,
+                latitude = if (noFix) null else rawLat,
+                longitude = if (noFix) null else rawLng,
                 className = rawClass,
                 distance = dist,
                 alertLevel = rawAlert,
