@@ -114,6 +114,8 @@ data class DetectionEvent(
          * @throws org.json.JSONException if any required key is missing or has the wrong type.
          */
         fun fromJson(json: JSONObject): DetectionEvent {
+            // Validate the enum-like strings before touching anything numeric, so the
+            // cheapest and most descriptive failure happens first on corrupt input.
             val rawAlert = json.getString("alertLevel")
             val rawClass = json.getString("className")
 
