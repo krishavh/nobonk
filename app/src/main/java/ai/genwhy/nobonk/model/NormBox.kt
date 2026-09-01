@@ -52,6 +52,17 @@ data class NormBox(
     val isEmpty: Boolean get() = width == 0f || height == 0f
 
     /**
+     * True when all four edges lie within the normalized 0f‥1f domain and the
+     * box is not inverted. Useful as a cheap sanity check on detector output;
+     * does not itself reject NaN (comparisons with NaN are false, so a NaN
+     * edge makes this return false, which is the desired conservative result).
+     */
+    val isNormalized: Boolean
+        get() = left in 0f..1f && top in 0f..1f &&
+            right in 0f..1f && bottom in 0f..1f &&
+            left <= right && top <= bottom
+
+    /**
      * Intersection-over-Union with [other], in 0f‥1f.
      *
      * Returns 0f when the boxes are disjoint, touch only at an edge/corner
