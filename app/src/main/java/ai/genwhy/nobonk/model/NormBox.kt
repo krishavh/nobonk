@@ -54,8 +54,8 @@ data class NormBox(
     /**
      * True when all four edges lie within the normalized 0f‥1f domain and the
      * box is not inverted. Useful as a cheap sanity check on detector output;
-     * does not itself reject NaN (comparisons with NaN are false, so a NaN
-     * edge makes this return false, which is the desired conservative result).
+     * a NaN edge makes this return false (comparisons with NaN are false),
+     * which is the desired conservative result.
      */
     val isNormalized: Boolean
         get() = left in 0f..1f && top in 0f..1f &&
@@ -69,7 +69,7 @@ data class NormBox(
      * (zero-area intersection), or when the union area is zero (both boxes
      * degenerate) — avoiding division by zero in the last case.
      *
-     * @return the IoU ratio clamped to the 0f‥1f domain by construction,
+     * @return the IoU ratio (clamped to 0f‥1f by construction),
      *   or 0f for degenerate/NaN inputs.
      */
     fun iou(other: NormBox): Float {
@@ -95,8 +95,8 @@ data class NormBox(
     /**
      * True when ([px], [py]) falls inside this box, inclusive of the edges.
      *
-     * Note: for inverted boxes (right < left or bottom < top) the `..` range
-     * is empty, so this is always false — matching empty-range semantics.
+     * For inverted boxes (right < left or bottom < top) the `..` range is
+     * empty, so this is always false — matching empty-range semantics.
      * NaN coordinates never satisfy a range check and yield false.
      *
      * @return true only when both coordinates lie within the (possibly empty)
