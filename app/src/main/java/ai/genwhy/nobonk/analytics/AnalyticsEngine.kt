@@ -262,8 +262,8 @@ object AnalyticsEngine {
             m == 1L -> "1 min"
             m < 60L -> "$m mins"
             else    -> {
-                val hours = m / 60
-                val mins = m % 60
+                val hours = m / 60L
+                val mins = m % 60L
                 "${hours}h ${mins}m"
             }
         }
