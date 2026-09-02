@@ -59,7 +59,8 @@ object Nms {
         // is treated as 0f, the most conservative (most suppressive) choice.
         val threshold = if (iouThreshold.isNaN()) 0f else iouThreshold.coerceIn(0f, 1f)
         // Pre-size the sink to the input size: the result can never exceed it,
-        // so the backing array is never grown mid-flatMap.
+        // so the backing array is never grown mid-flatMap. [groupBy] preserves
+        // first-encounter order of class ids, so output grouping is deterministic.
         return detections
             .groupBy { it.classId }
             .flatMapTo(ArrayList(detections.size)) { (_, group) ->
