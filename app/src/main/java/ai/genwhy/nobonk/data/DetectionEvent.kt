@@ -83,6 +83,9 @@ data class DetectionEvent(
         /**
          * Reads an optional double-valued coordinate from this [JSONObject].
          *
+         * Note: [JSONObject.isNull] returns `true` both for an explicit JSON null and
+         * for an absent key, so both cases collapse to `null` here.
+         *
          * @return the stored value, or `null` when the key is absent or JSON null.
          * @throws org.json.JSONException if the key is present but not a number.
          */
