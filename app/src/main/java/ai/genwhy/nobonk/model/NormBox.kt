@@ -73,10 +73,12 @@ data class NormBox(
      *   or 0f for degenerate/NaN inputs.
      */
     fun iou(other: NormBox): Float {
+        // Cheap early exit: an empty box (zero or clamped-negative extent,
+        // or NaN edges) can never contribute a positive-area intersection.
+        if (isEmpty || other.isEmpty) return 0f
         // Intersection rectangle: max of the left/top edges, min of the
         // right/bottom edges. Using strict `>=` here treats edge-touching
-        // boxes (zero-area overlap) as disjoint, and also rejects NaN
-        // extents, since all comparisons with NaN are false.
+        // boxes (zero-area overlap) as disjoint.
         val interLeft = maxOf(left, other.left)
         val interTop = maxOf(top, other.top)
         val interRight = minOf(right, other.right)
