@@ -119,6 +119,7 @@ data class NormBox(
          * Build a box from its center ([cx], [cy]) and size ([w], [h]),
          * all in normalized coordinates. Negative sizes produce inverted
          * edges; use [width]/[height] (which clamp to 0) for extents.
+         * NaN or infinite inputs propagate through the arithmetic unchanged.
          *
          * @return a box whose edge midpoints are exactly ([cx], [cy]).
          */
