@@ -183,7 +183,7 @@ data class SessionSummary(
     /**
      * Session length in whole minutes, truncated toward zero.
      *
-     * A negative [endTimestamp] − [startTimestamp] difference (e.g. from a clock
+     * A negative [endTimestamp] minus [startTimestamp] difference (e.g. from a clock
      * adjustment mid-session) is clamped to zero so the UI never shows a negative
      * duration. Integer division by [MILLIS_PER_MINUTE] truncates any sub-minute remainder.
      *
