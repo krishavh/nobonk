@@ -7,6 +7,9 @@ activityCompose = "1.9.3"
 composeBom = "2024.12.01"
 camerax = "1.4.1"
 onnxruntime = "1.21.1"
+desugarJdkLibs = "2.1.5"
+securityCrypto = "1.1.0-alpha06"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -29,6 +32,15 @@ androidx-camera-view = { group = "androidx.camera", name = "camera-view", versio
 
 # ONNX Runtime
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
+
+# Core library desugaring (java.time etc. on lower API levels)
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+
+# Encrypted history-at-rest (Keystore master key + EncryptedFile)
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+
+# Unit testing
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

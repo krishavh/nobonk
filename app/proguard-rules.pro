@@ -11,8 +11,8 @@
 # ── Android entry points (Activities, Services, BroadcastReceivers) ──────────
 # R8 keeps @Keep-annotated and manifest-declared entry points by default, but
 # being explicit avoids surprises.
--keep class com.persondetection.android.MainActivity { *; }
--keep class com.persondetection.android.service.DetectionService { *; }
+-keep class ai.genwhy.nobonk.MainActivity { *; }
+-keep class ai.genwhy.nobonk.service.DetectionService { *; }
 
 # ── Data classes used with JSON serialisation ─────────────────────────────────
 # DetectionEvent and SessionSummary are serialised/deserialised manually via
@@ -20,10 +20,10 @@
 # survive obfuscation because we use them as string keys in toJson/fromJson.
 # R8 will obfuscate the class bytecode names but leaves field access intact
 # when accessed directly (not via reflection), so these rules are precautionary.
--keepclassmembers class com.persondetection.android.data.DetectionEvent {
+-keepclassmembers class ai.genwhy.nobonk.data.DetectionEvent {
     public *;
 }
--keepclassmembers class com.persondetection.android.data.SessionSummary {
+-keepclassmembers class ai.genwhy.nobonk.data.SessionSummary {
     public *;
 }
 
@@ -54,9 +54,21 @@
 -dontwarn kotlinx.coroutines.debug.*
 
 # ── Android Keystore / Security ───────────────────────────────────────────────
-# Used by EncryptedFile (future SEC-04 work). Keep to avoid issues if added.
+# Precautionary keep for androidx.security.crypto (EncryptedFile / Keystore master
+# key). Only takes effect if the security-crypto dependency is on the classpath;
+# harmless otherwise. Kept so history-at-rest encryption can be added without a
+# ProGuard regression.
 -keep class androidx.security.crypto.** { *; }
 -dontwarn androidx.security.crypto.**
+
+# Tink (transitive via security-crypto) references compile-time-only annotations
+# from Error Prone / JSR-305 that are not on the runtime classpath. They are
+# discarded before packaging, so it is safe to silence the missing-class warnings.
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn javax.annotation.concurrent.**
 
 # ── Suppress known-harmless warnings from transitive dependencies ─────────────
 -dontwarn org.bouncycastle.**

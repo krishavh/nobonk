@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon FOREGROUND layer (T-REL-ASSETS). 108x108dp viewport; visual
+     content kept inside the central ~66dp safe zone. A walking pedestrian (the
+     distracted walker NoBonk protects) in amber, with a warning burst by the
+     head signalling "look up". Prefixed ic_launcher_* to avoid collisions. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Walking pedestrian (Material directions_walk, scaled + centred) -->
+    <group
+        android:scaleX="2.55"
+        android:scaleY="2.55"
+        android:translateX="24"
+        android:translateY="24">
+        <path
+            android:fillColor="#FFFFB300"
+            android:pathData="M13.5,5.5c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM9.8,8.9L7,23h2.1l1.8,-8 2.1,2v6h2v-7.5l-2.1,-2 0.6,-3C14.8,12 16.8,13 19,13v-2c-1.9,0 -3.5,-1 -4.3,-2.4l-1,-1.6c-0.4,-0.6 -1,-1 -1.7,-1 -0.3,0 -0.5,0.1 -0.8,0.1L6,8.3V13h2V9.6z" />
+    </group>
+
+    <!-- Warning burst near the head (look up!) -->
+    <path
+        android:fillColor="#FFFF5252"
+        android:pathData="M72,30l3.4,7.6l7.6,3.4l-7.6,3.4l-3.4,7.6l-3.4,-7.6l-7.6,-3.4l7.6,-3.4z" />
+</vector>
