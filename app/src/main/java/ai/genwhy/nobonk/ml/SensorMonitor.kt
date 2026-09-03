@@ -85,7 +85,8 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     /**
      * Human-readable hint shown to the user, derived from the current
-     * [cameraPitchDegrees]. Empty when the angle is fine.
+     * [cameraPitchDegrees]. Empty when the angle is fine (i.e. at or below
+     * the warning threshold — including all negative pitches).
      */
     val angleHint: String
         get() = when {
