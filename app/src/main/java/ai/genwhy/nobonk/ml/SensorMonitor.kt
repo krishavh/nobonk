@@ -63,12 +63,17 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     /**
      * Quality bucket derived from the current [cameraPitchDegrees].
-     *
-     *  [AngleQuality.OK]      → any normal phone-holding posture, detection works well
-     *  [AngleQuality.WARNING] → phone getting too flat, camera losing its forward view
-     *  [AngleQuality.BAD]     → phone nearly horizontal, camera looking at ceiling
      */
-    enum class AngleQuality { OK, WARNING, BAD }
+    enum class AngleQuality {
+        /** Any normal phone-holding posture; detection works well. */
+        OK,
+
+        /** Phone getting too flat; camera losing its forward view. */
+        WARNING,
+
+        /** Phone nearly horizontal; camera looking at the ceiling. */
+        BAD,
+    }
 
     /**
      * Quality bucket for the current [cameraPitchDegrees]:
