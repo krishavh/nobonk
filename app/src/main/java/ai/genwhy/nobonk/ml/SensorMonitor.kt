@@ -202,6 +202,8 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
         /** Physically meaningful pitch range in degrees, used to clamp the smoothed value. */
         const val PITCH_CLAMP_MIN = -90f
+
+        /** Upper bound of the physically meaningful pitch range in degrees. */
         const val PITCH_CLAMP_MAX = 90f
 
         /** Minimum number of components a usable sensor event must carry (x, y, z). */
