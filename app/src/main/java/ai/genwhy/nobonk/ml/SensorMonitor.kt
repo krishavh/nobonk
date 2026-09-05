@@ -200,7 +200,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         /** Complement of [PREVIOUS_SAMPLE_WEIGHT]; weight applied to the new sample. */
         const val NEW_SAMPLE_WEIGHT = 1f - PREVIOUS_SAMPLE_WEIGHT
 
-        /** Physically meaningful pitch range in degrees, used to clamp the smoothed value. */
+        /** Lower bound of the physically meaningful pitch range in degrees. */
         const val PITCH_CLAMP_MIN = -90f
 
         /** Upper bound of the physically meaningful pitch range in degrees. */
