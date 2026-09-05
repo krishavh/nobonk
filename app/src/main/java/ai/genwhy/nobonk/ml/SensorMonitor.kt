@@ -31,7 +31,8 @@ import android.hardware.SensorManager
  *
  * Thread-safety: [onSensorChanged] is invoked on the main thread (the listener
  * is registered with [SensorManager.SENSOR_DELAY_UI]), so the mutable pitch
- * state is confined to that thread and needs no synchronization.
+ * state is confined to that thread and needs no synchronization. [start] and
+ * [stop] are also expected to be called from the main thread.
  */
 class SensorMonitor(context: Context) : SensorEventListener {
 
@@ -135,7 +136,8 @@ class SensorMonitor(context: Context) : SensorEventListener {
         val values = event?.values?.takeIf { it.size >= AXIS_COUNT } ?: return
 
         // Only the y (along phone) and z (out of screen) components matter for
-        // pitch; values[0] (x, across phone) is intentionally ignored.
+        // pitch; values[0] (x, across phone) is intentionally ignored — roll
+        // about the camera's optical axis doesn't change where it points.
         val gy = values[1]
         val gz = values[2]
 
