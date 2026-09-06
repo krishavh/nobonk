@@ -50,6 +50,16 @@ android {
         }
     }
 
+    // Sideload APKs per ABI (Play uses the AAB, which slices automatically).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true      // Enable R8 obfuscation + shrinking (SEC-01)
