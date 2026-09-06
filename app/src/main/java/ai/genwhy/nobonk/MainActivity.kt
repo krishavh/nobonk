@@ -176,6 +176,8 @@ class MainActivity : ComponentActivity() {
             putExtra(DetectionService.EXTRA_MODEL, mode.modelFile)
             putExtra(DetectionService.EXTRA_INPUT_PX, mode.inputPx)
             putExtra(DetectionService.EXTRA_SKIP_NMS, mode.skipNms)
+            putExtra(DetectionService.EXTRA_SOUND, viewModel.soundEnabled)
+            putExtra(DetectionService.EXTRA_HAPTICS, viewModel.hapticsEnabled)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)

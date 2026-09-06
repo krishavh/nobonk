@@ -127,13 +127,17 @@ fun DetectionScreen(
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp),
             detections = detections,
             distanceThreshold = distanceThreshold,
-            onThresholdChange = { viewModel.distanceThreshold = it },
+            onThresholdChange = { viewModel.setThreshold(it) },
             onStartBackground = onStartBackground,
             onStopBackground = onStopBackground,
             canDrawOverlays = canDrawOverlays,
             onGrantOverlay = onGrantOverlay,
             isObjectDetectionEnabled = isObjectDetectionEnabled,
-            onObjectDetectionToggle = { viewModel.isObjectDetectionEnabled = it },
+            onObjectDetectionToggle = { viewModel.setDetectEverything(it) },
+            soundEnabled = viewModel.soundEnabled,
+            onSoundToggle = { viewModel.toggleSound(it) },
+            hapticsEnabled = viewModel.hapticsEnabled,
+            onHapticsToggle = { viewModel.toggleHaptics(it) },
             accuracyMode = accuracyMode,
             onAccuracyChange = { viewModel.setAccuracyMode(it, context) },
             onShowHistory = onShowHistory
@@ -240,6 +244,10 @@ private fun ControlDock(
     onObjectDetectionToggle: (Boolean) -> Unit,
     accuracyMode: AccuracyMode,
     onAccuracyChange: (AccuracyMode) -> Unit,
+    soundEnabled: Boolean,
+    onSoundToggle: (Boolean) -> Unit,
+    hapticsEnabled: Boolean,
+    onHapticsToggle: (Boolean) -> Unit,
     onShowHistory: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -284,6 +292,13 @@ private fun ControlDock(
                         SegChip("Everything", isObjectDetectionEnabled, NB.Safe, Modifier.weight(1f)) { onObjectDetectionToggle(true) }
                     }
                 }
+            }
+            Spacer(Modifier.height(10.dp))
+            SectionLabel("Cues")
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SegChip(if (soundEnabled) "🔊 Sound on" else "🔇 Sound off", soundEnabled, NB.Watch, Modifier.weight(1f)) { onSoundToggle(!soundEnabled) }
+                SegChip(if (hapticsEnabled) "📳 Haptics on" else "Haptics off", hapticsEnabled, NB.Watch, Modifier.weight(1f)) { onHapticsToggle(!hapticsEnabled) }
             }
         }
         Spacer(Modifier.height(12.dp))

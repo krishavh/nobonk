@@ -21,6 +21,7 @@ import androidx.lifecycle.lifecycleScope
 import ai.genwhy.nobonk.MainActivity
 import ai.genwhy.nobonk.R
 import ai.genwhy.nobonk.ml.DetectionEngine
+import ai.genwhy.nobonk.ml.FrameCadence
 import ai.genwhy.nobonk.model.AlertLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -47,11 +48,15 @@ class DetectionService : LifecycleService() {
     private var modelFile = "yolo26s_416.onnx"
     private var inputPx = 416
     private var skipNms = true
+    private var soundEnabled = true
+    private var hapticsEnabled = true
 
     // FPS cap + single-flight gate (fixes PERF-C03: no unbounded background inference).
     private val gate = AtomicBoolean(false)
     private var lastProcessTime = 0L
-    private val minFrameIntervalMs = 100
+    @Volatile private var cadenceAlert = AlertLevel.NONE
+    @Volatile private var cadenceHadDetections = false
+    @Volatile private var lastSeenAt = 0L
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var windowManager: WindowManager
@@ -71,6 +76,8 @@ class DetectionService : LifecycleService() {
         const val EXTRA_MODEL = "extra_model"
         const val EXTRA_INPUT_PX = "extra_input_px"
         const val EXTRA_SKIP_NMS = "extra_skip_nms"
+        const val EXTRA_SOUND = "extra_sound"
+        const val EXTRA_HAPTICS = "extra_haptics"
     }
 
     override fun onCreate() {
@@ -87,6 +94,8 @@ class DetectionService : LifecycleService() {
             modelFile = it.getStringExtra(EXTRA_MODEL) ?: modelFile
             inputPx = it.getIntExtra(EXTRA_INPUT_PX, inputPx)
             skipNms = it.getBooleanExtra(EXTRA_SKIP_NMS, skipNms)
+            soundEnabled = it.getBooleanExtra(EXTRA_SOUND, soundEnabled)
+            hapticsEnabled = it.getBooleanExtra(EXTRA_HAPTICS, hapticsEnabled)
         }
         when (intent?.action) {
             ACTION_STOP -> stopSelf()
@@ -166,14 +175,18 @@ class DetectionService : LifecycleService() {
     private fun processFrame(imageProxy: ImageProxy) {
         val eng = engine ?: run { imageProxy.close(); return }
         val now = System.currentTimeMillis()
-        if (now - lastProcessTime < minFrameIntervalMs) { imageProxy.close(); return }
+        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryPct())
+        if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!gate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
 
         lifecycleScope.launch(Dispatchers.Default) {
             try {
-                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson)
+                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled)
                 val result = eng.process(imageProxy, cfg)   // closes imageProxy, fires haptics+sound
+                cadenceAlert = result.highestAlert
+                cadenceHadDetections = result.detections.isNotEmpty()
+                if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
                 mainHandler.post { updateHud(result.hudMessage) }
                 if (result.highestAlert != AlertLevel.NONE) {
                     updateNotification("Alert: ${result.highestAlert} — ${result.detections.size} object(s)")
@@ -185,6 +198,14 @@ class DetectionService : LifecycleService() {
             }
         }
     }
+
+    /** Cheap sticky-intent battery read for the cadence policy (no receiver needed). */
+    private fun batteryPct(): Int = try {
+        val i = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+        val level = i?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = i?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+        if (level >= 0 && scale > 0) level * 100 / scale else 100
+    } catch (_: Exception) { 100 }
 
     private fun updateHud(message: String?) {
         if (message != null) {

@@ -25,12 +25,12 @@ People walk while looking at their phones and run into each other, walls, and cu
 
 ## How it works
 
-1. **Camera** — the back camera captures frames in real time (~10 fps). When you're looking at your screen, the back camera naturally faces forward.
-2. **On-device AI** — a small YOLO11 model (via ONNX Runtime Mobile) detects people, animals, and obstacles in each frame. No internet needed.
+1. **Camera** — the back camera captures frames in real time (up to ~10 fps, backing off to ~3 fps when the path has been clear for a while to save battery). When you're looking at your screen, the back camera naturally faces forward.
+2. **On-device AI** — a YOLO26 model (nano or small; via ONNX Runtime with NNAPI/XNNPACK acceleration) detects people, animals, and obstacles in each frame. No internet needed.
 3. **Distance estimation** — a pinhole-camera model converts bounding-box size to approximate distance; a box growing frame-over-frame means something is approaching.
-4. **Approach tracking** — IoU tracking plus time-to-collision physics (`ApproachDetector.kt`) flags anything closing distance fast enough to hit you within ~2 seconds.
+4. **Approach tracking** — IoU tracking plus time-to-collision physics (`ApproachTracker.kt`) flags anything closing distance fast enough to hit you within ~2 seconds.
 5. **Hazards the model can't classify** — `FrameAnalyzer.kt` detects blank walls (gradient-invariant adjacent-cell brightness analysis) and ground hazards like potholes and step-downs.
-6. **Alerts** — escalating haptic + on-screen warnings (LOW / MEDIUM / HIGH) based on distance thresholds you choose. Runs as a background foreground-service, so warnings appear over whatever app you're using.
+6. **Alerts** — escalating haptic + on-screen warnings (LOW / MEDIUM / HIGH) based on the alert distance you choose, plus a short synthesised chirp on MEDIUM/HIGH that is stereo-panned toward the hazard — with earbuds, someone approaching on your left is heard on your left. Sound and haptics can each be switched off.
 7. **Detection history** — sessions, alert counts, peak-danger hours, and danger hotspots, stored only on your device.
 
 ## Privacy by design

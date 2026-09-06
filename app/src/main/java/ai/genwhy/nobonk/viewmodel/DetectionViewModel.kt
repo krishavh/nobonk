@@ -21,6 +21,7 @@ import ai.genwhy.nobonk.data.DetectionEvent
 import ai.genwhy.nobonk.data.DetectionRepository
 import ai.genwhy.nobonk.data.SessionSummary
 import ai.genwhy.nobonk.ml.DetectionEngine
+import ai.genwhy.nobonk.ml.FrameCadence
 import ai.genwhy.nobonk.ml.SensorMonitor
 import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.model.Detection
@@ -61,6 +62,19 @@ class DetectionViewModel : ViewModel() {
         private set
 
     var distanceThreshold by mutableFloatStateOf(2.0f)
+        private set
+
+    /** Audible chirps for MEDIUM/HIGH alerts (persisted). */
+    var soundEnabled by mutableStateOf(true)
+        private set
+
+    /** Vibration ladder for LOW/MEDIUM/HIGH (persisted). */
+    var hapticsEnabled by mutableStateOf(true)
+        private set
+
+    /** Stereo pan of the current top hazard, −1 (left) … +1 (right); null when clear. */
+    var bearingPan by mutableStateOf<Float?>(null)
+        private set
 
     var isInitializing by mutableStateOf(true)
         private set
@@ -119,16 +133,42 @@ class DetectionViewModel : ViewModel() {
     private val lastEventTime = mutableMapOf<String, Long>()
 
     private var lastProcessTime = 0L
-    private val minFrameIntervalMs = 100
+    // Adaptive cadence inputs (written on the result path, read on the camera thread).
+    @Volatile private var cadenceAlert = AlertLevel.NONE
+    @Volatile private var cadenceHadDetections = false
+    @Volatile private var lastSeenAt = 0L
     private val _processingGate = AtomicBoolean(false)
 
     companion object {
         private const val TAG = "DetectionViewModel"
         private const val EVENT_LOG_DEBOUNCE_MS = 3_000L
+        private const val PREFS = "nobonk_prefs"
+        private const val P_THRESHOLD = "threshold_m"
+        private const val P_MODE = "accuracy_mode"
+        private const val P_EVERYTHING = "detect_everything"
+        private const val P_SOUND = "sound"
+        private const val P_HAPTICS = "haptics"
     }
+
+    private fun prefs() = appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private fun restoreSettings() {
+        val p = prefs() ?: return
+        distanceThreshold = p.getFloat(P_THRESHOLD, distanceThreshold)
+        isObjectDetectionEnabled = p.getBoolean(P_EVERYTHING, isObjectDetectionEnabled)
+        soundEnabled = p.getBoolean(P_SOUND, true)
+        hapticsEnabled = p.getBoolean(P_HAPTICS, true)
+        p.getString(P_MODE, null)?.let { name -> AccuracyMode.entries.firstOrNull { it.name == name }?.let { accuracyMode = it } }
+    }
+
+    fun setThreshold(meters: Float) { distanceThreshold = meters; prefs()?.edit()?.putFloat(P_THRESHOLD, meters)?.apply() }
+    fun setDetectEverything(on: Boolean) { isObjectDetectionEnabled = on; prefs()?.edit()?.putBoolean(P_EVERYTHING, on)?.apply() }
+    fun toggleSound(on: Boolean) { soundEnabled = on; prefs()?.edit()?.putBoolean(P_SOUND, on)?.apply() }
+    fun toggleHaptics(on: Boolean) { hapticsEnabled = on; prefs()?.edit()?.putBoolean(P_HAPTICS, on)?.apply() }
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
+        restoreSettings()
         // Phone-angle monitoring now lives in the shared DetectionEngine (so the
         // background service is gated too); the engine is created in loadModel().
         repository = DetectionRepository(context.applicationContext)
@@ -174,6 +214,7 @@ class DetectionViewModel : ViewModel() {
     fun setAccuracyMode(mode: AccuracyMode, context: Context) {
         if (mode == accuracyMode && engine != null) return
         accuracyMode = mode
+        prefs()?.edit()?.putString(P_MODE, mode.name)?.apply()
         viewModelScope.launch(Dispatchers.Main) {
             isInitializing = true
             initializationStatus = "Switching to ${mode.family} ${mode.label}…"
@@ -289,15 +330,19 @@ class DetectionViewModel : ViewModel() {
     fun processFrame(imageProxy: ImageProxy) {
         if (isInitializing || batteryLevel < 10) { imageProxy.close(); return }
         val now = System.currentTimeMillis()
-        if (now - lastProcessTime < minFrameIntervalMs) { imageProxy.close(); return }
+        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryLevel)
+        if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!_processingGate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
         val eng = engine ?: run { imageProxy.close(); _processingGate.set(false); return }
 
         viewModelScope.launch(Dispatchers.Default) {
             try {
-                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled)
+                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled)
                 val result = eng.process(imageProxy, cfg)
+                cadenceAlert = result.highestAlert
+                cadenceHadDetections = result.detections.isNotEmpty()
+                if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
 
                 for (d in result.detections) if (d.alertLevel != AlertLevel.NONE) logEvent(d)
 
@@ -311,6 +356,7 @@ class DetectionViewModel : ViewModel() {
                     phoneAngleQuality = result.angleQuality
                     phoneAngleHint = result.angleHint
                     isLowLight = result.lowLight
+                    bearingPan = result.bearingPan
                 }
             } catch (e: Exception) {
                 Dbg.e(TAG, "Frame processing error: ${e.message}")

@@ -5,7 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Canvas
 import android.graphics.Matrix
-import android.media.RingtoneManager
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -36,7 +38,9 @@ class DetectionEngine(private val appContext: Context) {
     data class Config(
         val distanceThreshold: Float,
         /** When false, only "person" detections are surfaced. */
-        val includeNonPerson: Boolean
+        val includeNonPerson: Boolean,
+        val soundEnabled: Boolean = true,
+        val hapticsEnabled: Boolean = true
     )
 
     data class Result(
@@ -52,7 +56,9 @@ class DetectionEngine(private val appContext: Context) {
         val lowLight: Boolean = false,
         /** Phone-angle reliability (now gated in BOTH foreground and background). */
         val angleQuality: SensorMonitor.AngleQuality = SensorMonitor.AngleQuality.OK,
-        val angleHint: String = ""
+        val angleHint: String = "",
+        /** Stereo pan (−1 left … +1 right) of the top hazard, null when nothing is alerting. */
+        val bearingPan: Float? = null
     )
 
     private val approachTracker = ApproachTracker()
@@ -84,7 +90,9 @@ class DetectionEngine(private val appContext: Context) {
     private val vibrator: Vibrator? =
         appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     private val lastHapticTime = mutableMapOf<AlertLevel, Long>()
-    private var lastSoundTime = 0L
+    private val lastCueTime = mutableMapOf<AlertLevel, Long>()
+    private var lastAnyCueTime = 0L
+    private var audioTrack: AudioTrack? = null
 
     // Per-track HIGH re-alert mute (Round-2): after a HIGH fires the loud LOOK-UP + sound
     // on a track, don't re-blast the same track for MUTE_MS — the box stays red and
@@ -275,8 +283,13 @@ class DetectionEngine(private val appContext: Context) {
         val suppressVisual = angleBad
 
         // ── Shared feedback (identical in both modes), driven by the debounced level ──
-        if (displayAlert != AlertLevel.NONE && !angleBad) handleHaptics(displayAlert)
-        if (displayAlert == AlertLevel.HIGH && !suppressSound) playAlertSound()
+        val pan = topDet?.let { AlertCue.panFor(it.boundingBox.centerX) }
+        if (displayAlert != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(displayAlert)
+        // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
+        // The cue is panned toward the object so a left-side hazard is heard on the left.
+        if (config.soundEnabled && !suppressSound && displayAlert.ordinal >= AlertLevel.MEDIUM.ordinal) {
+            playAlertCue(displayAlert, pan ?: 0f)
+        }
 
         val lookUpLabel = if (displayAlert == AlertLevel.HIGH && !suppressVisual) heldLabel else null
         val hud = buildHud(
@@ -285,7 +298,8 @@ class DetectionEngine(private val appContext: Context) {
         )
         return Result(
             scored, displayAlert, lookUpLabel, blocked, wall, ground, hud,
-            lowLight = lowLight, angleQuality = angleQuality, angleHint = angleHint
+            lowLight = lowLight, angleQuality = angleQuality, angleHint = angleHint,
+            bearingPan = if (displayAlert != AlertLevel.NONE) pan else null
         )
     }
 
@@ -376,15 +390,43 @@ class DetectionEngine(private val appContext: Context) {
         }
     }
 
-    private fun playAlertSound() {
+    /**
+     * Play the synthesised chirp for [level], panned by [pan]. Rate-limited per level (so
+     * a persistent MEDIUM doesn't nag) and globally (so a MEDIUM never lands on top of a
+     * HIGH still ringing). Uses the accessibility-assistance audio usage so the cue plays
+     * over music at a sensible volume without hijacking the alarm stream.
+     */
+    private fun playAlertCue(level: AlertLevel, pan: Float) {
         val now = System.currentTimeMillis()
-        if (now - lastSoundTime < 1500L) return   // don't stack ringtones
-        lastSoundTime = now
+        if (now - (lastCueTime[level] ?: 0L) < AlertCue.repeatIntervalMs(level)) return
+        if (now - lastAnyCueTime < 400L && level != AlertLevel.HIGH) return
+        val pcm = AlertCue.pcm(level, pan) ?: return
+        lastCueTime[level] = now
+        lastAnyCueTime = now
         try {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            RingtoneManager.getRingtone(appContext, uri)?.play()
+            audioTrack?.let { t -> runCatching { t.stop() }; t.release() }
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(AlertCue.SAMPLE_RATE)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                        .build()
+                )
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .setBufferSizeInBytes(pcm.size * 2)
+                .build()
+            track.write(pcm, 0, pcm.size)
+            track.play()
+            audioTrack = track
         } catch (e: Exception) {
-            Dbg.e(TAG, "Alert sound failed: ${e.message}")
+            Dbg.e(TAG, "Alert cue failed: ${e.message}")
         }
     }
 
@@ -394,6 +436,7 @@ class DetectionEngine(private val appContext: Context) {
 
         objectDetector?.close()
         objectDetector = null
+        audioTrack?.let { t -> runCatching { t.stop() }; t.release() }; audioTrack = null
         approachTracker.reset()
         stopSensors()
         sensorMonitor = null
