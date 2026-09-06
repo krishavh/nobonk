@@ -52,7 +52,7 @@ fun SegChip(label: String, selected: Boolean, color: Color = NB.Accent, modifier
             .padding(vertical = 10.dp, horizontal = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, color = if (selected) color else NB.Sub, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1)
+        Text(label, color = if (selected) color else NB.Sub, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 

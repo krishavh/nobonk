@@ -122,6 +122,7 @@ class DetectionService : LifecycleService() {
             try {
                 engine = DetectionEngine(this@DetectionService).also {
                     it.loadModel(modelFile, inputPx, skipNms)
+                    if (voiceEnabled) it.prepareVoice()
                     it.startSensors()   // background angle gating (was never wired before)
                 }
             } catch (e: Exception) {

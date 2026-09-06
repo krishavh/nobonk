@@ -513,22 +513,28 @@ class DetectionEngine(private val appContext: Context) {
         if (config.voiceEnabled) speak(VoiceCue.phrase(AlertLevel.HIGH, "person", AlertCue.Side.AHEAD))
     }
 
-    /** Lazily create the TTS engine (first HIGH with voice on), then speak [text] once per [VoiceCue.REPEAT_MS]. */
-    private fun speak(text: String?) {
-        text ?: return
-        val now = System.currentTimeMillis()
-        if (now - lastSpokenAt < VoiceCue.REPEAT_MS) return
-        val engine = tts ?: try {
-            TextToSpeech(appContext) { status -> ttsReady = status == TextToSpeech.SUCCESS }.also { t ->
+    /** Warm the text-to-speech engine so the very first HIGH can speak (init is async). */
+    fun prepareVoice() {
+        if (tts != null) return
+        try {
+            tts = TextToSpeech(appContext) { status -> ttsReady = status == TextToSpeech.SUCCESS }.also { t ->
                 t.setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
-                tts = t
             }
-        } catch (e: Exception) { Dbg.e(TAG, "TTS init failed: ${e.message}"); return }
+        } catch (e: Exception) { Dbg.e(TAG, "TTS init failed: ${e.message}") }
+    }
+
+    /** Lazily create the TTS engine (first HIGH with voice on), then speak [text] once per [VoiceCue.REPEAT_MS]. */
+    private fun speak(text: String?) {
+        text ?: return
+        val now = System.currentTimeMillis()
+        if (now - lastSpokenAt < VoiceCue.REPEAT_MS) return
+        if (tts == null) prepareVoice()
+        val engine = tts ?: return
         if (!ttsReady) return   // first call warms the engine; the next HIGH speaks
         lastSpokenAt = now
         try { engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "nobonk-$now") } catch (e: Exception) { Dbg.e(TAG, "TTS speak failed: ${e.message}") }

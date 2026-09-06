@@ -191,7 +191,10 @@ class DetectionViewModel : ViewModel() {
             eng.previewCue(DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled))
         }
     }
-    fun toggleVoice(on: Boolean) { voiceEnabled = on; prefs()?.edit()?.putBoolean(P_VOICE, on)?.apply() }
+    fun toggleVoice(on: Boolean) {
+        voiceEnabled = on; prefs()?.edit()?.putBoolean(P_VOICE, on)?.apply()
+        if (on) engine?.prepareVoice()
+    }
     fun toggleHaptics(on: Boolean) { hapticsEnabled = on; prefs()?.edit()?.putBoolean(P_HAPTICS, on)?.apply() }
 
     fun initialize(context: Context) {
@@ -241,6 +244,7 @@ class DetectionViewModel : ViewModel() {
         val eng = engine ?: DetectionEngine(context.applicationContext).also { engine = it }
         eng.loadModel(mode.modelFile, mode.inputPx, mode.skipNms)
         cameraInfo?.let { eng.attachCamera(it) }
+        if (voiceEnabled) eng.prepareVoice()
         eng.startSensors()   // angle monitoring for the foreground pipeline
         isHardwareAccelerated = eng.isHardwareAccelerated
         initializationStatus = "Running AI pre-flight..."
