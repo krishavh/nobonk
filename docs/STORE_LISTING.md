@@ -45,12 +45,16 @@ review risk on a safety-themed app.
 > **Everything runs on your phone. Nothing is ever recorded or sent anywhere.**
 >
 > **How it works**
-> • The back camera analyzes the path ahead in real time (~10 fps).
-> • A small YOLO AI model, running fully on-device via ONNX Runtime, spots
->   people, obstacles, walls, and ground hazards.
+> • The back camera analyzes the path ahead in real time (up to ~10 fps, slowing
+>   down automatically to save battery when the path is clear or you're standing still).
+> • A YOLO26 AI model, running fully on-device via ONNX Runtime, spots
+>   people, bikes, cars, pets, walls, and ground hazards. Dim street? NoBonk
+>   brightens what the model sees.
 > • When something gets close or is closing in fast, NoBonk escalates a
->   LOW / MEDIUM / HIGH warning — vibration plus an on-screen "LOOK UP!" alert —
->   even while you're using another app.
+>   LOW / MEDIUM / HIGH warning — vibration, a short chirp panned toward the
+>   hazard (with earbuds, left means left), and an on-screen "LOOK UP — PERSON
+>   ON YOUR LEFT" alert — even while you're using another app. An optional
+>   spoken warning is there for blind and low-vision walkers.
 > • An optional on-device history shows your sessions, alert counts, and (if you
 >   choose) a rough map of where your close calls happen.
 >

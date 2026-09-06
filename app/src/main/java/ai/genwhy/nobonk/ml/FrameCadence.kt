@@ -26,6 +26,9 @@ object FrameCadence {
     const val LOW_BATTERY_FACTOR = 1.5f
     /** Interval while the lens is covered (pocket, hand, face-down): just watch for light to return. */
     const val BLOCKED_MS = 500L
+    /** Standing still this long with an empty frame → [STATIONARY_MS] cadence. */
+    const val STATIONARY_AFTER_MS = 10_000L
+    const val STATIONARY_MS = 500L
 
     /**
      * @param lastAlert         alert level of the previous processed frame
@@ -33,13 +36,15 @@ object FrameCadence {
      * @param idleMs            time since the last frame that contained an object
      * @param batteryPct        current battery percentage (0..100)
      * @param cameraBlocked     previous frame was judged blocked (dark AND flat)
+     * @param stationaryMs      how long the phone has been held still (0 = moving/unknown)
      */
     fun intervalMs(
         lastAlert: AlertLevel,
         lastHadDetections: Boolean,
         idleMs: Long,
         batteryPct: Int,
-        cameraBlocked: Boolean = false
+        cameraBlocked: Boolean = false,
+        stationaryMs: Long = 0L
     ): Long {
         if (cameraBlocked) return BLOCKED_MS
         var ms = when {
@@ -53,6 +58,11 @@ object FrameCadence {
         // idle cadences on a low battery.
         if (batteryPct < LOW_BATTERY_PCT && lastAlert == AlertLevel.NONE) {
             ms = (ms * LOW_BATTERY_FACTOR).toLong()
+        }
+        // Standing still with nothing in frame (waiting at a crossing): 2 fps is plenty —
+        // the first sighting snaps back to full rate on the next frame.
+        if (lastAlert == AlertLevel.NONE && !lastHadDetections && stationaryMs >= STATIONARY_AFTER_MS) {
+            ms = maxOf(ms, STATIONARY_MS)
         }
         return ms
     }

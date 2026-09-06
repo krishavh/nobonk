@@ -70,7 +70,9 @@ class DetectionEngine(private val appContext: Context) {
         /** True when the night-boost gain was applied to this frame's detector input. */
         val nightBoost: Boolean = false,
         /** Detector wall time for this frame in ms (letterbox + inference + NMS). */
-        val inferMs: Long = 0L
+        val inferMs: Long = 0L,
+        /** How long the phone has been held still (0 = moving/unknown); cadence input. */
+        val stationaryMs: Long = 0L
     )
 
     private val approachTracker = ApproachTracker()
@@ -367,7 +369,8 @@ class DetectionEngine(private val appContext: Context) {
             shown, displayAlert, lookUpLabel, blocked, wall, ground, hud,
             lowLight = lowLight, angleQuality = angleQuality, angleHint = angleHint,
             bearingPan = if (displayAlert != AlertLevel.NONE) pan else null,
-            nightBoost = nightBoost, inferMs = lastInferMs
+            nightBoost = nightBoost, inferMs = lastInferMs,
+            stationaryMs = sensorMonitor?.stationaryMs(now) ?: 0L
         )
     }
 
@@ -496,6 +499,18 @@ class DetectionEngine(private val appContext: Context) {
         } catch (e: Exception) {
             Dbg.e(TAG, "Alert cue failed: ${e.message}")
         }
+    }
+
+    /**
+     * Demo/verification: fire the HIGH cue set once (haptic + centre-panned chirp + voice
+     * if enabled), bypassing the rate limits. Lets a user hear what an alert will be like
+     * and lets a tester check cues without a second person.
+     */
+    fun previewCue(config: Config) {
+        lastHapticTime.clear(); lastCueTime.clear(); lastAnyCueTime = 0L; lastSpokenAt = 0L
+        if (config.hapticsEnabled) handleHaptics(AlertLevel.HIGH)
+        if (config.soundEnabled) playAlertCue(AlertLevel.HIGH, 0f)
+        if (config.voiceEnabled) speak(VoiceCue.phrase(AlertLevel.HIGH, "person", AlertCue.Side.AHEAD))
     }
 
     /** Lazily create the TTS engine (first HIGH with voice on), then speak [text] once per [VoiceCue.REPEAT_MS]. */

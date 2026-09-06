@@ -142,6 +142,7 @@ fun DetectionScreen(
             onHapticsToggle = { viewModel.toggleHaptics(it) },
             voiceEnabled = viewModel.voiceEnabled,
             onVoiceToggle = { viewModel.toggleVoice(it) },
+            onTestAlert = { viewModel.testAlert() },
             accuracyMode = accuracyMode,
             onAccuracyChange = { viewModel.setAccuracyMode(it, context) },
             onShowHistory = onShowHistory,
@@ -261,6 +262,7 @@ private fun ControlDock(
     onHapticsToggle: (Boolean) -> Unit,
     voiceEnabled: Boolean,
     onVoiceToggle: (Boolean) -> Unit,
+    onTestAlert: () -> Unit = {},
     onShowHistory: () -> Unit,
     onShowAbout: () -> Unit = {}
 ) {
@@ -314,6 +316,7 @@ private fun ControlDock(
                 SegChip(if (soundEnabled) "🔊 Sound" else "🔇 Sound", soundEnabled, NB.Watch, Modifier.weight(1f)) { onSoundToggle(!soundEnabled) }
                 SegChip("📳 Haptics", hapticsEnabled, NB.Watch, Modifier.weight(1f)) { onHapticsToggle(!hapticsEnabled) }
                 SegChip("🗣 Voice", voiceEnabled, NB.Watch, Modifier.weight(1f)) { onVoiceToggle(!voiceEnabled) }
+                SegChip("▶ Test", false, NB.Danger, Modifier.weight(0.8f)) { onTestAlert() }
             }
             Spacer(Modifier.height(4.dp))
             Text(

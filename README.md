@@ -4,6 +4,7 @@
 
 NoBonk is an Android app that taps you on the shoulder before you walk into someone. It uses an on-device AI vision model to spot approaching people, walls, and ground hazards through your phone's back camera — and warns you with vibration and on-screen alerts — all while you're still staring at your screen.
 
+[![Android CI](https://github.com/krishavh/nobonk/actions/workflows/android.yml/badge.svg)](https://github.com/krishavh/nobonk/actions/workflows/android.yml)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Android%2010%2B-green)
 ![Language](https://img.shields.io/badge/kotlin-100%25-purple)

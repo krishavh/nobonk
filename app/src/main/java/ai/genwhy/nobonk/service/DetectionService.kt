@@ -59,6 +59,7 @@ class DetectionService : LifecycleService() {
     @Volatile private var cadenceHadDetections = false
     @Volatile private var lastSeenAt = 0L
     @Volatile private var cadenceBlocked = false
+    @Volatile private var cadenceStationaryMs = 0L
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var windowManager: WindowManager
@@ -180,7 +181,7 @@ class DetectionService : LifecycleService() {
     private fun processFrame(imageProxy: ImageProxy) {
         val eng = engine ?: run { imageProxy.close(); return }
         val now = System.currentTimeMillis()
-        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryPct(), cadenceBlocked)
+        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryPct(), cadenceBlocked, cadenceStationaryMs)
         if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!gate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
@@ -192,6 +193,7 @@ class DetectionService : LifecycleService() {
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()
                 cadenceBlocked = result.cameraBlocked
+                cadenceStationaryMs = result.stationaryMs
                 if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
                 mainHandler.post { updateHud(result.hudMessage) }
                 if (result.highestAlert != AlertLevel.NONE) {

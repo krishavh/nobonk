@@ -51,6 +51,12 @@ class SensorMonitor(context: Context) : SensorEventListener {
         sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
+    /** Raw accelerometer for the walking/standing-still gate (cadence only). */
+    private val accelSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    val motion = MotionGate()
+    /** Milliseconds the phone has been held still; 0 = moving or unknown. */
+    fun stationaryMs(nowMs: Long = System.currentTimeMillis()): Long = motion.stationaryMs(nowMs)
+
     /**
      * Camera pitch in degrees, clamped to [-90, 90].
      *
@@ -112,6 +118,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         val manager = sensorManager ?: return
         val sensor = gravitySensor ?: return
         manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+        accelSensor?.let { manager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
     }
 
     /** Unregisters this monitor; safe to call multiple times, even without a prior [start]. */
@@ -134,6 +141,11 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // Note: `values` is reused by the system across events, but we only read
         // the components synchronously here, so no copy is needed.
         val values = event?.values?.takeIf { it.size >= AXIS_COUNT } ?: return
+        if (event.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+            val x = values[0]; val y = values[1]; val z = values[2]
+            motion.push(kotlin.math.sqrt(x * x + y * y + z * z), System.currentTimeMillis())
+            if (gravitySensor?.type != Sensor.TYPE_ACCELEROMETER) return   // pitch comes from the gravity sensor
+        }
 
         // Only the y (along phone) and z (out of screen) components matter for
         // pitch; values[0] (x, across phone) is intentionally ignored — roll

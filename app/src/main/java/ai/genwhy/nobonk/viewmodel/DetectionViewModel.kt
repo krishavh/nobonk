@@ -154,6 +154,7 @@ class DetectionViewModel : ViewModel() {
     @Volatile private var cadenceHadDetections = false
     @Volatile private var lastSeenAt = 0L
     @Volatile private var cadenceBlocked = false
+    @Volatile private var cadenceStationaryMs = 0L
     private val _processingGate = AtomicBoolean(false)
 
     companion object {
@@ -183,6 +184,13 @@ class DetectionViewModel : ViewModel() {
     fun setThreshold(meters: Float) { distanceThreshold = meters; prefs()?.edit()?.putFloat(P_THRESHOLD, meters)?.apply() }
     fun setDetectEverything(on: Boolean) { isObjectDetectionEnabled = on; prefs()?.edit()?.putBoolean(P_EVERYTHING, on)?.apply() }
     fun toggleSound(on: Boolean) { soundEnabled = on; prefs()?.edit()?.putBoolean(P_SOUND, on)?.apply() }
+    /** Play the HIGH cue set once so the user knows what an alert feels like. */
+    fun testAlert() {
+        val eng = engine ?: return
+        viewModelScope.launch(Dispatchers.Default) {
+            eng.previewCue(DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled))
+        }
+    }
     fun toggleVoice(on: Boolean) { voiceEnabled = on; prefs()?.edit()?.putBoolean(P_VOICE, on)?.apply() }
     fun toggleHaptics(on: Boolean) { hapticsEnabled = on; prefs()?.edit()?.putBoolean(P_HAPTICS, on)?.apply() }
 
@@ -358,7 +366,7 @@ class DetectionViewModel : ViewModel() {
     fun processFrame(imageProxy: ImageProxy) {
         if (isInitializing || batteryLevel < 10) { imageProxy.close(); return }
         val now = System.currentTimeMillis()
-        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryLevel, cadenceBlocked)
+        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryLevel, cadenceBlocked, cadenceStationaryMs)
         if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!_processingGate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
@@ -371,6 +379,7 @@ class DetectionViewModel : ViewModel() {
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()
                 cadenceBlocked = result.cameraBlocked
+                cadenceStationaryMs = result.stationaryMs
                 if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
 
                 for (d in result.detections) if (d.alertLevel != AlertLevel.NONE) logEvent(d)

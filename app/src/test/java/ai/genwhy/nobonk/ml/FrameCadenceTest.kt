@@ -22,6 +22,12 @@ class FrameCadenceTest {
         assertEquals(FrameCadence.BLOCKED_MS, FrameCadence.intervalMs(AlertLevel.NONE, false, 0, 100, cameraBlocked = true))
         assertEquals(FrameCadence.BLOCKED_MS, FrameCadence.intervalMs(AlertLevel.HIGH, true, 0, 5, cameraBlocked = true))
     }
+    @Test fun standingStillWithEmptyFrameDropsToTwoFps() {
+        assertEquals(FrameCadence.STATIONARY_MS, FrameCadence.intervalMs(AlertLevel.NONE, false, 1_000, 90, stationaryMs = 15_000))
+        assertEquals(FrameCadence.BASE_MS, FrameCadence.intervalMs(AlertLevel.NONE, true, 1_000, 90, stationaryMs = 15_000))
+        assertEquals(FrameCadence.BASE_MS, FrameCadence.intervalMs(AlertLevel.LOW, false, 1_000, 90, stationaryMs = 15_000))
+        assertEquals(500L, FrameCadence.intervalMs(AlertLevel.NONE, false, 20_000, 10, stationaryMs = 15_000))   // max(450 low-battery idle, 500 stationary)
+    }
     @Test fun lowBatteryStretchesIdleOnly() {
         val idle = FrameCadence.intervalMs(AlertLevel.NONE, false, 20_000, 10)
         assertEquals((FrameCadence.BASE_MS * 3 * FrameCadence.LOW_BATTERY_FACTOR).toLong(), idle)
