@@ -9,6 +9,8 @@
 - **Which side.** The LOOK UP screen now says *PERSON ON YOUR LEFT / RIGHT / AHEAD*, shows a side arrow and lights the hazard's edge of the screen, so peripheral vision gets the direction even before you read it. TalkBack gets the same sentence.
 - **Per-phone distance calibration.** The distance label used a hard-coded focal length; NoBonk now reads the bound camera's lens focal length and sensor size (Camera2 characteristics) and derives the normalized focal for this phone (`ml/CameraIntrinsics.kt`). Falls back to the old constant when the camera reports nothing.
 - **Calm boxes.** Drawn bounding boxes are EMA-smoothed per track (faster alpha while approaching); the alert ladder still uses raw boxes so no latency is added to safety logic (`ml/BoxSmoother.kt`).
+- **Voice cue (opt-in).** "Person on your left. Look up." spoken through the phone's offline text-to-speech on each new HIGH hazard, for blind/low-vision walkers and pocket-and-earbuds use. Off by default; toggle in the settings drawer (`ml/VoiceCue.kt`).
+- **Background notification** now reads "NoBonk is watching", is silent, and has a **Stop** action.
 
 ### Performance
 - **Zero-allocation frame path.** CameraX RGBA plane → reusable raw bitmap → one Canvas draw (rotate + downscale) into a reusable work bitmap. Three Bitmap allocations per frame removed; steady-state GC churn gone. Pure `FrameGeometry` helper with unit tests.

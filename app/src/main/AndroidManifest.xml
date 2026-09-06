@@ -22,6 +22,13 @@
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 
+    <!-- Package-visibility for the system text-to-speech engine (optional "Voice" cue).
+         This is not a permission and grants no network access. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

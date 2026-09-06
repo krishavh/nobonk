@@ -178,6 +178,7 @@ class MainActivity : ComponentActivity() {
             putExtra(DetectionService.EXTRA_SKIP_NMS, mode.skipNms)
             putExtra(DetectionService.EXTRA_SOUND, viewModel.soundEnabled)
             putExtra(DetectionService.EXTRA_HAPTICS, viewModel.hapticsEnabled)
+            putExtra(DetectionService.EXTRA_VOICE, viewModel.voiceEnabled)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)

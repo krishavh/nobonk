@@ -138,6 +138,8 @@ fun DetectionScreen(
             onSoundToggle = { viewModel.toggleSound(it) },
             hapticsEnabled = viewModel.hapticsEnabled,
             onHapticsToggle = { viewModel.toggleHaptics(it) },
+            voiceEnabled = viewModel.voiceEnabled,
+            onVoiceToggle = { viewModel.toggleVoice(it) },
             accuracyMode = accuracyMode,
             onAccuracyChange = { viewModel.setAccuracyMode(it, context) },
             onShowHistory = onShowHistory
@@ -248,6 +250,8 @@ private fun ControlDock(
     onSoundToggle: (Boolean) -> Unit,
     hapticsEnabled: Boolean,
     onHapticsToggle: (Boolean) -> Unit,
+    voiceEnabled: Boolean,
+    onVoiceToggle: (Boolean) -> Unit,
     onShowHistory: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -297,9 +301,15 @@ private fun ControlDock(
             SectionLabel("Cues")
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SegChip(if (soundEnabled) "🔊 Sound on" else "🔇 Sound off", soundEnabled, NB.Watch, Modifier.weight(1f)) { onSoundToggle(!soundEnabled) }
-                SegChip(if (hapticsEnabled) "📳 Haptics on" else "Haptics off", hapticsEnabled, NB.Watch, Modifier.weight(1f)) { onHapticsToggle(!hapticsEnabled) }
+                SegChip(if (soundEnabled) "🔊 Sound" else "🔇 Sound", soundEnabled, NB.Watch, Modifier.weight(1f)) { onSoundToggle(!soundEnabled) }
+                SegChip("📳 Haptics", hapticsEnabled, NB.Watch, Modifier.weight(1f)) { onHapticsToggle(!hapticsEnabled) }
+                SegChip("🗣 Voice", voiceEnabled, NB.Watch, Modifier.weight(1f)) { onVoiceToggle(!voiceEnabled) }
             }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Sound and voice are panned toward the hazard — with earbuds, left means left.",
+                color = NB.Dim, fontSize = 10.sp
+            )
         }
         Spacer(Modifier.height(12.dp))
         // Row 3 — actions

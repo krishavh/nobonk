@@ -8,6 +8,7 @@ import android.graphics.Matrix
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.speech.tts.TextToSpeech
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -44,7 +45,8 @@ class DetectionEngine(private val appContext: Context) {
         /** When false, only "person" detections are surfaced. */
         val includeNonPerson: Boolean,
         val soundEnabled: Boolean = true,
-        val hapticsEnabled: Boolean = true
+        val hapticsEnabled: Boolean = true,
+        val voiceEnabled: Boolean = false
     )
 
     data class Result(
@@ -98,6 +100,9 @@ class DetectionEngine(private val appContext: Context) {
     private val boxSmoother = BoxSmoother()
     private var lastAnyCueTime = 0L
     private var audioTrack: AudioTrack? = null
+    private var tts: TextToSpeech? = null
+    @Volatile private var ttsReady = false
+    private var lastSpokenAt = 0L
 
     // Per-track HIGH re-alert mute (Round-2): after a HIGH fires the loud LOOK-UP + sound
     // on a track, don't re-blast the same track for MUTE_MS — the box stays red and
@@ -320,6 +325,9 @@ class DetectionEngine(private val appContext: Context) {
         if (config.soundEnabled && !suppressSound && displayAlert.ordinal >= AlertLevel.MEDIUM.ordinal) {
             playAlertCue(displayAlert, pan ?: 0f)
         }
+        if (config.voiceEnabled && !suppressSound && displayAlert == AlertLevel.HIGH) {
+            speak(VoiceCue.phrase(displayAlert, heldLabel, AlertCue.sideFor(pan)))
+        }
 
         val lookUpLabel = if (displayAlert == AlertLevel.HIGH && !suppressVisual) heldLabel else null
         val hud = buildHud(
@@ -465,6 +473,27 @@ class DetectionEngine(private val appContext: Context) {
         }
     }
 
+    /** Lazily create the TTS engine (first HIGH with voice on), then speak [text] once per [VoiceCue.REPEAT_MS]. */
+    private fun speak(text: String?) {
+        text ?: return
+        val now = System.currentTimeMillis()
+        if (now - lastSpokenAt < VoiceCue.REPEAT_MS) return
+        val engine = tts ?: try {
+            TextToSpeech(appContext) { status -> ttsReady = status == TextToSpeech.SUCCESS }.also { t ->
+                t.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                tts = t
+            }
+        } catch (e: Exception) { Dbg.e(TAG, "TTS init failed: ${e.message}"); return }
+        if (!ttsReady) return   // first call warms the engine; the next HIGH speaks
+        lastSpokenAt = now
+        try { engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "nobonk-$now") } catch (e: Exception) { Dbg.e(TAG, "TTS speak failed: ${e.message}") }
+    }
+
     fun close() {
         rawBitmap?.recycle(); rawBitmap = null
         workBitmap?.recycle(); workBitmap = null
@@ -472,6 +501,7 @@ class DetectionEngine(private val appContext: Context) {
         objectDetector?.close()
         objectDetector = null
         audioTrack?.let { t -> runCatching { t.stop() }; t.release() }; audioTrack = null
+        tts?.let { t -> runCatching { t.stop() }; runCatching { t.shutdown() } }; tts = null; ttsReady = false
         approachTracker.reset()
         boxSmoother.reset()
         stopSensors()

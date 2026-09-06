@@ -72,6 +72,10 @@ class DetectionViewModel : ViewModel() {
     var hapticsEnabled by mutableStateOf(true)
         private set
 
+    /** Spoken "Person on your left. Look up." on HIGH (persisted, default off). */
+    var voiceEnabled by mutableStateOf(false)
+        private set
+
     /** Stereo pan of the current top hazard, −1 (left) … +1 (right); null when clear. */
     var bearingPan by mutableStateOf<Float?>(null)
         private set
@@ -148,6 +152,7 @@ class DetectionViewModel : ViewModel() {
         private const val P_EVERYTHING = "detect_everything"
         private const val P_SOUND = "sound"
         private const val P_HAPTICS = "haptics"
+        private const val P_VOICE = "voice"
     }
 
     private fun prefs() = appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -158,12 +163,14 @@ class DetectionViewModel : ViewModel() {
         isObjectDetectionEnabled = p.getBoolean(P_EVERYTHING, isObjectDetectionEnabled)
         soundEnabled = p.getBoolean(P_SOUND, true)
         hapticsEnabled = p.getBoolean(P_HAPTICS, true)
+        voiceEnabled = p.getBoolean(P_VOICE, false)
         p.getString(P_MODE, null)?.let { name -> AccuracyMode.entries.firstOrNull { it.name == name }?.let { accuracyMode = it } }
     }
 
     fun setThreshold(meters: Float) { distanceThreshold = meters; prefs()?.edit()?.putFloat(P_THRESHOLD, meters)?.apply() }
     fun setDetectEverything(on: Boolean) { isObjectDetectionEnabled = on; prefs()?.edit()?.putBoolean(P_EVERYTHING, on)?.apply() }
     fun toggleSound(on: Boolean) { soundEnabled = on; prefs()?.edit()?.putBoolean(P_SOUND, on)?.apply() }
+    fun toggleVoice(on: Boolean) { voiceEnabled = on; prefs()?.edit()?.putBoolean(P_VOICE, on)?.apply() }
     fun toggleHaptics(on: Boolean) { hapticsEnabled = on; prefs()?.edit()?.putBoolean(P_HAPTICS, on)?.apply() }
 
     fun initialize(context: Context) {
@@ -346,7 +353,7 @@ class DetectionViewModel : ViewModel() {
 
         viewModelScope.launch(Dispatchers.Default) {
             try {
-                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled)
+                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled)
                 val result = eng.process(imageProxy, cfg)
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()

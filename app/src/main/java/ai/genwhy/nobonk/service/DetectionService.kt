@@ -50,6 +50,7 @@ class DetectionService : LifecycleService() {
     private var skipNms = true
     private var soundEnabled = true
     private var hapticsEnabled = true
+    private var voiceEnabled = false
 
     // FPS cap + single-flight gate (fixes PERF-C03: no unbounded background inference).
     private val gate = AtomicBoolean(false)
@@ -78,6 +79,7 @@ class DetectionService : LifecycleService() {
         const val EXTRA_SKIP_NMS = "extra_skip_nms"
         const val EXTRA_SOUND = "extra_sound"
         const val EXTRA_HAPTICS = "extra_haptics"
+        const val EXTRA_VOICE = "extra_voice"
     }
 
     override fun onCreate() {
@@ -96,6 +98,7 @@ class DetectionService : LifecycleService() {
             skipNms = it.getBooleanExtra(EXTRA_SKIP_NMS, skipNms)
             soundEnabled = it.getBooleanExtra(EXTRA_SOUND, soundEnabled)
             hapticsEnabled = it.getBooleanExtra(EXTRA_HAPTICS, hapticsEnabled)
+            voiceEnabled = it.getBooleanExtra(EXTRA_VOICE, voiceEnabled)
         }
         when (intent?.action) {
             ACTION_STOP -> stopSelf()
@@ -105,7 +108,7 @@ class DetectionService : LifecycleService() {
     }
 
     private fun startForegroundService() {
-        val notification = createNotification("Scanning for people...")
+        val notification = createNotification("Watching your path · tap to open")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
         } else {
@@ -183,14 +186,15 @@ class DetectionService : LifecycleService() {
 
         lifecycleScope.launch(Dispatchers.Default) {
             try {
-                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled)
+                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled)
                 val result = eng.process(imageProxy, cfg)   // closes imageProxy, fires haptics+sound
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()
                 if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
                 mainHandler.post { updateHud(result.hudMessage) }
                 if (result.highestAlert != AlertLevel.NONE) {
-                    updateNotification("Alert: ${result.highestAlert} — ${result.detections.size} object(s)")
+                    val n = result.detections.size
+                    updateNotification("${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · $n object${if (n == 1) "" else "s"} in view")
                 }
             } catch (e: Exception) {
                 Dbg.e(TAG, "Frame processing error: ${e.message}", e)
@@ -247,12 +251,19 @@ class DetectionService : LifecycleService() {
     private fun createNotification(content: String): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val stopIntent = Intent(this, DetectionService::class.java).apply { action = ACTION_STOP }
+        val stopPending = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("NoBonk active")
+            .setContentTitle("NoBonk is watching")
             .setContentText(content)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(pendingIntent)
+            .addAction(0, "Stop", stopPending)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }
 
