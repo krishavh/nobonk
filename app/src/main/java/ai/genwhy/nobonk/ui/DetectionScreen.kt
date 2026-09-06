@@ -1,5 +1,12 @@
 package ai.genwhy.nobonk.ui
 
+import ai.genwhy.nobonk.ml.SensorMonitor
+import ai.genwhy.nobonk.model.AlertLevel
+import ai.genwhy.nobonk.model.Detection
+import ai.genwhy.nobonk.ui.components.*
+import ai.genwhy.nobonk.ui.theme.NB
+import ai.genwhy.nobonk.viewmodel.AccuracyMode
+import ai.genwhy.nobonk.viewmodel.DetectionViewModel
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -10,12 +17,12 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,12 +34,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -41,14 +47,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import ai.genwhy.nobonk.ml.SensorMonitor
-import ai.genwhy.nobonk.model.AlertLevel
-import ai.genwhy.nobonk.model.Detection
-import ai.genwhy.nobonk.viewmodel.AccuracyMode
-import ai.genwhy.nobonk.viewmodel.DetectionViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.Locale
 import java.util.concurrent.Executors
 
+/**
+ * The live detection screen. Layering (bottom → top): camera preview, corner-bracket
+ * detection overlay, top status bar, notice banners, the bottom control dock, then the
+ * full-screen states (camera covered / LOOK UP / warming up).
+ *
+ * Design rules: one colour language everywhere (NB.alert), glass panels over the camera,
+ * nothing important inside the top 88 dp (status bar) or under the dock.
+ */
 @Composable
 fun DetectionScreen(
     viewModel: DetectionViewModel,
@@ -75,133 +85,47 @@ fun DetectionScreen(
     val isHardwareAccelerated = viewModel.isHardwareAccelerated
     val context = LocalContext.current
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // key(cameraRebindKey) forces CameraPreview to be fully recreated each
-        // time we return from background. This re-runs the factory lambda which
-        // calls cameraProvider.unbindAll() + bindToLifecycle fresh, reclaiming
-        // the camera from the DetectionService.
+    Box(modifier = Modifier.fillMaxSize().background(NB.Night)) {
         key(cameraRebindKey) {
-            CameraPreview(
-                modifier = Modifier.fillMaxSize(),
-                onFrameAnalyzed = { imageProxy ->
-                    viewModel.processFrame(imageProxy)
-                }
-            )
+            CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) })
         }
 
-        // ── Bounding boxes ─────────────────────────────────────
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            for (detection in detections) {
-                val box = detection.boundingBox
-                val color = viewModel.colorFor(detection)
+        DetectionOverlay(detections = detections, frameAlert = viewModel.frameAlert)
 
-                val left = box.left * size.width
-                val top = box.top * size.height
-                val w = (box.right - box.left) * size.width
-                val h = (box.bottom - box.top) * size.height
-
-                // Semi-transparent fill — raised to 0.25f so the box is clearly visible
-                drawRoundRect(
-                    color = color.copy(alpha = 0.25f),
-                    topLeft = Offset(left, top),
-                    size = Size(w, h),
-                    cornerRadius = CornerRadius(12f, 12f)
-                )
-                // Rounded border — 6f instead of 3f for visibility
-                drawRoundRect(
-                    color = color,
-                    topLeft = Offset(left, top),
-                    size = Size(w, h),
-                    cornerRadius = CornerRadius(12f, 12f),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 6f)
-                )
-
-                // Approaching indicator: thicker outer ring
-                if (detection.isApproaching) {
-                    drawRoundRect(
-                        color = Color.Red.copy(alpha = 0.7f),
-                        topLeft = Offset(left - 5f, top - 5f),
-                        size = Size(w + 10f, h + 10f),
-                        cornerRadius = CornerRadius(16f, 16f),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 6f)
-                    )
-                }
-
-                // Label with background pill
-                drawContext.canvas.nativeCanvas.apply {
-                    val label = "${detection.className.uppercase()} ${String.format(Locale.US, "%.1f", detection.distance)}m"
-                    val textPaint = android.graphics.Paint().apply {
-                        this.color = android.graphics.Color.WHITE
-                        textSize = 36f
-                        typeface = android.graphics.Typeface.DEFAULT_BOLD
-                        isAntiAlias = true
-                    }
-                    // Fix: use color.toArgb() to get the real Android ARGB int from a Compose Color.
-                    // Previously this used color.hashCode() which is an arbitrary Java object hash
-                    // and produces random/wrong background colours.
-                    val argb = color.toArgb()
-                    val bgPaint = android.graphics.Paint().apply {
-                        this.color = android.graphics.Color.argb(
-                            200,
-                            (argb shr 16) and 0xFF,
-                            (argb shr 8) and 0xFF,
-                            argb and 0xFF
-                        )
-                        isAntiAlias = true
-                    }
-                    val textWidth = textPaint.measureText(label)
-                    val textHeight = 36f
-                    val padH = 12f
-                    val padV = 6f
-                    val labelY = (top - textHeight - padV * 2).coerceAtLeast(0f)
-
-                    // Pill background
-                    drawRoundRect(
-                        left, labelY,
-                        left + textWidth + padH * 2,
-                        labelY + textHeight + padV * 2,
-                        14f, 14f, bgPaint
-                    )
-                    // Label text
-                    drawText(label, left + padH, labelY + textHeight + padV - 2f, textPaint)
-                }
-            }
-        }
-
-        // ── Status bar ─────────────────────────────────────────
         if (!isInitializing) {
-            SystemActiveIndicator(
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp),
+            TopStatusBar(
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
                 batteryLevel = batteryLevel,
-                isHardwareAccelerated = isHardwareAccelerated
+                isHardwareAccelerated = isHardwareAccelerated,
+                mode = accuracyMode,
+                live = !isCameraBlocked
             )
         }
 
-        // ── Phone angle warning ────────────────────────────────
-        if (phoneAngleQuality != SensorMonitor.AngleQuality.OK && phoneAngleHint.isNotEmpty()) {
-            AngleWarningBanner(
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 80.dp),
-                hint = phoneAngleHint,
-                isBad = phoneAngleQuality == SensorMonitor.AngleQuality.BAD
-            )
+        // Notices stack under the status bar — one slot, most important first.
+        Column(
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 58.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            when {
+                isCameraBlocked -> Unit
+                phoneAngleQuality != SensorMonitor.AngleQuality.OK && phoneAngleHint.isNotEmpty() ->
+                    NoticeBanner("📐", "Camera angle", phoneAngleHint,
+                        color = if (phoneAngleQuality == SensorMonitor.AngleQuality.BAD) NB.Danger else NB.Watch,
+                        description = "Camera angle warning. $phoneAngleHint")
+                isLowLight -> NoticeBanner("🔅", "Low light", "Detection is less reliable in the dark", color = NB.Watch)
+            }
+            if (isWallDetected && !isCameraBlocked)
+                NoticeBanner("🧱", "Obstacle ahead", "Watch your path", color = NB.Watch, description = "Obstacle ahead. Watch your path.")
         }
 
-        // ── Ground hazard warning (bottom of screen) ──────────
         if (isGroundHazard && !isCameraBlocked) {
-            GroundHazardBanner(modifier = Modifier.align(Alignment.BottomCenter))
+            GroundHazardBanner(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 250.dp))
         }
 
-        // ── Low-light reliability banner ──────────────────────
-        // Detection silently degrades at dusk/night — exactly when a distracted walker
-        // is at most risk — so surface it honestly. Suppressed while fully blocked
-        // (that has its own overlay) or when the angle warning already occupies the slot.
-        if (isLowLight && !isCameraBlocked && phoneAngleQuality == SensorMonitor.AngleQuality.OK) {
-            LowLightBanner(modifier = Modifier.align(Alignment.TopCenter).padding(top = 80.dp))
-        }
-
-        // ── Control panel ──────────────────────────────────────
-        ControlPanel(
-            modifier = Modifier.align(Alignment.CenterEnd),
+        ControlDock(
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp),
+            detections = detections,
             distanceThreshold = distanceThreshold,
             onThresholdChange = { viewModel.distanceThreshold = it },
             onStartBackground = onStartBackground,
@@ -215,204 +139,97 @@ fun DetectionScreen(
             onShowHistory = onShowHistory
         )
 
-        // ── Wall banner — calm, non-blocking ─────────────────────────────────
-        if (isWallDetected && !isCameraBlocked) {
-            WallWarningBanner(modifier = Modifier.align(Alignment.TopCenter).padding(top = 110.dp))
-        }
-
-        // ── Full-screen overlays (highest priority on top) ────────────────────
         if (isCameraBlocked) {
             CameraBlockedOverlay()
-        } else if (viewModel.frameAlert == AlertLevel.HIGH &&
-            viewModel.phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
-            // Driven by the engine's linger-debounced alert so the overlay doesn't strobe.
-            // Suppressed when the phone is at a bad angle (camera at ceiling/ground →
-            // detections unreliable): the engine mutes sound/haptics and shows the
-            // "point phone forward" cue, so the full-screen LOOK UP must not fire either
-            // (HIGH-3 — keep foreground consistent with the background trust model).
+        } else if (viewModel.frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
             LookUpOverlay(className = viewModel.lookUpLabel ?: "person")
         }
+        if (isInitializing) InitializingOverlay(initializationStatus)
+    }
+}
 
-        if (isInitializing) {
-            InitializingOverlay(initializationStatus)
+/* ───────────────────────── overlay ───────────────────────── */
+
+@Composable
+private fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel) {
+    val t = rememberInfiniteTransition(label = "bracket")
+    val breathe by t.animateFloat(0f, 1f, infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b")
+    val labelPaint = remember {
+        android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 34f; typeface = android.graphics.Typeface.DEFAULT_BOLD; isAntiAlias = true }
+    }
+    val bgPaint = remember { android.graphics.Paint().apply { isAntiAlias = true } }
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        // Danger vignette when the frame-level alert is HIGH — the eye reads the edges first.
+        if (frameAlert == AlertLevel.HIGH) {
+            drawRect(Brush.radialGradient(listOf(Color.Transparent, NB.Danger.copy(alpha = 0.10f + 0.18f * breathe)), center = center, radius = size.maxDimension * 0.75f))
+        }
+        for (d in detections) {
+            val box = d.boundingBox
+            val color = NB.alert(d.alertLevel)
+            val l = box.left * size.width; val tp = box.top * size.height
+            val w = (box.right - box.left) * size.width; val h = (box.bottom - box.top) * size.height
+            if (w <= 2f || h <= 2f) continue
+            val stroke = if (d.alertLevel == AlertLevel.HIGH) 7f else 5f
+            val arm = (minOf(w, h) * 0.22f).coerceIn(18f, 64f)
+            // soft fill
+            drawRoundRect(color.copy(alpha = if (d.alertLevel == AlertLevel.NONE) 0.06f else 0.14f), Offset(l, tp), Size(w, h), CornerRadius(14f, 14f))
+            // corner brackets
+            val s = Stroke(width = stroke, cap = StrokeCap.Round)
+            fun corner(x: Float, y: Float, dx: Float, dy: Float) {
+                drawLine(color, Offset(x, y), Offset(x + dx * arm, y), stroke, StrokeCap.Round)
+                drawLine(color, Offset(x, y), Offset(x, y + dy * arm), stroke, StrokeCap.Round)
+            }
+            corner(l, tp, 1f, 1f); corner(l + w, tp, -1f, 1f); corner(l, tp + h, 1f, -1f); corner(l + w, tp + h, -1f, -1f)
+            // approaching: breathing outer ring
+            if (d.isApproaching) {
+                val g = 6f + 6f * breathe
+                drawRoundRect(NB.Danger.copy(alpha = 0.55f + 0.35f * breathe), Offset(l - g, tp - g), Size(w + 2 * g, h + 2 * g), CornerRadius(18f, 18f), style = s)
+            }
+            // label pill
+            drawContext.canvas.nativeCanvas.apply {
+                val dist = if (d.hasDistanceEstimate) String.format(Locale.US, " %.1f m", d.distance) else ""
+                val label = d.className.uppercase() + dist + (if (d.isApproaching) "  ▲" else "")
+                val tw = labelPaint.measureText(label); val th = 34f; val padH = 14f; val padV = 8f
+                val y = (tp - th - padV * 2 - 6f).coerceAtLeast(6f)
+                val argb = color.toArgb()
+                bgPaint.color = android.graphics.Color.argb(215, (argb shr 16) and 0xFF, (argb shr 8) and 0xFF, argb and 0xFF)
+                drawRoundRect(l, y, l + tw + padH * 2, y + th + padV * 2, 16f, 16f, bgPaint)
+                labelPaint.color = if (d.alertLevel == AlertLevel.MEDIUM) android.graphics.Color.rgb(20, 16, 4) else android.graphics.Color.WHITE
+                drawText(label, l + padH, y + th + padV - 4f, labelPaint)
+            }
         }
     }
 }
 
-// ── New: Angle warning banner ───────────────────────────────────
+/* ───────────────────────── top status ───────────────────────── */
 
 @Composable
-fun AngleWarningBanner(modifier: Modifier = Modifier, hint: String, isBad: Boolean) {
-    // Solid (opaque) high-contrast bar; meaning is carried by TEXT, not colour/emoji, and
-    // the whole banner is exposed to TalkBack as one description (accessibility pass).
-    val bgColor = if (isBad) Color(0xFFC62828) else Color(0xFFE65100)
+private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, isHardwareAccelerated: Boolean, mode: AccuracyMode, live: Boolean) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(bgColor)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .semantics { contentDescription = "Camera angle warning. $hint" },
-        verticalAlignment = Alignment.CenterVertically
+            .clip(NB.PillShape)
+            .background(NB.Glass)
+            .border(1.dp, NB.GlassLine, NB.PillShape)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .semantics { contentDescription = "NoBonk ${if (live) "active" else "paused"}. ${if (isHardwareAccelerated) "Hardware accelerated" else "CPU"}. Battery $batteryLevel percent." },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("📐", fontSize = 20.sp)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = hint,
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.3.sp
-        )
+        PulseDot(if (live) NB.Safe else NB.Watch)
+        Text("NOBONK", color = NB.Ink, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+        Pill(if (isHardwareAccelerated) "NPU" else "CPU", color = if (isHardwareAccelerated) NB.Accent else NB.Sub)
+        Pill(mode.label.uppercase(), color = NB.Accent2)
+        Text("$batteryLevel%", color = if (batteryLevel < 20) NB.Watch else NB.Sub, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
-// ── New: Low-light reliability banner ───────────────────────────
+/* ───────────────────────── bottom dock ───────────────────────── */
 
 @Composable
-fun LowLightBanner(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF263238))
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .semantics {
-                contentDescription = "Low light. Detection reliability is reduced. Stay extra alert."
-            },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("🔅", fontSize = 20.sp)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "LOW LIGHT — reduced reliability",
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.3.sp
-        )
-    }
-}
-
-// ── New: Ground hazard banner ───────────────────────────────────
-
-@Composable
-fun GroundHazardBanner(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "groundPulse")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.7f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(400), RepeatMode.Reverse),
-        label = "groundAlpha"
-    )
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer { this.alpha = alpha }
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, Color(0xFFFF6F00).copy(alpha = 0.85f))
-                )
-            )
-            .padding(vertical = 20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("WATCH YOUR STEP", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-            Text("Possible pothole or drop ahead", color = Color.White.copy(alpha = 0.9f), fontSize = 14.sp)
-        }
-    }
-}
-
-// ── New: Wall warning banner (calm, non-blocking) ───────────────
-
-@Composable
-fun WallWarningBanner(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF0D47A1))
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .semantics { contentDescription = "Obstacle ahead. Watch your path." },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("🧱", fontSize = 18.sp)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "Obstacle ahead — watch your path",
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.3.sp
-        )
-    }
-}
-
-// ── Existing composables (unchanged except where noted) ─────────
-
-@Composable
-fun SystemActiveIndicator(
-    modifier: Modifier = Modifier,
-    batteryLevel: Int,
-    isHardwareAccelerated: Boolean = false
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "alpha"
-    )
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.Black.copy(alpha = 0.6f))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Pulsing dot — yellow if battery low
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .graphicsLayer { this.alpha = alpha }
-                .clip(CircleShape)
-                .background(if (batteryLevel < 20) Color.Yellow else Color.Green)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "AI ACTIVE",
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        // Acceleration chip — cyan for NPU, grey for CPU
-        val chipColor = if (isHardwareAccelerated) Color(0xFF00BCD4) else Color.White.copy(alpha = 0.4f)
-        Text(
-            text = if (isHardwareAccelerated) "NPU" else "CPU",
-            color = chipColor,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.sp,
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(chipColor.copy(alpha = 0.15f))
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "$batteryLevel%",
-            color = if (batteryLevel < 20) Color.Yellow else Color.White.copy(alpha = 0.7f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-fun ControlPanel(
+private fun ControlDock(
     modifier: Modifier,
+    detections: List<Detection>,
     distanceThreshold: Float,
     onThresholdChange: (Float) -> Unit,
     onStartBackground: () -> Unit,
@@ -423,261 +240,181 @@ fun ControlPanel(
     onObjectDetectionToggle: (Boolean) -> Unit,
     accuracyMode: AccuracyMode,
     onAccuracyChange: (AccuracyMode) -> Unit,
-    onShowHistory: () -> Unit = {}
+    onShowHistory: () -> Unit
 ) {
-    Column(
-        modifier = modifier
-            .padding(16.dp)
-            .width(120.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Black.copy(alpha = 0.5f))
+    var expanded by remember { mutableStateOf(false) }
+    val nearest = detections.filter { it.hasDistanceEstimate }.minByOrNull { it.distance }
+    val nearestColor = nearest?.let { NB.alert(it.alertLevel) } ?: NB.Safe
+
+    GlassCard(modifier = modifier.fillMaxWidth(), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
+        // Row 1 — what's ahead + proximity meter
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                SectionLabel(if (nearest == null) "Path" else "Nearest")
+                Text(
+                    if (nearest == null) "Clear ahead" else "${nearest.className.replaceFirstChar { it.uppercase() }} · ${String.format(Locale.US, "%.1f", nearest.distance)} m",
+                    color = if (nearest == null) NB.Ink else nearestColor, fontSize = 20.sp, fontWeight = FontWeight.Bold
                 )
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
-            .padding(vertical = 16.dp, horizontal = 8.dp),
+            }
+            ProximityMeter(distance = nearest?.distance, threshold = distanceThreshold, color = nearestColor)
+        }
+        Spacer(Modifier.height(12.dp))
+        // Row 2 — alert distance
+        SectionLabel("Alert at")
+        Spacer(Modifier.height(6.dp))
+        val presets = listOf(0.5f to "0.5 m", 1.0f to "1 m", 2.0f to "2 m", 3.5f to "3.5 m")
+        Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            presets.forEach { (v, label) -> SegChip(label, distanceThreshold == v, NB.Accent, Modifier.weight(1f)) { onThresholdChange(v) } }
+        }
+        if (expanded) {
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.weight(1f)) {
+                    SectionLabel("Model")
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AccuracyMode.entries.forEach { m -> SegChip(m.label, accuracyMode == m, NB.Accent2, Modifier.weight(1f)) { onAccuracyChange(m) } }
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    SectionLabel("Detect")
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SegChip("People", !isObjectDetectionEnabled, NB.Safe, Modifier.weight(1f)) { onObjectDetectionToggle(false) }
+                        SegChip("Everything", isObjectDetectionEnabled, NB.Safe, Modifier.weight(1f)) { onObjectDetectionToggle(true) }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        // Row 3 — actions
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { if (canDrawOverlays) onStartBackground() else onGrantOverlay() },
+                modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
+                colors = ButtonDefaults.buttonColors(containerColor = if (canDrawOverlays) NB.Safe else NB.Watch, contentColor = Color(0xFF04140D))
+            ) { Text(if (canDrawOverlays) "Run in background" else "Allow overlay", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
+            OutlinedButton(onClick = onStopBackground, modifier = Modifier.height(48.dp), shape = NB.ChipShape,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Danger),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NB.Danger.copy(alpha = 0.6f))) { Text("Stop", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            IconButton(onClick = onShowHistory, modifier = Modifier.size(48.dp).clip(NB.ChipShape).background(Color.White.copy(alpha = 0.06f))) {
+                Icon(Icons.Default.List, contentDescription = "History", tint = NB.Sub)
+            }
+            Box(
+                modifier = Modifier.size(48.dp).clip(NB.ChipShape).background(Color.White.copy(alpha = 0.06f)).clickable { expanded = !expanded }
+                    .semantics { contentDescription = if (expanded) "Hide settings" else "Show settings" },
+                contentAlignment = Alignment.Center
+            ) { Text(if (expanded) "▾" else "⚙", color = NB.Sub, fontSize = 18.sp) }
+        }
+    }
+}
+
+/** Horizontal meter: how close the nearest object is relative to the alert distance. */
+@Composable
+private fun ProximityMeter(distance: Float?, threshold: Float, color: Color) {
+    val frac = if (distance == null) 0f else (1f - (distance / (threshold * 2f))).coerceIn(0.04f, 1f)
+    val anim by animateFloatAsState(frac, animationSpec = tween(220), label = "prox")
+    Column(horizontalAlignment = Alignment.End) {
+        Canvas(Modifier.width(110.dp).height(14.dp)) {
+            val r = CornerRadius(7f, 7f)
+            drawRoundRect(Color.White.copy(alpha = 0.10f), size = size, cornerRadius = r)
+            drawRoundRect(color, size = Size(size.width * anim, size.height), cornerRadius = r)
+            // threshold tick at the halfway mark (distance == threshold)
+            drawLine(Color.White.copy(alpha = 0.6f), Offset(size.width * 0.5f, 0f), Offset(size.width * 0.5f, size.height), 2f)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(if (distance == null) "no objects" else "alert at ${String.format(Locale.US, "%.1f", threshold)} m", color = NB.Dim, fontSize = 10.sp)
+    }
+}
+
+/* ───────────────────────── banners & overlays ───────────────────────── */
+
+@Composable
+fun GroundHazardBanner(modifier: Modifier = Modifier) {
+    val t = rememberInfiniteTransition(label = "gh")
+    val a by t.animateFloat(0.75f, 1f, infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "a")
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            .clip(NB.CardShape).background(NB.Watch.copy(alpha = a)).padding(vertical = 14.dp)
+            .semantics { contentDescription = "Watch your step. Possible pothole or drop ahead." },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Button(
-            onClick = { if (canDrawOverlays) onStartBackground() else onGrantOverlay() },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (canDrawOverlays) Color(0xFF2E7D32) else Color(0xFFEF6C00)
-            )
-        ) {
-            Text(if (canDrawOverlays) "START\nBG" else "GRANT\nHUD", fontSize = 10.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedButton(
-            onClick = onStopBackground,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
-            border = androidx.compose.foundation.BorderStroke(2.dp, Color.Red.copy(alpha = 0.5f))
-        ) {
-            Text("STOP\nBG", fontSize = 10.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("ALERT AT", color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-        val presets = listOf(0.5f, 1.0f, 2.0f, 3.5f)
-        val labels = listOf("0.5m", "1m", "2m", "3.5m")
-
-        Column(Modifier.selectableGroup()) {
-            presets.forEachIndexed { index, preset ->
-                val selected = distanceThreshold == preset
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(32.dp)
-                        .padding(vertical = 2.dp)
-                        .selectable(
-                            selected = selected,
-                            onClick = { onThresholdChange(preset) },
-                            role = Role.RadioButton
-                        ),
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (selected) Color.Green.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
-                    border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, Color.Green) else null
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(labels[index], color = if (selected) Color.Green else Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("ACCURACY", color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(4.dp))
-        // Segmented selector: YOLO26 family (NMS-free), Fast / Sharp
-        val yolo26Color = Color(0xFF69F0AE)   // green
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color.White.copy(alpha = 0.07f))
-                .padding(vertical = 3.dp, horizontal = 3.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            listOf(
-                "YOLO26" to AccuracyMode.entries.toList()
-            ).forEach { (familyLabel, modes) ->
-                val familyColor = yolo26Color
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    // Family badge
-                    Box(
-                        modifier = Modifier
-                            .width(36.dp)
-                            .align(Alignment.CenterVertically),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = familyLabel,
-                            color = familyColor.copy(alpha = 0.6f),
-                            fontSize = 6.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    // Mode chips
-                    modes.forEach { mode ->
-                        val selected = accuracyMode == mode
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (selected) familyColor.copy(alpha = 0.22f) else Color.Transparent)
-                                .border(
-                                    width = if (selected) 1.dp else 0.dp,
-                                    color = if (selected) familyColor else Color.Transparent,
-                                    shape = RoundedCornerShape(6.dp)
-                                )
-                                .selectable(selected = selected, onClick = { onAccuracyChange(mode) })
-                                .padding(vertical = 5.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = mode.label,  // Fast / Sharp
-                                color = if (selected) familyColor else Color.White.copy(alpha = 0.40f),
-                                fontSize = 9.sp,
-                                fontWeight = if (selected) FontWeight.Black else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(2.dp))
-        // Description line: family · size · NMS status
-        val modeDesc = buildString {
-            append(accuracyMode.family)
-            append(" · ")
-            append(accuracyMode.label)   // S, M, or H
-            append(" · ${accuracyMode.inputPx}px")
-            if (accuracyMode.skipNms) append(" · NMS-free")
-        }
-        Text(
-            text = modeDesc,
-            color = Color.White.copy(alpha = 0.45f),
-            fontSize = 8.sp
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text("OBJECTS", color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-        Switch(
-            checked = isObjectDetectionEnabled,
-            onCheckedChange = onObjectDetectionToggle,
-            colors = SwitchDefaults.colors(checkedThumbColor = Color.Green, checkedTrackColor = Color.Green.copy(alpha = 0.3f))
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // ── History button ──────────────────────────────────────
-        Button(
-            onClick = onShowHistory,
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF1A237E)
-            )
-        ) {
-            Text("📊\nHISTORY", fontSize = 9.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 13.sp)
-        }
+        Text("WATCH YOUR STEP", color = Color(0xFF1A1200), fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+        Text("Possible pothole or drop ahead", color = Color(0xFF1A1200).copy(alpha = 0.85f), fontSize = 14.sp)
     }
 }
 
 @Composable
 fun LookUpOverlay(className: String) {
-    // Human-readable subtitle based on what the model detected
     val subtitle = when (className) {
-        "person"                  -> "PERSON AHEAD"
-        "car", "truck", "bus"     -> "VEHICLE AHEAD"
-        "motorcycle", "bicycle"   -> "BIKE AHEAD"
-        "dog", "cat", "horse"     -> "ANIMAL AHEAD"
-        else                      -> "OBJECT AHEAD"
+        "person" -> "PERSON AHEAD"
+        "car", "truck", "bus" -> "VEHICLE AHEAD"
+        "motorcycle", "bicycle" -> "BIKE AHEAD"
+        "dog", "cat", "horse" -> "ANIMAL AHEAD"
+        else -> "OBJECT AHEAD"
     }
-    val infiniteTransition = rememberInfiniteTransition(label = "alert")
-    val color by infiniteTransition.animateColor(
-        initialValue = Color.Red.copy(alpha = 0.2f),
-        targetValue = Color.Red.copy(alpha = 0.6f),
-        animationSpec = infiniteRepeatable(animation = tween(500), repeatMode = RepeatMode.Reverse),
-        label = "color"
-    )
+    val t = rememberInfiniteTransition(label = "alert")
+    val bg by t.animateColor(NB.Danger.copy(alpha = 0.55f), NB.Danger.copy(alpha = 0.85f), infiniteRepeatable(tween(260), RepeatMode.Reverse), label = "c")
+    val scale by t.animateFloat(0.96f, 1.04f, infiniteRepeatable(tween(260), RepeatMode.Reverse), label = "s")
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(color)
-            .semantics { contentDescription = "Look up now. $subtitle. Collision warning." },
+        modifier = Modifier.fillMaxSize().background(bg).semantics { contentDescription = "Look up now. $subtitle. Collision warning." },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Warning, contentDescription = "Collision warning", modifier = Modifier.size(100.dp), tint = Color.White)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("LOOK UP!", color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-            Text(subtitle, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(96.dp), tint = Color.White)
+            Spacer(Modifier.height(8.dp))
+            Text("LOOK UP", color = Color.White, fontSize = (64 * scale).sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp, textAlign = TextAlign.Center)
+            Text(subtitle, color = Color.White.copy(alpha = 0.95f), fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, textAlign = TextAlign.Center)
         }
     }
 }
 
 @Composable
 fun InitializingOverlay(status: String) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f)),
-        contentAlignment = Alignment.Center
-    ) {
+    val critical = status.contains("CRITICAL")
+    Box(Modifier.fillMaxSize().background(NB.Night), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            CircularProgressIndicator(modifier = Modifier.size(64.dp), color = Color.Green, strokeWidth = 6.dp)
-            Spacer(modifier = Modifier.height(32.dp))
-            Text("ENGINE WARMUP", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(status, color = if (status.contains("CRITICAL")) Color.Red else Color.Green, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-
-            if (!status.contains("CRITICAL")) {
-                Spacer(modifier = Modifier.height(40.dp))
-                Surface(color = Color.White.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp)) {
-                    Text(
-                        text = "Assistive backup — not a certified safety device. It can miss hazards. Keep looking up.",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(16.dp),
-                        textAlign = TextAlign.Center,
-                        lineHeight = 17.sp
-                    )
-                }
-            }
+            Wordmark()
+            Spacer(Modifier.height(28.dp))
+            Text(if (critical) "SOMETHING WENT WRONG" else "WARMING UP THE EYES", color = if (critical) NB.Danger else NB.Sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.4.sp)
+            Spacer(Modifier.height(10.dp))
+            Text(status, color = if (critical) NB.Danger else NB.Ink, fontSize = 14.sp, textAlign = TextAlign.Center)
+            if (!critical) { Spacer(Modifier.height(18.dp)); LinearProgressIndicator(modifier = Modifier.width(180.dp).clip(NB.PillShape), color = NB.Accent, trackColor = NB.Line) }
         }
     }
 }
 
 @Composable
 fun CameraBlockedOverlay() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f))
-            .semantics {
-                contentDescription = "Camera covered. Detection is paused. Hold the phone so the back camera can see ahead."
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Warning, contentDescription = "Camera covered", modifier = Modifier.size(80.dp), tint = Color.Yellow)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("CAMERA COVERED", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black)
-            Text("Hold phone better for visibility", color = Color.White.copy(alpha = 0.8f), fontSize = 18.sp, textAlign = TextAlign.Center)
+    Box(Modifier.fillMaxSize().background(NB.Night.copy(alpha = 0.92f)), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+            Text("🖐", fontSize = 56.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("CAMERA COVERED", color = NB.Ink, fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Point the back camera at the path ahead", color = NB.Sub, fontSize = 15.sp, textAlign = TextAlign.Center)
         }
     }
 }
+
+/** NoBonk wordmark: an eye-like mark plus the name. Drawn, not an asset, so it scales anywhere. */
+@Composable
+fun Wordmark(size: Int = 64) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Canvas(Modifier.size(size.dp)) {
+            val r = this.size.minDimension / 2f
+            drawCircle(Brush.linearGradient(listOf(NB.Accent, NB.Accent2)), radius = r, style = Stroke(width = r * 0.22f))
+            drawCircle(NB.Ink, radius = r * 0.34f)
+            drawCircle(NB.Night, radius = r * 0.16f, center = center + Offset(r * 0.1f, -r * 0.08f))
+        }
+        Column {
+            Text("NoBonk", color = NB.Ink, fontSize = (size * 0.5f).sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp)
+            Text("look up, not down", color = NB.Sub, fontSize = (size * 0.19f).sp, letterSpacing = 1.sp)
+        }
+    }
+}
+
+/* ───────────────────────── camera ───────────────────────── */
 
 @Composable
 fun CameraPreview(modifier: Modifier = Modifier, onFrameAnalyzed: (androidx.camera.core.ImageProxy) -> Unit) {
