@@ -49,3 +49,12 @@ class AlertCueTest {
             }
     }
 }
+
+class BearingSideTest {
+    @Test fun sides() {
+        assertEquals(AlertCue.Side.LEFT, AlertCue.sideFor(-0.6f))
+        assertEquals(AlertCue.Side.RIGHT, AlertCue.sideFor(0.6f))
+        assertEquals(AlertCue.Side.AHEAD, AlertCue.sideFor(0.1f))
+        assertEquals(AlertCue.Side.AHEAD, AlertCue.sideFor(null))
+    }
+}

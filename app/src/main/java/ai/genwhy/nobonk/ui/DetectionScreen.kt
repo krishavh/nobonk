@@ -87,7 +87,7 @@ fun DetectionScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(NB.Night)) {
         key(cameraRebindKey) {
-            CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) })
+            CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) }, onCameraBound = { viewModel.onCameraBound(it) })
         }
 
         DetectionOverlay(detections = detections, frameAlert = viewModel.frameAlert)
@@ -146,7 +146,7 @@ fun DetectionScreen(
         if (isCameraBlocked) {
             CameraBlockedOverlay()
         } else if (viewModel.frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
-            LookUpOverlay(className = viewModel.lookUpLabel ?: "person")
+            LookUpOverlay(className = viewModel.lookUpLabel ?: "person", bearingPan = viewModel.bearingPan)
         }
         if (isInitializing) InitializingOverlay(initializationStatus)
     }
@@ -360,13 +360,25 @@ fun GroundHazardBanner(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun LookUpOverlay(className: String) {
-    val subtitle = when (className) {
-        "person" -> "PERSON AHEAD"
-        "car", "truck", "bus" -> "VEHICLE AHEAD"
-        "motorcycle", "bicycle" -> "BIKE AHEAD"
-        "dog", "cat", "horse" -> "ANIMAL AHEAD"
-        else -> "OBJECT AHEAD"
+fun LookUpOverlay(className: String, bearingPan: Float? = null) {
+    val side = ai.genwhy.nobonk.ml.AlertCue.sideFor(bearingPan)
+    val what = when (className) {
+        "person" -> "PERSON"
+        "car", "truck", "bus" -> "VEHICLE"
+        "motorcycle", "bicycle" -> "BIKE"
+        "dog", "cat", "horse" -> "ANIMAL"
+        else -> "OBJECT"
+    }
+    val where = when (side) {
+        ai.genwhy.nobonk.ml.AlertCue.Side.LEFT -> "ON YOUR LEFT"
+        ai.genwhy.nobonk.ml.AlertCue.Side.RIGHT -> "ON YOUR RIGHT"
+        ai.genwhy.nobonk.ml.AlertCue.Side.AHEAD -> "AHEAD"
+    }
+    val subtitle = "$what $where"
+    val arrow = when (side) {
+        ai.genwhy.nobonk.ml.AlertCue.Side.LEFT -> "◀"
+        ai.genwhy.nobonk.ml.AlertCue.Side.RIGHT -> "▶"
+        ai.genwhy.nobonk.ml.AlertCue.Side.AHEAD -> null
     }
     val t = rememberInfiniteTransition(label = "alert")
     val bg by t.animateColor(NB.Danger.copy(alpha = 0.55f), NB.Danger.copy(alpha = 0.85f), infiniteRepeatable(tween(260), RepeatMode.Reverse), label = "c")
@@ -375,10 +387,24 @@ fun LookUpOverlay(className: String) {
         modifier = Modifier.fillMaxSize().background(bg).semantics { contentDescription = "Look up now. $subtitle. Collision warning." },
         contentAlignment = Alignment.Center
     ) {
+        // Side glow: a bright band on the hazard's edge so peripheral vision gets the direction too.
+        if (arrow != null) {
+            val left = side == ai.genwhy.nobonk.ml.AlertCue.Side.LEFT
+            Box(
+                Modifier.fillMaxHeight().fillMaxWidth(0.28f).align(if (left) Alignment.CenterStart else Alignment.CenterEnd)
+                    .background(Brush.horizontalGradient(
+                        if (left) listOf(Color.White.copy(alpha = 0.55f), Color.Transparent)
+                        else listOf(Color.Transparent, Color.White.copy(alpha = 0.55f))
+                    ))
+            )
+        }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(96.dp), tint = Color.White)
             Spacer(Modifier.height(8.dp))
             Text("LOOK UP", color = Color.White, fontSize = (64 * scale).sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp, textAlign = TextAlign.Center)
+            if (arrow != null) {
+                Text(arrow, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+            }
             Text(subtitle, color = Color.White.copy(alpha = 0.95f), fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, textAlign = TextAlign.Center)
         }
     }
@@ -432,7 +458,11 @@ fun Wordmark(size: Int = 64) {
 /* ───────────────────────── camera ───────────────────────── */
 
 @Composable
-fun CameraPreview(modifier: Modifier = Modifier, onFrameAnalyzed: (androidx.camera.core.ImageProxy) -> Unit) {
+fun CameraPreview(
+    modifier: Modifier = Modifier,
+    onFrameAnalyzed: (androidx.camera.core.ImageProxy) -> Unit,
+    onCameraBound: (androidx.camera.core.CameraInfo) -> Unit = {}
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -453,7 +483,8 @@ fun CameraPreview(modifier: Modifier = Modifier, onFrameAnalyzed: (androidx.came
                 .also { it.setAnalyzer(cameraExecutor) { imageProxy -> onFrameAnalyzed(imageProxy) } }
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
+                val cam = cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
+                onCameraBound(cam.cameraInfo)
             } catch (e: Exception) { e.printStackTrace() }
         }, ContextCompat.getMainExecutor(ctx))
         previewView

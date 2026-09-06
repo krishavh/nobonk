@@ -200,11 +200,19 @@ class DetectionViewModel : ViewModel() {
         }
     }
 
+    /** Camera the preview bound; its intrinsics calibrate the distance label. */
+    fun onCameraBound(info: androidx.camera.core.CameraInfo) {
+        cameraInfo = info
+        engine?.attachCamera(info)
+    }
+    private var cameraInfo: androidx.camera.core.CameraInfo? = null
+
     private fun loadModel(context: Context) {
         val mode = accuracyMode
         initializationStatus = "Loading ${mode.modelFile} @ ${mode.inputPx}px..."
         val eng = engine ?: DetectionEngine(context.applicationContext).also { engine = it }
         eng.loadModel(mode.modelFile, mode.inputPx, mode.skipNms)
+        cameraInfo?.let { eng.attachCamera(it) }
         eng.startSensors()   // angle monitoring for the foreground pipeline
         isHardwareAccelerated = eng.isHardwareAccelerated
         initializationStatus = "Running AI pre-flight..."

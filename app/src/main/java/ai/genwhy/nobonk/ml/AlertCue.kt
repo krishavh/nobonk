@@ -33,6 +33,16 @@ object AlertCue {
         AlertLevel.NONE   -> null
     }
 
+    /** Which way the hazard is, for the LOOK UP overlay and TalkBack. */
+    enum class Side { LEFT, AHEAD, RIGHT }
+
+    fun sideFor(pan: Float?): Side = when {
+        pan == null -> Side.AHEAD
+        pan < -0.25f -> Side.LEFT
+        pan > 0.25f -> Side.RIGHT
+        else -> Side.AHEAD
+    }
+
     /** Minimum spacing between two cues of the same level (ms). */
     fun repeatIntervalMs(level: AlertLevel): Long = when (level) {
         AlertLevel.HIGH -> 900L

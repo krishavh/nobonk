@@ -165,7 +165,8 @@ class DetectionService : LifecycleService() {
                 .also { it.setAnalyzer(cameraExecutor) { proxy -> processFrame(proxy) } }
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis)
+                val cam = cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis)
+                engine?.attachCamera(cam.cameraInfo)
             } catch (e: Exception) {
                 Dbg.e(TAG, "Camera binding failed", e)
             }

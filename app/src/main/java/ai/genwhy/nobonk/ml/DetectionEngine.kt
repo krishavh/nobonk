@@ -12,7 +12,11 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import ai.genwhy.nobonk.util.Dbg
+import androidx.camera.core.CameraInfo
 import androidx.camera.core.ImageProxy
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import android.hardware.camera2.CameraCharacteristics
 import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.model.Detection
 import kotlinx.coroutines.async
@@ -91,6 +95,7 @@ class DetectionEngine(private val appContext: Context) {
         appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     private val lastHapticTime = mutableMapOf<AlertLevel, Long>()
     private val lastCueTime = mutableMapOf<AlertLevel, Long>()
+    private val boxSmoother = BoxSmoother()
     private var lastAnyCueTime = 0L
     private var audioTrack: AudioTrack? = null
 
@@ -114,7 +119,32 @@ class DetectionEngine(private val appContext: Context) {
     /** (Re)load the model. Safe to call off the main thread. */
     fun loadModel(modelName: String, inputPx: Int, skipNms: Boolean) {
         objectDetector?.close()
-        objectDetector = ObjectDetector(appContext, modelName, inputPx, skipNms)
+        objectDetector = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
+    }
+
+    /** Normalized focal length in use by the distance estimator (see [CameraIntrinsics]). */
+    @Volatile var focalNorm: Float = CameraIntrinsics.DEFAULT_FOCAL_NORM
+        private set
+
+    /**
+     * Read the bound camera's lens/sensor characteristics so the distance label is
+     * calibrated to THIS phone instead of a typical one. Safe to call from any thread and
+     * before or after [loadModel]; silently keeps the default if the camera reports nothing.
+     */
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun attachCamera(cameraInfo: CameraInfo) {
+        try {
+            val c2 = Camera2CameraInfo.from(cameraInfo)
+            val focals = c2.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+            val size = c2.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+            val f = focals?.firstOrNull() ?: return
+            val norm = CameraIntrinsics.normalizedFocal(f, size?.width ?: 0f, size?.height ?: 0f, cameraInfo.sensorRotationDegrees) ?: return
+            focalNorm = norm
+            objectDetector?.focalNorm = norm
+            Dbg.d(TAG, "Camera intrinsics: f=${f}mm sensor=${size} → focalNorm=$norm")
+        } catch (e: Exception) {
+            Dbg.e(TAG, "attachCamera failed: ${e.message}")
+        }
     }
 
     fun warmUp() {
@@ -296,8 +326,13 @@ class DetectionEngine(private val appContext: Context) {
             displayAlert, heldLabel, topDet?.isApproaching == true, wall, ground,
             angleBad, angleHint, lowLight
         )
+        // Display-only box smoothing (alert ladder above used the raw boxes).
+        val shown = scored.map { d ->
+            val key = approachTracker.trackIdFor(d.id) ?: d.id
+            d.copy(boundingBox = boxSmoother.smooth(key, d.boundingBox, d.isApproaching, now))
+        }
         return Result(
-            scored, displayAlert, lookUpLabel, blocked, wall, ground, hud,
+            shown, displayAlert, lookUpLabel, blocked, wall, ground, hud,
             lowLight = lowLight, angleQuality = angleQuality, angleHint = angleHint,
             bearingPan = if (displayAlert != AlertLevel.NONE) pan else null
         )
@@ -438,6 +473,7 @@ class DetectionEngine(private val appContext: Context) {
         objectDetector = null
         audioTrack?.let { t -> runCatching { t.stop() }; t.release() }; audioTrack = null
         approachTracker.reset()
+        boxSmoother.reset()
         stopSensors()
         sensorMonitor = null
         lastHighByTrack.clear()

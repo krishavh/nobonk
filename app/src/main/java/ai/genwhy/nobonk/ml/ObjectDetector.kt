@@ -281,8 +281,12 @@ class ObjectDetector(
      * Rough monocular distance for the on-screen label / history only. The alarm ladder
      * does NOT use this (it saturates) — see [AlertPolicy].
      */
+    /** Normalized focal length (focal / sensor extent along frame height). Set from the
+     *  bound camera's characteristics via [CameraIntrinsics]; defaults to a typical phone. */
+    @Volatile var focalNorm: Float = CameraIntrinsics.DEFAULT_FOCAL_NORM
+
     private fun estimateDistance(boxHeight: Float, boxWidth: Float, className: String): Float {
-        val focalLength = 0.87f
+        val focalLength = focalNorm
         val (realHeightM, typicalAspect) = when (className) {
             "person"     -> Pair(1.70f, 0.40f)
             "dog", "cat" -> Pair(0.45f, 1.40f)
