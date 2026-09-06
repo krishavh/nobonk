@@ -16,10 +16,10 @@ from urllib.error import HTTPError, URLError
 LANE = "http://192.168.186.14:8888/v1/chat/completions"
 MODEL = "qwen3.8-flash-next"
 
-def call(prompt, max_tokens=8000):
+def call(prompt, max_tokens=16000):
     body = json.dumps({"model": MODEL, "messages": [{"role": "user", "content": prompt}],
                        "max_tokens": max_tokens, "temperature": 0.3,
-                       "chat_template_kwargs": {"enable_thinking": True}}).encode()
+                       "chat_template_kwargs": {"enable_thinking": False}}).encode()
     req = Request(LANE, data=body, headers={"Content-Type": "application/json"})
     with urlopen(req, timeout=1200) as r:
         d = json.load(r)
