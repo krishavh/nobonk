@@ -53,7 +53,7 @@ android {
     // Sideload APKs per ABI (Play uses the AAB, which slices automatically).
     splits {
         abi {
-            isEnable = true
+            isEnable = !project.hasProperty("bundle")  // -Pbundle for bundleRelease (AGP issue 402800800)
             reset()
             include("arm64-v8a", "armeabi-v7a")
             isUniversalApk = false
