@@ -10,7 +10,7 @@ package ai.genwhy.nobonk.ml
  */
 object EpChooser {
     const val PREFERRED = "XNNPACK"
-    /** An accelerator must beat XNNPACK by this factor to be chosen over it. */
+    /** Any other provider (NNAPI or plain CPU) must beat XNNPACK by this factor to be chosen over it. */
     const val REQUIRED_SPEEDUP = 1.15f
 
     /** @param medianMs per-EP median inference latency; @return the winning EP name, or null if empty. */

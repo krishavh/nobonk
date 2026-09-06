@@ -19,6 +19,9 @@ class EpChooserTest {
     @Test fun withoutXnnpackFastestWins() {
         assertEquals("CPU", EpChooser.pick(mapOf("NNAPI" to 90.0, "CPU" to 70.0)))
     }
+    @Test fun plainCpuCanWinWhenClearlyFaster() {   // observed on the x86_64 emulator
+        assertEquals("CPU", EpChooser.pick(mapOf("XNNPACK" to 1413.0, "NNAPI" to 791.2, "CPU" to 431.8)))
+    }
     @Test fun medianIsRobust() {
         assertEquals(40.0, EpChooser.median(listOf(40.0, 900.0, 39.0)), 1e-9)
         assertEquals(45.0, EpChooser.median(listOf(40.0, 50.0)), 1e-9)

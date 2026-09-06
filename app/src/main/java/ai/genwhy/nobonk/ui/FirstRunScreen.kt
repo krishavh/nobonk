@@ -33,10 +33,10 @@ fun FirstRunScreen(onContinue: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Color(0xFF0B1220), NB.Night)))
-            .verticalScroll(rememberScrollState())
             .statusBarsPadding()
-            .padding(horizontal = 22.dp)
     ) {
+      // Scrollable content; the CTA below is pinned so it is always visible on short screens.
+      Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         Spacer(Modifier.height(36.dp))
         Wordmark(size = 60)
         Spacer(Modifier.height(26.dp))
@@ -60,14 +60,16 @@ fun FirstRunScreen(onContinue: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             Text("NoBonk is a backup, not a guarantee. It can miss people, cars, glass, poles, curbs and drop-offs, and it works worse in the dark or at a bad angle. Keep looking up.", color = NB.Ink, fontSize = 15.sp, lineHeight = 21.sp)
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+      }
+      Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, NB.Night))).padding(horizontal = 22.dp).padding(top = 10.dp, bottom = 22.dp)) {
         Button(
             onClick = onContinue, modifier = Modifier.fillMaxWidth().height(56.dp), shape = NB.ChipShape,
             colors = ButtonDefaults.buttonColors(containerColor = NB.Safe, contentColor = Color(0xFF04140D))
         ) { Text("I understand — let's go", fontSize = 17.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center) }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         Text("You'll be asked for camera access next.", color = NB.Dim, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
-        Spacer(Modifier.height(32.dp))
+      }
     }
 }
 

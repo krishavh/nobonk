@@ -121,8 +121,7 @@ class ObjectDetector(
                 }
                 val med = EpChooser.median(samples)
                 Dbg.i(TAG, "EP '$ep' runs $modelName @ ${dim}px: median ${"%.1f".format(med)} ms")
-                // CPU is the floor; keep it only when nothing better built.
-                if (ep == "CPU" && candidates.isNotEmpty()) candidate.close() else candidates[ep] = Candidate(candidate, dim, med)
+                candidates[ep] = Candidate(candidate, dim, med)
             } catch (e: Exception) {
                 Dbg.w(TAG, "EP '$ep' unavailable — skipping. Reason: ${e.message}")
             }
