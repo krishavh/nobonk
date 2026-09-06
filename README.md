@@ -55,18 +55,22 @@ People walk while looking at their phones and run into each other, walls, and cu
 
 ## Getting the model
 
-The AI model file is **not** included in this repo (it's large, and the weights are distributed by Ultralytics under AGPL-3.0). After cloning, export a model and drop it into `app/src/main/assets/`.
+The detector weights are **not** committed (large binaries; Ultralytics distributes them under AGPL-3.0). NoBonk ships the **YOLO26** family, exported end-to-end (NMS-free), at 416 px:
 
-The app loads `yolo11s.onnx` (the small model, at 416 px) by default. To produce it with the [Ultralytics](https://docs.ultralytics.com/) tools:
+| Asset | Mode in app | Size | Notes |
+|---|---|---|---|
+| `yolo26n_416.onnx` | **Fast** | ~9 MB | nano; best battery, everyday default on mid-range phones |
+| `yolo26s_416.onnx` | **Sharp** (default) | ~36 MB | small; sharper on far/small objects |
+
+Reproduce them with the pinned recipe (ultralytics 8.4.142 torch 2.14.0+cpu):
 
 ```bash
-pip install ultralytics
-yolo export model=yolo11s.pt format=onnx imgsz=416 opset=12
+pip install ultralytics onnx onnxslim onnxruntime
+yolo export model=yolo26n.pt format=onnx imgsz=416 opset=17 simplify=True && mv yolo26n.onnx app/src/main/assets/yolo26n_416.onnx
+yolo export model=yolo26s.pt format=onnx imgsz=416 opset=17 simplify=True && mv yolo26s.onnx app/src/main/assets/yolo26s_416.onnx
 ```
 
-Then move `yolo11s.onnx` into `app/src/main/assets/`. The detector also supports the `m` variant and the YOLO26 family — the roster is defined in `AccuracyMode` in `DetectionViewModel.kt`.
-
-**The exact model files the app expects, the pinned `yolo export` recipe to reproduce them, and the AGPL-3.0 provenance of the weights are documented in [`docs/MODEL.md`](docs/MODEL.md)** — this is the model's "corresponding source" for AGPL §13. Regenerate every asset from that file.
+YOLO26 emits final boxes directly (`[1, 300, 6]`: x1,y1,x2,y2,score,class), so the app does no NMS pass for these models. Provenance, the AGPL §13 obligations, and why YOLO26 over the alternatives we evaluated (RF-DETR, D-FINE, YOLOX) are in [`docs/MODEL.md`](docs/MODEL.md) and [`docs/MODEL_CHOICE.md`](docs/MODEL_CHOICE.md).
 
 ## Building it yourself
 
@@ -95,15 +99,19 @@ Issues and pull requests welcome! Some good areas to dig into: better low-light 
 
 ## Acknowledgments
 
+**Author:** Krishav Haarith (student). **Guardian / account holder:** Haarith Devarajan.
+
 This project leaned heavily on AI coding tools, and they deserve real credit for the amount of code they helped produce:
 
-- **Claude Code** and **OpenAI Codex** — most of the Kotlin in this repo was generated and refactored with these tools, working from the author's design and direction.
+- **Claude** (Anthropic; Claude Code, incl. the Fable 5.1 and Opus models) — most of the Kotlin, the release engineering (16 KB alignment, signing, CI), the zero-allocation frame path, and the model export/benchmark work.
+- **OpenAI Codex** and **ChatGPT Astra** — refactoring, Play Console / registration workflow, and website.
+- **Kaaval** (the family's local Hermes agent on a DGX Spark, running Qwen3.8-Flash-Next) — hundreds of autonomous build-and-test iterations on the hardening backlog.
 - **Google Gemini** — debugging help, security/privacy review, and the alert-system diagram.
 - **Warp AI** — terminal workflow and build scripting.
 
-The problem itself, the iOS-to-Android decision, the distance-estimation and wall-detection approaches, the privacy-first design, the false-alert tuning, and all the real-world testing came from the author — the tools wrote code to fit those ideas, not the other way around.
+The problem itself, the iOS-to-Android decision, the distance-estimation and wall-detection approaches, the privacy-first design, the false-alert tuning, and all of the testing on real sidewalks are Krishav's.
 
-Built with Android Studio, Jetpack Compose, CameraX, and ONNX Runtime. YOLO model weights from the official [Ultralytics](https://github.com/ultralytics/ultralytics) repositories. Thanks to the ACSEF Winter Bootcamp for project feedback.
+Built with Android Studio, Jetpack Compose, CameraX, and ONNX Runtime. YOLO model weights from the official [Ultralytics](https://github.com/ultralytics/ultralytics) YOLO26 release (AGPL-3.0). Thanks to the Ultralytics, ONNX Runtime, and AndroidX teams.
 
 ## License
 

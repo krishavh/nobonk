@@ -26,11 +26,10 @@ The model roster is defined authoritatively in
 
 | Asset filename       | Input size | Family | Upstream weights | NMS       | Used by mode |
 |----------------------|-----------:|--------|------------------|-----------|--------------|
-| `yolo11s.onnx`       | 416        | YOLO11 | `yolo11s.pt`     | in-app    | **S (default)** |
-| `yolo11m.onnx`       | 416 & 640  | YOLO11 | `yolo11m.pt`     | in-app    | M (416), H (640) |
-| `yolo26n_416.onnx`   | 416        | YOLO26 | `yolo26n.pt`     | NMS-free  | S (YOLO26)   |
-| `yolo26s_416.onnx`   | 416        | YOLO26 | `yolo26s.pt`     | NMS-free  | M (YOLO26)   |
-| `yolo26m_416.onnx`   | 416        | YOLO26 | `yolo26m.pt`     | NMS-free  | H (YOLO26)   |
+| `yolo26n_416.onnx`   | 416        | YOLO26 | `yolo26n.pt`     | NMS-free (end-to-end) | **Fast** |
+| `yolo26s_416.onnx`   | 416        | YOLO26 | `yolo26s.pt`     | NMS-free (end-to-end) | **Sharp** (default) |
+
+_2026-09-06: the YOLO11 tier (`yolo11s.onnx`, `yolo11m.onnx`) and `yolo26m` were removed from the roster — the app ships and offers only what is bundled. Export environment for the current assets: ultralytics 8.4.142 torch 2.14.0+cpu, opset 17, `simplify=True`._
 
 Notes:
 - **Default model:** `yolo11s.onnx` at **416 px** (the `ObjectDetector` constructor
@@ -54,7 +53,7 @@ you used alongside any shipped `.onnx` (they are part of the AGPL corresponding 
 #    YOLO11 weights export cleanly on the 8.3.x line; the YOLO26 weights require the
 #    Ultralytics release that first published the yolo26* checkpoints. Pin explicitly.
 python -m venv .venv && source .venv/bin/activate
-pip install "ultralytics==8.3.0"        # YOLO11 tier  (bump for the YOLO26 tier)
+pip install ultralytics onnx onnxslim onnxruntime   # versions pinned in the note above
 
 # 2. Capture the exact provenance you must commit next to the model:
 pip freeze | grep -E '^(ultralytics|torch|onnx|onnxslim|numpy)=='
