@@ -496,9 +496,7 @@ fun ControlPanel(
 
         Text("ACCURACY", color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(4.dp))
-        // Two-row segmented selector: YOLO11 (top) / YOLO26 (bottom)
-        // YOLO11 = blue family | YOLO26 = green family
-        val yolo11Color = Color(0xFF4FC3F7)   // light blue
+        // Segmented selector: YOLO26 family (NMS-free), Fast / Sharp
         val yolo26Color = Color(0xFF69F0AE)   // green
         Column(
             modifier = Modifier
@@ -509,10 +507,9 @@ fun ControlPanel(
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             listOf(
-                "YOLO11" to AccuracyMode.entries.filter { it.family == "YOLO11" },
-                "YOLO26" to AccuracyMode.entries.filter { it.family == "YOLO26" }
+                "YOLO26" to AccuracyMode.entries.toList()
             ).forEach { (familyLabel, modes) ->
-                val familyColor = if (familyLabel == "YOLO11") yolo11Color else yolo26Color
+                val familyColor = yolo26Color
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -549,7 +546,7 @@ fun ControlPanel(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = mode.label,  // S, M, or H
+                                text = mode.label,  // Fast / Sharp
                                 color = if (selected) familyColor else Color.White.copy(alpha = 0.40f),
                                 fontSize = 9.sp,
                                 fontWeight = if (selected) FontWeight.Black else FontWeight.Normal

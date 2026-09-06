@@ -28,7 +28,7 @@ import java.util.UUID
  */
 class ObjectDetector(
     context: Context,
-    modelName: String = "yolo11s.onnx",
+    modelName: String = "yolo26s_416.onnx",
     requestedInputSize: Int = 416,
     val skipNms: Boolean = false
 ) {

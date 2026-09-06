@@ -39,15 +39,13 @@ enum class AccuracyMode(
     val modelFile: String,
     val inputPx: Int,
     val label: String,
-    val skipNms: Boolean = false,
-    val family: String = "YOLO11"
+    val skipNms: Boolean = true,
+    val family: String = "YOLO26"
 ) {
-    Y11S("yolo11s.onnx",    416, "S", skipNms = false, family = "YOLO11"),
-    Y11M("yolo11m.onnx",    416, "M", skipNms = false, family = "YOLO11"),
-    Y11H("yolo11m.onnx",    640, "H", skipNms = false, family = "YOLO11"),
-    Y26N("yolo26n_416.onnx", 416, "S", skipNms = true, family = "YOLO26"),
-    Y26S("yolo26s_416.onnx", 416, "M", skipNms = true, family = "YOLO26"),
-    Y26M("yolo26m_416.onnx", 416, "H", skipNms = true, family = "YOLO26"),
+    /** YOLO26-nano, NMS-free — fastest, best battery; the everyday default on mid-range phones. */
+    Y26N("yolo26n_416.onnx", 416, "Fast",  skipNms = true, family = "YOLO26"),
+    /** YOLO26-small, NMS-free — sharper on small/far objects. */
+    Y26S("yolo26s_416.onnx", 416, "Sharp", skipNms = true, family = "YOLO26"),
 }
 
 /**

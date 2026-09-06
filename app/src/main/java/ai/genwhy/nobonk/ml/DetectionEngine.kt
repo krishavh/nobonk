@@ -2,6 +2,8 @@ package ai.genwhy.nobonk.ml
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Paint
+import android.graphics.Canvas
 import android.graphics.Matrix
 import android.media.RingtoneManager
 import android.os.Build
@@ -121,25 +123,59 @@ class DetectionEngine(private val appContext: Context) {
      * the background pipeline previously dropped. No YUV→JPEG round-trip, no NV21 stride
      * bug (fixes PERF-C01/C02).
      */
-    private fun imageProxyToUprightBitmap(imageProxy: ImageProxy): Bitmap {
-        val raw = imageProxy.toBitmap()
-        val rotation = imageProxy.imageInfo.rotationDegrees
-        if (rotation == 0) return raw
-        val m = Matrix().apply { postRotate(rotation.toFloat()) }
-        val rotated = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, false)
-        if (rotated != raw) raw.recycle()
-        return rotated
+    // ── Zero-allocation frame path (T-PERF-FRAME) ───────────────────────────────
+    // CameraX hands us an RGBA_8888 plane. We copy it into a REUSABLE raw bitmap, then
+    // rotate-to-upright + downscale in ONE Canvas draw into a REUSABLE work bitmap.
+    // Previously: toBitmap() + createBitmap(rotate) + createScaledBitmap = 3 allocations
+    // per frame (GC churn, frame-time spikes). Now: none in steady state.
+    private var rawBitmap: Bitmap? = null
+    private var workBitmap: Bitmap? = null
+    private var packedRows: java.nio.ByteBuffer? = null
+    private var rowScratch: ByteArray? = null
+    private val workMatrix = Matrix()
+    private val workPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+
+    private fun proxyToRawBitmap(p: ImageProxy): Bitmap {
+        val w = p.width; val h = p.height
+        var bmp = rawBitmap
+        if (bmp == null || bmp.width != w || bmp.height != h) {
+            bmp?.recycle(); bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); rawBitmap = bmp
+        }
+        val plane = p.planes[0]
+        if (plane.pixelStride != 4) {
+            // Unexpected layout — fall back to CameraX's converter (allocates, but correct).
+            val fb = p.toBitmap(); return fb
+        }
+        val buf = plane.buffer; buf.rewind()
+        val rowStride = plane.rowStride
+        if (rowStride == w * 4) {
+            bmp.copyPixelsFromBuffer(buf)
+        } else {
+            // Row padding present: repack rows tightly into a reusable direct buffer.
+            val need = w * h * 4
+            var packed = packedRows
+            if (packed == null || packed.capacity() < need) { packed = java.nio.ByteBuffer.allocateDirect(need); packedRows = packed }
+            var row = rowScratch
+            if (row == null || row.size < w * 4) { row = ByteArray(w * 4); rowScratch = row }
+            packed.clear()
+            for (y in 0 until h) { buf.position(y * rowStride); buf.get(row, 0, w * 4); packed.put(row, 0, w * 4) }
+            packed.rewind(); bmp.copyPixelsFromBuffer(packed)
+        }
+        return bmp
     }
 
-    /** Downscale so the longest edge == [inputSize], preserving aspect (bounds cost). */
-    private fun toWorkBitmap(src: Bitmap): Bitmap {
-        val maxEdge = maxOf(src.width, src.height)
-        if (maxEdge <= inputSize) return src
-        val scale = inputSize.toFloat() / maxEdge
-        val w = (src.width * scale).toInt().coerceAtLeast(1)
-        val h = (src.height * scale).toInt().coerceAtLeast(1)
-        val out = Bitmap.createScaledBitmap(src, w, h, true)
-        if (out != src) src.recycle()
+    /** Rotate to upright and downscale so the longest edge == [inputSize] — one draw, reusable output. */
+    private fun toUprightWork(raw: Bitmap, rotationDeg: Int): Bitmap {
+        val g = FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize)
+        var out = workBitmap
+        if (out == null || out.width != g.outW || out.height != g.outH) {
+            out?.recycle(); out = Bitmap.createBitmap(g.outW, g.outH, Bitmap.Config.ARGB_8888); workBitmap = out
+        }
+        workMatrix.reset()
+        workMatrix.postRotate(rotationDeg.toFloat())
+        workMatrix.postTranslate(g.shiftX, g.shiftY)
+        workMatrix.postScale(g.scale, g.scale)
+        Canvas(out).drawBitmap(raw, workMatrix, workPaint)
         return out
     }
 
@@ -150,19 +186,18 @@ class DetectionEngine(private val appContext: Context) {
      */
     suspend fun process(imageProxy: ImageProxy, config: Config): Result {
         val detector = objectDetector
-        val upright = try {
-            imageProxyToUprightBitmap(imageProxy)
+        val work = try {
+            val raw = proxyToRawBitmap(imageProxy)
+            toUprightWork(raw, imageProxy.imageInfo.rotationDegrees)
         } finally {
             imageProxy.close()
         }
-        val work = toWorkBitmap(upright)
 
         // ── Blocked-camera check: low brightness AND low variance (fixes ML-06) ──
         val (meanBrightness, variance) = brightnessAndVariance(work)
         val blocked = LowLight.isBlocked(meanBrightness, variance)
 
         if (blocked || detector == null) {
-            work.recycle()
             // Reset linger so a stale HIGH doesn't survive a blocked frame.
             heldAlert = AlertLevel.NONE; heldLabel = null; heldUntil = 0L
             return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = blocked,
@@ -181,7 +216,6 @@ class DetectionEngine(private val appContext: Context) {
             ground = frameAnalyzer.isGroundHazardDetected
             d
         }
-        work.recycle()
 
         val filtered = if (config.includeNonPerson) raw else raw.filter { it.className == "person" }
 
@@ -355,6 +389,9 @@ class DetectionEngine(private val appContext: Context) {
     }
 
     fun close() {
+        rawBitmap?.recycle(); rawBitmap = null
+        workBitmap?.recycle(); workBitmap = null
+
         objectDetector?.close()
         objectDetector = null
         approachTracker.reset()
