@@ -1,10 +1,12 @@
 package ai.genwhy.nobonk.ui
 
+import ai.genwhy.nobonk.BuildConfig
+import ai.genwhy.nobonk.ui.components.SectionLabel
+import ai.genwhy.nobonk.ui.theme.NB
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -16,170 +18,96 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/**
- * In-app open-source licenses / attribution screen (T-DOCS-LICENSES).
- *
- * Also satisfies the AGPL-3.0 §13 obligation for the bundled Ultralytics YOLO model by
- * surfacing a link to the corresponding source. Reachable from the History screen footer.
- */
-
-private val LicBg      = Color(0xFF0A0E1A)
-private val LicCard    = Color(0xFF141828)
-private val LicCyan    = Color(0xFF00E5FF)
-private val LicText    = Color(0xFFEEEEEE)
-private val LicSub     = Color(0xFF9E9E9E)
-
-private data class Lib(
-    val name: String,
-    val license: String,
-    val note: String
-)
+private data class Lib(val name: String, val license: String, val note: String)
 
 private val LIBRARIES = listOf(
-    Lib(
-        "ONNX Runtime",
-        "MIT License",
-        "Microsoft. On-device neural-network inference engine used to run the YOLO detector."
-    ),
-    Lib(
-        "AndroidX CameraX",
-        "Apache License 2.0",
-        "Google / Android Open Source Project. Camera capture + analysis pipeline."
-    ),
-    Lib(
-        "Ultralytics YOLO",
-        "AGPL-3.0 License",
-        "The bundled object-detection model weights and export tooling are licensed under " +
-            "the GNU Affero General Public License v3.0. Per AGPL §13, the complete " +
-            "corresponding source for this app — including the exact model / export recipe — " +
-            "is published at the link below."
-    ),
-    Lib(
-        "AndroidX Security (Jetpack)",
-        "Apache License 2.0",
-        "Keystore-backed encryption used to protect on-device detection history at rest."
-    ),
-    Lib(
-        "Jetpack Compose & Kotlin Coroutines",
-        "Apache License 2.0",
-        "JetBrains / Google. UI toolkit and asynchronous processing."
-    )
+    Lib("Ultralytics YOLO26", "AGPL-3.0", "Detector weights (yolo26n, yolo26s) and export tooling. Per AGPL §13 the complete corresponding source — including the exact export recipe — is published in the repository (docs/MODEL.md)."),
+    Lib("ONNX Runtime", "MIT", "Microsoft. Runs the detector on the phone's CPU/NPU."),
+    Lib("AndroidX CameraX", "Apache-2.0", "Camera preview and the RGBA analysis stream."),
+    Lib("Jetpack Compose, Material 3, Kotlin coroutines", "Apache-2.0", "UI toolkit and async processing (Google / JetBrains)."),
+    Lib("AndroidX Security", "Apache-2.0", "Keystore-backed encryption of the on-device history."),
+    Lib("desugar_jdk_libs", "GPL-2.0 with Classpath Exception", "java.time on older Android versions."),
 )
 
-private const val SOURCE_URL = "https://github.com/krishavh/nobonk"
+private const val SOURCE_URL = "github.com/krishavh/nobonk"
+private const val PRIVACY_URL = "krishavh.github.io/privacy/nobonk.html"
 
+/** About, credits and open-source licenses. Reached from History → "About". */
 @Composable
 fun LicensesScreen(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(LicBg)
-            .verticalScroll(rememberScrollState())
-    ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 44.dp, start = 8.dp, end = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back to history", tint = LicCyan)
-            }
-            Spacer(Modifier.width(4.dp))
-            Text(
-                "OPEN-SOURCE LICENSES",
-                color = LicText,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp
-            )
+    Column(Modifier.fillMaxSize().background(NB.Night).statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = NB.Accent) }
+            Text("About NoBonk", color = NB.Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
-
-        Text(
-            "NoBonk is built on open-source software. The components below are used under " +
-                "their respective licenses.",
-            color = LicSub,
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-
-        LIBRARIES.forEach { lib -> LicenseCard(lib) }
-
-        // Source availability (AGPL §13)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(LicCard)
-                .border(1.dp, LicCyan.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                .padding(16.dp)
-        ) {
-            Text(
-                "SOURCE CODE",
-                color = LicCyan,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "The complete corresponding source for this app and the detection model is " +
-                    "available at:",
-                color = LicSub,
-                fontSize = 13.sp,
-                lineHeight = 18.sp
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                SOURCE_URL,
-                color = LicCyan,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "The detection model's exact files and reproducible export recipe " +
-                    "(AGPL §13 corresponding source) are documented in docs/MODEL.md " +
-                    "in that repository.",
-                color = LicSub,
-                fontSize = 13.sp,
-                lineHeight = 18.sp
-            )
-        }
+        Spacer(Modifier.height(14.dp))
+        Wordmark(size = 56)
+        Spacer(Modifier.height(8.dp))
+        Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · offline · no accounts · no ads", color = NB.Sub, fontSize = 13.sp)
 
         Spacer(Modifier.height(24.dp))
-        Text(
-            "NoBonk is an assistive aid, not a certified safety device. Always keep looking up.",
-            color = LicSub,
-            fontSize = 12.sp,
-            lineHeight = 17.sp,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-        Spacer(Modifier.height(32.dp))
+        SectionLabel("Made by")
+        Spacer(Modifier.height(8.dp))
+        Card {
+            Text("Krishav Haarith", color = NB.Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("Student · Dublin, California. The problem, the design, the false-alert tuning and every sidewalk test.", color = NB.Sub, fontSize = 14.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("Haarith Devarajan", color = NB.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text("Parent, guardian and Play account holder.", color = NB.Sub, fontSize = 14.sp)
+        }
+
+        Spacer(Modifier.height(18.dp))
+        SectionLabel("Built with help from")
+        Spacer(Modifier.height(8.dp))
+        Card {
+            Credit("Claude (Anthropic)", "Most of the Kotlin, the release engineering, the zero-allocation frame path, model export and benchmarks — via Claude Code.")
+            Credit("OpenAI Codex & ChatGPT Astra", "Refactoring, Play Console and registration workflow, website.")
+            Credit("Kaaval", "The family's local Hermes agent on a DGX Spark (Qwen3.8-Flash-Next): hundreds of autonomous build-and-test iterations.")
+            Credit("Google Gemini · Warp AI", "Debugging, security review, alert-system diagram; terminal workflow.")
+            Text("AI tools wrote a lot of code here. The ideas, the decisions and the testing were Krishav's — and it says so honestly, because that's the point of a student project.", color = NB.Dim, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 6.dp))
+        }
+
+        Spacer(Modifier.height(18.dp))
+        SectionLabel("Open-source licenses")
+        Spacer(Modifier.height(8.dp))
+        LIBRARIES.forEach { lib ->
+            Card(modifier = Modifier.padding(bottom = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(lib.name, color = NB.Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text(lib.license, color = NB.Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(lib.note, color = NB.Sub, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        SectionLabel("Source & privacy")
+        Spacer(Modifier.height(8.dp))
+        Card {
+            Text("NoBonk is itself AGPL-3.0. Source, model recipe and issue tracker:", color = NB.Sub, fontSize = 13.sp)
+            Text(SOURCE_URL, color = NB.Accent, fontSize = 14.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(vertical = 4.dp))
+            Text("Privacy policy:", color = NB.Sub, fontSize = 13.sp)
+            Text(PRIVACY_URL, color = NB.Accent, fontSize = 14.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(top = 4.dp))
+        }
+        Spacer(Modifier.height(36.dp))
     }
 }
 
 @Composable
-private fun LicenseCard(lib: Lib) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(LicCard)
-            .padding(16.dp)
-    ) {
-        Text(lib.name, color = LicText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(2.dp))
-        Text(lib.license, color = LicCyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        Text(lib.note, color = LicSub, fontSize = 13.sp, lineHeight = 18.sp)
+private fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.fillMaxWidth().clip(NB.CardShape).background(NB.Surface).border(1.dp, NB.Line, NB.CardShape).padding(14.dp), content = content)
+}
+
+@Composable
+private fun Credit(who: String, what: String) {
+    Column(Modifier.padding(bottom = 8.dp)) {
+        Text(who, color = NB.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(what, color = NB.Sub, fontSize = 13.sp, lineHeight = 18.sp)
     }
 }

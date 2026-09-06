@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import ai.genwhy.nobonk.ui.theme.NB
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -37,12 +38,12 @@ import kotlin.math.roundToInt
 // ── Colour palette ────────────────────────────────────────────────────────────
 
 private val BgDark       = Color(0xFF0A0E1A)
-private val CardBg       = Color(0xFF141828)
-private val Cyan         = Color(0xFF00E5FF)
-private val Orange       = Color(0xFFFF6D00)
-private val Red          = Color(0xFFFF1744)
-private val Green        = Color(0xFF69F0AE)
-private val Purple       = Color(0xFFD500F9)
+private val CardBg = NB.Night
+private val Cyan = NB.Accent
+private val Orange = NB.Watch
+private val Red = NB.Danger
+private val Green = NB.Safe
+private val Purple = NB.Accent2
 private val TextPrimary  = Color(0xFFEEEEEE)
 private val TextSecondary= Color(0xFF9E9E9E)
 
