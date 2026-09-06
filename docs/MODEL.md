@@ -26,8 +26,8 @@ The model roster is defined authoritatively in
 
 | Asset filename       | Input size | Family | Upstream weights | NMS       | Used by mode |
 |----------------------|-----------:|--------|------------------|-----------|--------------|
-| `yolo26n_416.onnx`   | 416        | YOLO26 | `yolo26n.pt`     | NMS-free (end-to-end) | **Fast** |
-| `yolo26s_416.onnx`   | 416        | YOLO26 | `yolo26s.pt`     | NMS-free (end-to-end) | **Sharp** (default) |
+| `yolo26n_416.onnx`   | 416        | YOLO26 | `yolo26n.pt`     | in-app (raw head) | **Fast** |
+| `yolo26s_416.onnx`   | 416        | YOLO26 | `yolo26s.pt`     | in-app (raw head) | **Sharp** (default) |
 
 _2026-09-06: the YOLO11 tier (`yolo11s.onnx`, `yolo11m.onnx`) and `yolo26m` were removed from the roster — the app ships and offers only what is bundled. Export environment for the current assets: ultralytics 8.4.142 torch 2.14.0+cpu, opset 17, `simplify=True`._
 

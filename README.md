@@ -55,7 +55,7 @@ People walk while looking at their phones and run into each other, walls, and cu
 
 ## Getting the model
 
-The detector weights are **not** committed (large binaries; Ultralytics distributes them under AGPL-3.0). NoBonk ships the **YOLO26** family, exported end-to-end (NMS-free), at 416 px:
+The detector weights are **not** committed (large binaries; Ultralytics distributes them under AGPL-3.0). NoBonk ships the **YOLO26** family at 416 px (raw detection head; the app runs its own per-class NMS — measured faster than the end-to-end export, see `docs/MODEL_CHOICE.md`):
 
 | Asset | Mode in app | Size | Notes |
 |---|---|---|---|
@@ -70,7 +70,7 @@ yolo export model=yolo26n.pt format=onnx imgsz=416 opset=17 simplify=True && mv 
 yolo export model=yolo26s.pt format=onnx imgsz=416 opset=17 simplify=True && mv yolo26s.onnx app/src/main/assets/yolo26s_416.onnx
 ```
 
-YOLO26 emits final boxes directly (`[1, 300, 6]`: x1,y1,x2,y2,score,class), so the app does no NMS pass for these models. Provenance, the AGPL §13 obligations, and why YOLO26 over the alternatives we evaluated (RF-DETR, D-FINE, YOLOX) are in [`docs/MODEL.md`](docs/MODEL.md) and [`docs/MODEL_CHOICE.md`](docs/MODEL_CHOICE.md).
+The exported graph outputs `[1, 84, 3549]` (cx, cy, w, h + 80 class scores per candidate); `ml/Nms.kt` keeps the eight classes NoBonk cares about and suppresses duplicates. Provenance, the AGPL §13 obligations, and why YOLO26 over the alternatives we evaluated (RF-DETR, D-FINE, YOLOX) are in [`docs/MODEL.md`](docs/MODEL.md) and [`docs/MODEL_CHOICE.md`](docs/MODEL_CHOICE.md).
 
 ## Building it yourself
 

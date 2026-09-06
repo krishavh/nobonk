@@ -39,13 +39,17 @@ enum class AccuracyMode(
     val modelFile: String,
     val inputPx: Int,
     val label: String,
-    val skipNms: Boolean = true,
+    val skipNms: Boolean = false,
     val family: String = "YOLO26"
 ) {
-    /** YOLO26-nano, NMS-free — fastest, best battery; the everyday default on mid-range phones. */
-    Y26N("yolo26n_416.onnx", 416, "Fast",  skipNms = true, family = "YOLO26"),
-    /** YOLO26-small, NMS-free — sharper on small/far objects. */
-    Y26S("yolo26s_416.onnx", 416, "Sharp", skipNms = true, family = "YOLO26"),
+    // Both assets are the RAW one-to-many head ([1,84,3549]); the app runs its own
+    // per-class NMS (ml/Nms.kt). Measured 2026-09-06 (x86 CPU, ORT 1.28): the raw head
+    // is ~1.5x faster than the end-to-end export (yolo26s 31 ms vs 47 ms) and avoids
+    // TopK/gather ops that accelerators (NNAPI) may not support.
+    /** YOLO26-nano — fastest, best battery; the everyday pick on mid-range phones. */
+    Y26N("yolo26n_416.onnx", 416, "Fast",  skipNms = false, family = "YOLO26"),
+    /** YOLO26-small — sharper on small/far objects. */
+    Y26S("yolo26s_416.onnx", 416, "Sharp", skipNms = false, family = "YOLO26"),
 }
 
 /**
