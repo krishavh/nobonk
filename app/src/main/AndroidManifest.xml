@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -15,6 +16,11 @@
          requested in-context. FINE location was dropped (SEC-N03): coarse is enough
          for ~55 m hotspot clustering. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+        <!-- Libraries declare these; strip them at merge so the shipped manifest matches the
+         privacy policy: NoBonk has no network capability at all. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 
     <application
         android:allowBackup="false"
