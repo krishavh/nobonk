@@ -358,7 +358,7 @@ class DetectionEngine(private val appContext: Context) {
         val lookUpLabel = if (displayAlert == AlertLevel.HIGH && !suppressVisual) heldLabel else null
         val hud = buildHud(
             displayAlert, heldLabel, topDet?.isApproaching == true, wall, ground,
-            angleBad, angleHint, lowLight
+            angleBad, angleHint, lowLight, AlertCue.sideFor(pan)
         )
         // Display-only box smoothing (alert ladder above used the raw boxes).
         val shown = scored.map { d ->
@@ -376,7 +376,7 @@ class DetectionEngine(private val appContext: Context) {
 
     private fun buildHud(
         highest: AlertLevel, className: String?, closing: Boolean, wall: Boolean, ground: Boolean,
-        angleBad: Boolean, angleHint: String, lowLight: Boolean
+        angleBad: Boolean, angleHint: String, lowLight: Boolean, side: AlertCue.Side = AlertCue.Side.AHEAD
     ): String? = when {
         // Bad angle takes priority: detection is unreliable, so tell the user to fix it
         // instead of blasting a possibly-bogus LOOK UP.
@@ -384,12 +384,17 @@ class DetectionEngine(private val appContext: Context) {
         // Show the LOOK-UP line whenever the debounced level is HIGH (the re-alert mute
         // silences the SOUND, not the visual — HIGH-1). Bad angle is already handled above.
         highest == AlertLevel.HIGH -> {
+            val where = when (side) {
+                AlertCue.Side.LEFT -> "ON YOUR LEFT"
+                AlertCue.Side.RIGHT -> "ON YOUR RIGHT"
+                AlertCue.Side.AHEAD -> "AHEAD"
+            }
             val label = when (className) {
-                "person" -> "PERSON AHEAD"
-                "car", "truck", "bus" -> "VEHICLE AHEAD"
-                "motorcycle", "bicycle" -> "BIKE AHEAD"
-                "dog", "cat", "horse" -> "ANIMAL AHEAD"
-                else -> "OBJECT AHEAD"
+                "person" -> "PERSON $where"
+                "car", "truck", "bus" -> "VEHICLE $where"
+                "motorcycle", "bicycle" -> "BIKE $where"
+                "dog", "cat", "horse" -> "ANIMAL $where"
+                else -> "OBJECT $where"
             }
             "⚠️ LOOK UP!  $label${if (closing) " (closing)" else ""}"
         }
