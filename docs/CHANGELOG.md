@@ -11,6 +11,9 @@
 - **Calm boxes.** Drawn bounding boxes are EMA-smoothed per track (faster alpha while approaching); the alert ladder still uses raw boxes so no latency is added to safety logic (`ml/BoxSmoother.kt`).
 - **Voice cue (opt-in).** "Person on your left. Look up." spoken through the phone's offline text-to-speech on each new HIGH hazard, for blind/low-vision walkers and pocket-and-earbuds use. Off by default; toggle in the settings drawer (`ml/VoiceCue.kt`).
 - **Background notification** now reads "NoBonk is watching", is silent, and has a **Stop** action.
+- **Night boost.** When the scene is dark (mean luma < 60) the detector input is brightened toward the training distribution with a bounded linear gain (≤ 2.5×) in the same Canvas draw that rotates and scales the frame — zero extra passes. The low-light banner says when it is on. Aimed at the "3/10 in low light" limitation; needs on-device re-measurement.
+- **Live stats** under the status pill: processed fps and detector latency in ms.
+- **About / privacy / licenses** reachable from the settings drawer (was History → About only).
 
 ### Performance
 - **Zero-allocation frame path.** CameraX RGBA plane → reusable raw bitmap → one Canvas draw (rotate + downscale) into a reusable work bitmap. Three Bitmap allocations per frame removed; steady-state GC churn gone. Pure `FrameGeometry` helper with unit tests.

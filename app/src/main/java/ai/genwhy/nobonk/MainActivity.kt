@@ -129,6 +129,7 @@ class MainActivity : ComponentActivity() {
                                     canDrawOverlays   = canDrawOverlays,
                                     onGrantOverlay    = { requestOverlayPermission() },
                                     onShowHistory     = { showHistory = true },
+                                    onShowAbout       = { showLicenses = true },
                                     cameraRebindKey   = cameraRebindKey
                                 )
                             }

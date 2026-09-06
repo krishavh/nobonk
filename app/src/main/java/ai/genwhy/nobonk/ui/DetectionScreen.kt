@@ -67,6 +67,7 @@ fun DetectionScreen(
     canDrawOverlays: Boolean,
     onGrantOverlay: () -> Unit,
     onShowHistory: () -> Unit = {},
+    onShowAbout: () -> Unit = {},
     cameraRebindKey: Int = 0
 ) {
     val detections = viewModel.detections
@@ -98,7 +99,8 @@ fun DetectionScreen(
                 batteryLevel = batteryLevel,
                 isHardwareAccelerated = isHardwareAccelerated,
                 mode = accuracyMode,
-                live = !isCameraBlocked
+                live = !isCameraBlocked,
+                stats = if (viewModel.fps > 0f) String.format(Locale.US, "%.0f fps · %d ms", viewModel.fps, viewModel.inferMs) else null
             )
         }
 
@@ -113,7 +115,7 @@ fun DetectionScreen(
                     NoticeBanner("📐", "Camera angle", phoneAngleHint,
                         color = if (phoneAngleQuality == SensorMonitor.AngleQuality.BAD) NB.Danger else NB.Watch,
                         description = "Camera angle warning. $phoneAngleHint")
-                isLowLight -> NoticeBanner("🔅", "Low light", "Detection is less reliable in the dark", color = NB.Watch)
+                isLowLight -> NoticeBanner("🔅", if (viewModel.isNightBoost) "Low light · night boost on" else "Low light", "Detection is less reliable in the dark", color = NB.Watch)
             }
             if (isWallDetected && !isCameraBlocked)
                 NoticeBanner("🧱", "Obstacle ahead", "Watch your path", color = NB.Watch, description = "Obstacle ahead. Watch your path.")
@@ -142,7 +144,8 @@ fun DetectionScreen(
             onVoiceToggle = { viewModel.toggleVoice(it) },
             accuracyMode = accuracyMode,
             onAccuracyChange = { viewModel.setAccuracyMode(it, context) },
-            onShowHistory = onShowHistory
+            onShowHistory = onShowHistory,
+            onShowAbout = onShowAbout
         )
 
         if (isCameraBlocked) {
@@ -211,9 +214,10 @@ private fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel
 /* ───────────────────────── top status ───────────────────────── */
 
 @Composable
-private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, isHardwareAccelerated: Boolean, mode: AccuracyMode, live: Boolean) {
+private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, isHardwareAccelerated: Boolean, mode: AccuracyMode, live: Boolean, stats: String? = null) {
+  Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .clip(NB.PillShape)
             .background(NB.Glass)
             .border(1.dp, NB.GlassLine, NB.PillShape)
@@ -228,6 +232,11 @@ private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, isHardwareAccele
         Pill(mode.label.uppercase(), color = NB.Accent2)
         Text("$batteryLevel%", color = if (batteryLevel < 20) NB.Watch else NB.Sub, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
+    if (stats != null) {
+        Spacer(Modifier.height(4.dp))
+        Text(stats, color = NB.Dim, fontSize = 10.sp, letterSpacing = 0.5.sp)
+    }
+  }
 }
 
 /* ───────────────────────── bottom dock ───────────────────────── */
@@ -252,7 +261,8 @@ private fun ControlDock(
     onHapticsToggle: (Boolean) -> Unit,
     voiceEnabled: Boolean,
     onVoiceToggle: (Boolean) -> Unit,
-    onShowHistory: () -> Unit
+    onShowHistory: () -> Unit,
+    onShowAbout: () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
     val nearest = detections.filter { it.hasDistanceEstimate }.minByOrNull { it.distance }
@@ -309,6 +319,12 @@ private fun ControlDock(
             Text(
                 "Sound and voice are panned toward the hazard — with earbuds, left means left.",
                 color = NB.Dim, fontSize = 10.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "About NoBonk · privacy · licenses",
+                color = NB.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { onShowAbout() }.padding(vertical = 4.dp)
             )
         }
         Spacer(Modifier.height(12.dp))

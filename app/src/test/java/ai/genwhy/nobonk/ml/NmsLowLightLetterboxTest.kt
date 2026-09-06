@@ -42,3 +42,20 @@ class LetterboxTest {
         assertEquals("no horizontal pad for wide source", 0f, t.padX, 0.001f)
     }
 }
+
+class NightBoostGainTest {
+    @org.junit.Test fun normalLightNoGain() {
+        org.junit.Assert.assertEquals(1f, LowLight.gainFor(120f), 0f)
+        org.junit.Assert.assertEquals(1f, LowLight.gainFor(60f), 0f)
+    }
+    @org.junit.Test fun darkScenesGetBoundedGain() {
+        org.junit.Assert.assertEquals(90f / 45f, LowLight.gainFor(45f), 1e-5f)
+        org.junit.Assert.assertEquals(2.5f, LowLight.gainFor(10f), 0f)
+        org.junit.Assert.assertEquals(2.5f, LowLight.gainFor(1f), 0f)
+    }
+    @org.junit.Test fun garbageIsNeutral() {
+        org.junit.Assert.assertEquals(1f, LowLight.gainFor(Float.NaN), 0f)
+        org.junit.Assert.assertEquals(1f, LowLight.gainFor(0f), 0f)
+        org.junit.Assert.assertEquals(1f, LowLight.gainFor(-5f), 0f)
+    }
+}

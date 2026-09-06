@@ -76,6 +76,18 @@ class DetectionViewModel : ViewModel() {
     var voiceEnabled by mutableStateOf(false)
         private set
 
+    /** Night boost currently applied to the detector input. */
+    var isNightBoost by mutableStateOf(false)
+        private set
+
+    /** Rolling detector latency (ms) and processed-frame rate, for the status bar. */
+    var inferMs by mutableIntStateOf(0)
+        private set
+    var fps by mutableFloatStateOf(0f)
+        private set
+    private var lastResultAt = 0L
+    private var fpsEma = 0f
+
     /** Stereo pan of the current top hazard, −1 (left) … +1 (right); null when clear. */
     var bearingPan by mutableStateOf<Float?>(null)
         private set
@@ -372,6 +384,15 @@ class DetectionViewModel : ViewModel() {
                     phoneAngleHint = result.angleHint
                     isLowLight = result.lowLight
                     bearingPan = result.bearingPan
+                    isNightBoost = result.nightBoost
+                    inferMs = result.inferMs.toInt()
+                    val t = System.currentTimeMillis()
+                    if (lastResultAt != 0L) {
+                        val inst = 1000f / (t - lastResultAt).coerceAtLeast(1L)
+                        fpsEma = if (fpsEma == 0f) inst else fpsEma * 0.8f + inst * 0.2f
+                        fps = fpsEma
+                    }
+                    lastResultAt = t
                 }
             } catch (e: Exception) {
                 Dbg.e(TAG, "Frame processing error: ${e.message}")

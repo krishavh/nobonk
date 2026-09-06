@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -64,7 +66,11 @@ class DetectionEngine(private val appContext: Context) {
         val angleQuality: SensorMonitor.AngleQuality = SensorMonitor.AngleQuality.OK,
         val angleHint: String = "",
         /** Stereo pan (−1 left … +1 right) of the top hazard, null when nothing is alerting. */
-        val bearingPan: Float? = null
+        val bearingPan: Float? = null,
+        /** True when the night-boost gain was applied to this frame's detector input. */
+        val nightBoost: Boolean = false,
+        /** Detector wall time for this frame in ms (letterbox + inference + NMS). */
+        val inferMs: Long = 0L
     )
 
     private val approachTracker = ApproachTracker()
@@ -177,6 +183,10 @@ class DetectionEngine(private val appContext: Context) {
     private var rowScratch: ByteArray? = null
     private val workMatrix = Matrix()
     private val workPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private var lastMeanBrightness = 128f
+    private var lastInferMs = 0L
+    private var appliedGain = 1f
+    private val gainMatrix = ColorMatrix()
 
     private fun proxyToRawBitmap(p: ImageProxy): Bitmap {
         val w = p.width; val h = p.height
@@ -218,6 +228,14 @@ class DetectionEngine(private val appContext: Context) {
         workMatrix.postRotate(rotationDeg.toFloat())
         workMatrix.postTranslate(g.shiftX, g.shiftY)
         workMatrix.postScale(g.scale, g.scale)
+        // Night boost: brighten the detector input in the same draw when the last frame was dark.
+        val gain = LowLight.gainFor(lastMeanBrightness)
+        if (gain != appliedGain) {
+            appliedGain = gain
+            workPaint.colorFilter = if (gain > LowLight.BOOST_ACTIVE_GAIN) {
+                gainMatrix.setScale(gain, gain, gain, 1f); ColorMatrixColorFilter(gainMatrix)
+            } else null
+        }
         Canvas(out).drawBitmap(raw, workMatrix, workPaint)
         return out
     }
@@ -237,7 +255,11 @@ class DetectionEngine(private val appContext: Context) {
         }
 
         // ── Blocked-camera check: low brightness AND low variance (fixes ML-06) ──
-        val (meanBrightness, variance) = brightnessAndVariance(work)
+        val (boostedMean, variance) = brightnessAndVariance(work)
+        // Undo the boost so the blocked/low-light logic sees the true scene brightness.
+        val meanBrightness = boostedMean / appliedGain
+        val nightBoost = appliedGain > LowLight.BOOST_ACTIVE_GAIN
+        lastMeanBrightness = meanBrightness
         val blocked = LowLight.isBlocked(meanBrightness, variance)
 
         if (blocked || detector == null) {
@@ -252,8 +274,10 @@ class DetectionEngine(private val appContext: Context) {
         var ground = false
         val raw: List<Detection> = coroutineScope {
             val wallJob = async { frameAnalyzer.analyze(work); }
+            val t0 = System.nanoTime()
             val yoloJob = async { detector.detect(work) }
             val d = yoloJob.await()
+            lastInferMs = (System.nanoTime() - t0) / 1_000_000
             wallJob.await()
             wall = frameAnalyzer.isWallDetected
             ground = frameAnalyzer.isGroundHazardDetected
@@ -342,7 +366,8 @@ class DetectionEngine(private val appContext: Context) {
         return Result(
             shown, displayAlert, lookUpLabel, blocked, wall, ground, hud,
             lowLight = lowLight, angleQuality = angleQuality, angleHint = angleHint,
-            bearingPan = if (displayAlert != AlertLevel.NONE) pan else null
+            bearingPan = if (displayAlert != AlertLevel.NONE) pan else null,
+            nightBoost = nightBoost, inferMs = lastInferMs
         )
     }
 
