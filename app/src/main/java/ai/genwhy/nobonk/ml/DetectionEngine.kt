@@ -142,7 +142,7 @@ class DetectionEngine(private val appContext: Context) {
      * calibrated to THIS phone instead of a typical one. Safe to call from any thread and
      * before or after [loadModel]; silently keeps the default if the camera reports nothing.
      */
-    @OptIn(ExperimentalCamera2Interop::class)
+    @androidx.annotation.OptIn(markerClass = [ExperimentalCamera2Interop::class])
     fun attachCamera(cameraInfo: CameraInfo) {
         try {
             val c2 = Camera2CameraInfo.from(cameraInfo)

@@ -49,6 +49,7 @@ fun FirstRunScreen(onContinue: () -> Unit) {
         ValueCard("👀", "Sees people, bikes, cars and pets", "An on-device vision model (YOLO26) looks at every frame and estimates how close things are and whether they're closing in.", NB.Accent)
         ValueCard("🔒", "Nothing leaves the phone", "No photos, no video, no uploads, no internet permission. Frames live in memory for a few milliseconds and are gone.", NB.Safe)
         ValueCard("🔔", "Works over other apps", "With the overlay permission, the LOOK UP warning appears on top of whatever you're reading. A notification shows it's running.", NB.Accent2)
+        ValueCard("🎧", "Hear which side", "Alert sounds are panned toward the hazard — with earbuds, left means left. Vibration, sound and an optional spoken warning can each be switched off.", NB.Watch)
         ValueCard("📍", "Location is optional, off by default", "Turn it on later if you want a map of your close calls. Coarse only, stays on the device, deletable any time.", NB.Sub)
         Spacer(Modifier.height(14.dp))
         Column(

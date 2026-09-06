@@ -33,6 +33,16 @@ People walk while looking at their phones and run into each other, walls, and cu
 6. **Alerts** — escalating haptic + on-screen warnings (LOW / MEDIUM / HIGH) based on the alert distance you choose, plus a short synthesised chirp on MEDIUM/HIGH that is stereo-panned toward the hazard — with earbuds, someone approaching on your left is heard on your left. Sound and haptics can each be switched off.
 7. **Detection history** — sessions, alert counts, peak-danger hours, and danger hotspots, stored only on your device.
 
+## Alerts you can hear, feel and read
+
+| Level | Screen | Haptic | Sound | Voice (opt-in) |
+|---|---|---|---|---|
+| LOW | amber bracket | single tap | — | — |
+| MEDIUM | amber bracket + approach ring | double tap | soft double chirp | — |
+| HIGH | red **LOOK UP** with side arrow and edge glow | triple buzz | urgent triple chirp | "Person on your left. Look up." |
+
+Sound and voice are **stereo-panned toward the hazard** (constant-power pan law, 20 % centre dead-zone): with earbuds, left means left. All cues are individually switchable and persist across launches. On a dark scene NoBonk brightens the detector input (bounded "night boost") and tells you it is doing so. Design notes live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the change history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+
 ## Privacy by design
 
 - **No video or photos are ever recorded, stored, or transmitted.** Camera frames are processed in memory and immediately discarded — nothing from the camera is ever written to disk or sent anywhere.
@@ -88,14 +98,14 @@ From the command line:
 
 ## Known limitations
 
-- Doesn't work well in low light (camera hardware limitation).
-- Distance estimates are approximate and depend on camera angle — the app warns you when the phone is held too flat.
+- Works worse in low light (camera hardware limitation). A bounded night-boost gain on the detector input helps on dim streets, not in the dark.
+- Distance estimates are approximate and depend on camera angle — the app warns you when the phone is held too flat. The estimate is calibrated to your phone's lens and sensor when the camera reports them.
 - Older/slower phones may lag; walk at slow-to-medium speed.
 - **NoBonk is a student-built safety prototype, not a certified safety device. It will miss things. Keep looking up.**
 
 ## Contributing
 
-Issues and pull requests welcome! Some good areas to dig into: better low-light handling, per-phone distance calibration, smarter alert descriptions, IoU-based multi-person ID matching, and a formal study on whether the app actually reduces near-misses. Check the open issues for known bugs.
+Issues and pull requests welcome! Some good areas to dig into: better low-light handling (learned denoise/enhance ahead of the detector), smarter alert descriptions, IoU-based multi-person ID matching, and a formal study on whether the app actually reduces near-misses. Check the open issues for known bugs.
 
 ## Acknowledgments
 
