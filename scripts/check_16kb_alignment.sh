@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# NOTE (2026-09-06): Google's 16 KB requirement applies to 64-bit ABIs only
+# (arm64-v8a, x86_64). 32-bit libs (armeabi-v7a, x86) at 4 KB are NOT a Play
+# blocker; they are reported below for information but do not fail the check.
 # check_16kb_alignment.sh — verify every bundled native .so is 16 KB-aligned.
 #
 # WHY: Google Play requires all apps targeting Android 15+ that ship native code
