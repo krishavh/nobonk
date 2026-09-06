@@ -146,7 +146,14 @@ fun DetectionScreen(
             accuracyMode = accuracyMode,
             onAccuracyChange = { viewModel.setAccuracyMode(it, context) },
             onShowHistory = onShowHistory,
-            onShowAbout = onShowAbout
+            onShowAbout = onShowAbout,
+            pausedReason = when {
+                isInitializing -> "Starting…"
+                isCameraBlocked -> "Camera blocked"
+                phoneAngleQuality == SensorMonitor.AngleQuality.BAD -> "Point phone forward"
+                batteryLevel < 10 -> "Paused — battery too low"
+                else -> null
+            }
         )
 
         if (isCameraBlocked) {
@@ -164,8 +171,12 @@ fun DetectionScreen(
 private fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel) {
     val t = rememberInfiniteTransition(label = "bracket")
     val breathe by t.animateFloat(0f, 1f, infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b")
-    val labelPaint = remember {
-        android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 34f; typeface = android.graphics.Typeface.DEFAULT_BOLD; isAntiAlias = true }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val textPx = with(density) { 12.sp.toPx() }          // honours the user's font scale
+    val padHPx = with(density) { 7.dp.toPx() }; val padVPx = with(density) { 4.dp.toPx() }
+    val strokePx = with(density) { 2.dp.toPx() }; val strokeHiPx = with(density) { 3.dp.toPx() }
+    val labelPaint = remember(textPx) {
+        android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = textPx; typeface = android.graphics.Typeface.DEFAULT_BOLD; isAntiAlias = true }
     }
     val bgPaint = remember { android.graphics.Paint().apply { isAntiAlias = true } }
 
@@ -180,8 +191,8 @@ private fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel
             val l = box.left * size.width; val tp = box.top * size.height
             val w = (box.right - box.left) * size.width; val h = (box.bottom - box.top) * size.height
             if (w <= 2f || h <= 2f) continue
-            val stroke = if (d.alertLevel == AlertLevel.HIGH) 7f else 5f
-            val arm = (minOf(w, h) * 0.22f).coerceIn(18f, 64f)
+            val stroke = if (d.alertLevel == AlertLevel.HIGH) strokeHiPx else strokePx
+            val arm = (minOf(w, h) * 0.22f).coerceIn(6f * strokePx, 24f * strokePx)
             // soft fill
             drawRoundRect(color.copy(alpha = if (d.alertLevel == AlertLevel.NONE) 0.06f else 0.14f), Offset(l, tp), Size(w, h), CornerRadius(14f, 14f))
             // corner brackets
@@ -200,13 +211,18 @@ private fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel
             drawContext.canvas.nativeCanvas.apply {
                 val dist = if (d.hasDistanceEstimate) String.format(Locale.US, " %.1f m", d.distance) else ""
                 val label = d.className.uppercase() + dist + (if (d.isApproaching) "  ▲" else "")
-                val tw = labelPaint.measureText(label); val th = 34f; val padH = 14f; val padV = 8f
-                val y = (tp - th - padV * 2 - 6f).coerceAtLeast(6f)
+                val fm = labelPaint.fontMetrics
+                val tw = labelPaint.measureText(label); val th = fm.descent - fm.ascent; val padH = padHPx; val padV = padVPx
+                val pillW = tw + padH * 2; val pillH = th + padV * 2
+                // Keep the pill on screen: clamp x to the canvas, prefer above the box, else just inside it.
+                val x = l.coerceIn(0f, (size.width - pillW).coerceAtLeast(0f))
+                val yAbove = tp - pillH - padV
+                val y = (if (yAbove >= padV) yAbove else tp + padV).coerceIn(0f, (size.height - pillH).coerceAtLeast(0f))
                 val argb = color.toArgb()
                 bgPaint.color = android.graphics.Color.argb(215, (argb shr 16) and 0xFF, (argb shr 8) and 0xFF, argb and 0xFF)
-                drawRoundRect(l, y, l + tw + padH * 2, y + th + padV * 2, 16f, 16f, bgPaint)
+                drawRoundRect(x, y, x + pillW, y + pillH, pillH / 2f, pillH / 2f, bgPaint)
                 labelPaint.color = if (d.alertLevel == AlertLevel.MEDIUM) android.graphics.Color.rgb(20, 16, 4) else android.graphics.Color.WHITE
-                drawText(label, l + padH, y + th + padV - 4f, labelPaint)
+                drawText(label, x + padH, y + padV - fm.ascent, labelPaint)
             }
         }
     }
@@ -264,20 +280,23 @@ private fun ControlDock(
     onVoiceToggle: (Boolean) -> Unit,
     onTestAlert: () -> Unit = {},
     onShowHistory: () -> Unit,
-    onShowAbout: () -> Unit = {}
+    onShowAbout: () -> Unit = {},
+    /** When non-null the pipeline is not watching (blocked / starting / off-angle); shown instead of a detection summary. */
+    pausedReason: String? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
     val nearest = detections.filter { it.hasDistanceEstimate }.minByOrNull { it.distance }
-    val nearestColor = nearest?.let { NB.alert(it.alertLevel) } ?: NB.Safe
+    // Never imply "safe": no detections means exactly that — nothing the model recognised.
+    val nearestColor = nearest?.let { NB.alert(it.alertLevel) } ?: NB.Sub
 
     GlassCard(modifier = modifier.fillMaxWidth(), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
         // Row 1 — what's ahead + proximity meter
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                SectionLabel(if (nearest == null) "Path" else "Nearest")
+                SectionLabel(if (pausedReason != null) "Status" else if (nearest == null) "Watching" else "Nearest")
                 Text(
-                    if (nearest == null) "Clear ahead" else "${nearest.className.replaceFirstChar { it.uppercase() }} · ${String.format(Locale.US, "%.1f", nearest.distance)} m",
-                    color = if (nearest == null) NB.Ink else nearestColor, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                    if (pausedReason != null) pausedReason else if (nearest == null) "No objects detected" else "${nearest.className.replaceFirstChar { it.uppercase() }} · ${String.format(Locale.US, "%.1f", nearest.distance)} m",
+                    color = if (pausedReason != null) NB.Watch else if (nearest == null) NB.Ink else nearestColor, fontSize = 20.sp, fontWeight = FontWeight.Bold
                 )
             }
             ProximityMeter(distance = nearest?.distance, threshold = distanceThreshold, color = nearestColor)
@@ -367,7 +386,7 @@ private fun ProximityMeter(distance: Float?, threshold: Float, color: Color) {
             drawLine(Color.White.copy(alpha = 0.6f), Offset(size.width * 0.5f, 0f), Offset(size.width * 0.5f, size.height), 2f)
         }
         Spacer(Modifier.height(4.dp))
-        Text(if (distance == null) "no objects" else "alert at ${String.format(Locale.US, "%.1f", threshold)} m", color = NB.Dim, fontSize = 10.sp)
+        Text(if (distance == null) "nothing recognised" else "alert at ${String.format(Locale.US, "%.1f", threshold)} m", color = NB.Dim, fontSize = 10.sp)
     }
 }
 
@@ -502,7 +521,10 @@ fun CameraPreview(
     AndroidView(modifier = modifier, factory = { ctx ->
         val previewView = PreviewView(ctx)
         val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-        cameraProviderFuture.addListener({
+        // Bind after layout so the PreviewView can hand us its ViewPort: Preview and
+        // ImageAnalysis then share one field of view (same crop), which is what makes the
+        // normalized detection boxes line up with the FILL_CENTER preview on tall screens.
+        cameraProviderFuture.addListener({ previewView.post {
             val cameraProvider = cameraProviderFuture.get()
             val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
             val imageAnalysis = ImageAnalysis.Builder()
@@ -512,10 +534,15 @@ fun CameraPreview(
                 .also { it.setAnalyzer(cameraExecutor) { imageProxy -> onFrameAnalyzed(imageProxy) } }
             try {
                 cameraProvider.unbindAll()
-                val cam = cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
+                val viewPort = previewView.viewPort ?: androidx.camera.core.ViewPort.Builder(
+                    android.util.Rational(previewView.width.coerceAtLeast(1), previewView.height.coerceAtLeast(1)),
+                    previewView.display?.rotation ?: android.view.Surface.ROTATION_0
+                ).build()
+                val group = androidx.camera.core.UseCaseGroup.Builder().setViewPort(viewPort).addUseCase(preview).addUseCase(imageAnalysis).build()
+                val cam = cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, group)
                 onCameraBound(cam.cameraInfo)
             } catch (e: Exception) { e.printStackTrace() }
-        }, ContextCompat.getMainExecutor(ctx))
+        } }, ContextCompat.getMainExecutor(ctx))
         previewView
     })
 }

@@ -2,6 +2,12 @@
 
 ## 1.0 (unreleased) — 2026-09-06 "look up" pass
 
+### Review fixes (2026-09-06 evening, from Astra's source review)
+- **Boxes line up with the preview.** Preview and ImageAnalysis now share one `ViewPort` (`UseCaseGroup`), and the frame path honours the analysis `cropRect` (`FrameGeometry` crop-aware overload), so normalized boxes map 1:1 onto the FILL_CENTER preview on tall screens. Previously the overlay assumed the analysis frame and the preview had the same field of view.
+- **Honest status wording.** The dock says *No objects detected* (grey) instead of *Clear ahead* (green), and shows *Starting… / Camera blocked / Point phone forward / Paused — battery too low* whenever the pipeline is not actually watching.
+- **Readable labels.** Label pills are 12 sp (honour font scaling), density-based padding/strokes, and are clamped inside the canvas (right-edge objects no longer clip their name/distance).
+- **HIGH re-alert mute only starts when the cue fires.** A HIGH seen at a bad camera angle no longer consumes the 2 s mute window, so the first audible alert after correcting the angle is immediate (`ml/HighReAlertMute.kt`, regression-tested).
+
 ### Alerts & battery (2026-09-06, iteration 2)
 - **Directional alert cues.** The notification ringtone is gone. NoBonk now synthesises a short rising chirp (HIGH = urgent triple, MEDIUM = softer double; LOW stays haptic-only) and pans it toward the hazard: something on your left is heard on your left (real spatial cue with earbuds, graceful mono on a speaker). Constant-power pan law, 20 % centre dead-zone, never clips (`ml/AlertCue.kt`, unit-tested). Plays on the accessibility-assistance audio usage so it sits over music without hijacking the alarm stream.
 - **Sound / haptics toggles** in the settings drawer, and all settings (alert distance, model, detect scope, cues) now persist across launches.

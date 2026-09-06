@@ -115,8 +115,7 @@ class DetectionEngine(private val appContext: Context) {
     // Per-track HIGH re-alert mute (Round-2): after a HIGH fires the loud LOOK-UP + sound
     // on a track, don't re-blast the same track for MUTE_MS — the box stays red and
     // haptics continue, but we stop hammering the user for one persistent hazard.
-    private val lastHighByTrack = mutableMapOf<String, Long>()
-    private val highReAlertMuteMs = 2000L
+    private val highMute = HighReAlertMute(muteMs = 2_000L)
 
     // Alert-level hysteresis (fixes ML-11 flicker): escalate immediately, but hold the
     // level for LINGER_MS before de-escalating so overlay/sound/HUD don't strobe when an
@@ -220,13 +219,15 @@ class DetectionEngine(private val appContext: Context) {
     }
 
     /** Rotate to upright and downscale so the longest edge == [inputSize] — one draw, reusable output. */
-    private fun toUprightWork(raw: Bitmap, rotationDeg: Int): Bitmap {
-        val g = FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize)
+    private fun toUprightWork(raw: Bitmap, rotationDeg: Int, crop: android.graphics.Rect? = null): Bitmap {
+        val g = if (crop == null || crop.isEmpty) FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize)
+                else FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize, crop.left, crop.top, crop.width(), crop.height())
         var out = workBitmap
         if (out == null || out.width != g.outW || out.height != g.outH) {
             out?.recycle(); out = Bitmap.createBitmap(g.outW, g.outH, Bitmap.Config.ARGB_8888); workBitmap = out
         }
         workMatrix.reset()
+        workMatrix.postTranslate(-g.cropLeft, -g.cropTop)   // ViewPort crop → origin
         workMatrix.postRotate(rotationDeg.toFloat())
         workMatrix.postTranslate(g.shiftX, g.shiftY)
         workMatrix.postScale(g.scale, g.scale)
@@ -251,7 +252,7 @@ class DetectionEngine(private val appContext: Context) {
         val detector = objectDetector
         val work = try {
             val raw = proxyToRawBitmap(imageProxy)
-            toUprightWork(raw, imageProxy.imageInfo.rotationDegrees)
+            toUprightWork(raw, imageProxy.imageInfo.rotationDegrees, imageProxy.cropRect)
         } finally {
             imageProxy.close()
         }
@@ -325,15 +326,11 @@ class DetectionEngine(private val appContext: Context) {
         // are unreliable, so we suppress the loud LOOK-UP + sound and instead surface a
         // "point phone forward" reliability cue. When the same track already fired HIGH
         // within the mute window, we also hold the loud re-alert.
-        var mutedRepeat = false
-        if (displayAlert == AlertLevel.HIGH) {
-            val trackId = topDet?.let { approachTracker.trackIdFor(it.id) }
-            if (trackId != null) {
-                val last = lastHighByTrack[trackId] ?: 0L
-                if (now - last < highReAlertMuteMs) mutedRepeat = true else lastHighByTrack[trackId] = now
-            }
-            lastHighByTrack.entries.removeAll { now - it.value > 10_000L }
-        }
+        // The mute window is consumed only when the cue actually fires (a HIGH seen at a
+        // bad angle must not delay the first audible alert after the angle is corrected).
+        val fireHigh = displayAlert == AlertLevel.HIGH &&
+            highMute.shouldEmit(topDet?.let { approachTracker.trackIdFor(it.id) }, now, canEmit = !angleBad)
+        val mutedRepeat = displayAlert == AlertLevel.HIGH && !angleBad && !fireHigh
         // Distinguish "don't re-PLAY the sound" from "hide the visual warning" (HIGH-1).
         // A persistent hazard re-fires HIGH every frame; after the first alert we mute the
         // re-played SOUND on that track for the mute window — but the red LOOK-UP visual
@@ -557,7 +554,7 @@ class DetectionEngine(private val appContext: Context) {
         boxSmoother.reset()
         stopSensors()
         sensorMonitor = null
-        lastHighByTrack.clear()
+        highMute.reset()
     }
 
     companion object { private const val TAG = "DetectionEngine" }
