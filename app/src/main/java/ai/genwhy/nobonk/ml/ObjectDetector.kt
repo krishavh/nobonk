@@ -64,6 +64,8 @@ class ObjectDetector(
 
     companion object {
         private const val TAG = "ObjectDetector"
+        /** Timed inferences per execution provider at load (after one warm-up). */
+        private const val BENCH_RUNS = 3
 
         /** COCO class ids we actually map to a display name — scanning only these
          *  (instead of all 80) shortens the per-box post-processing loop ~10× (PERF-P04). */
@@ -92,11 +94,13 @@ class ObjectDetector(
         //   1. NNAPI    — device accelerator (NPU/GPU/DSP), best-effort.
         //   2. XNNPACK  — optimized CPU kernels (reliable everywhere on ARM).
         //   3. CPU      — plain reference kernels (always works).
-        var built: OrtSession? = null
-        var builtEp = "CPU"
-        var resolvedInput = requestedInputSize
-
-        for (ep in listOf("NNAPI", "XNNPACK", "CPU")) {
+        // Build every provider that can run the graph, time each one for a few
+        // inferences, and keep the fastest (XNNPACK unless an accelerator clearly wins —
+        // see EpChooser). Losers are closed immediately.
+        data class Candidate(val session: OrtSession, val dim: Int, val medianMs: Double)
+        val candidates = LinkedHashMap<String, Candidate>()
+        val eps = if (android.os.Build.VERSION.SDK_INT >= 35) listOf("XNNPACK", "NNAPI", "CPU") else listOf("NNAPI", "XNNPACK", "CPU")
+        for (ep in eps) {
             try {
                 val opts = OrtSession.SessionOptions().apply {
                     setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
@@ -111,16 +115,26 @@ class ObjectDetector(
                 val candidate = ortEnvironment.createSession(modelBytes, opts)
                 val dim = readInputSize(candidate, modelName, requestedInputSize)
                 warmUp(candidate, dim)   // throws if this EP can't actually run the graph
-                built = candidate
-                builtEp = ep
-                resolvedInput = dim
-                Dbg.i(TAG, "Execution provider verified: $ep for $modelName")
-                break
+                val samples = ArrayList<Double>(BENCH_RUNS)
+                repeat(BENCH_RUNS) {
+                    val t0 = System.nanoTime(); warmUp(candidate, dim); samples += (System.nanoTime() - t0) / 1e6
+                }
+                val med = EpChooser.median(samples)
+                Dbg.i(TAG, "EP '$ep' runs $modelName @ ${dim}px: median ${"%.1f".format(med)} ms")
+                // CPU is the floor; keep it only when nothing better built.
+                if (ep == "CPU" && candidates.isNotEmpty()) candidate.close() else candidates[ep] = Candidate(candidate, dim, med)
             } catch (e: Exception) {
-                Dbg.w(TAG, "EP '$ep' unavailable — trying next. Reason: ${e.message}")
+                Dbg.w(TAG, "EP '$ep' unavailable — skipping. Reason: ${e.message}")
             }
         }
-
+        val winner = EpChooser.pick(candidates.mapValues { it.value.medianMs })
+        var built: OrtSession? = null
+        var builtEp = "CPU"
+        var resolvedInput = requestedInputSize
+        for ((ep, c) in candidates) {
+            if (ep == winner) { built = c.session; builtEp = ep; resolvedInput = c.dim } else c.session.close()
+        }
+        if (winner != null) Dbg.i(TAG, "Execution provider chosen by measurement: $winner for $modelName")
         ortSession = built ?: ortEnvironment.createSession(
             modelBytes,
             OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }
@@ -131,7 +145,7 @@ class ObjectDetector(
         pixels = IntArray(inputSize * inputSize)
         floatBuffer = FloatBuffer.allocate(3 * inputSize * inputSize)
 
-        val family = if (skipNms) "YOLO26 (NMS-free)" else "YOLO11"
+        val family = if (skipNms) "YOLO26 end-to-end (NMS-free)" else "YOLO26 raw head + in-app NMS"
         Dbg.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider | HW accel: $isHardwareAccelerated")
     }
 

@@ -17,6 +17,7 @@
 - **About / privacy / licenses** reachable from the settings drawer (was History → About only).
 
 ### Performance
+- **Execution provider chosen by measurement.** Every provider that can run the graph (NNAPI, XNNPACK, CPU) is timed for three inferences at load; the fastest wins, with XNNPACK preferred unless an accelerator is ≥15 % faster (`ml/EpChooser.kt`). On Android 15+ (where NNAPI is deprecated and often slower than XNNPACK on Tensor phones) XNNPACK is tried first. Log line `Execution provider chosen by measurement`.
 - **Zero-allocation frame path.** CameraX RGBA plane → reusable raw bitmap → one Canvas draw (rotate + downscale) into a reusable work bitmap. Three Bitmap allocations per frame removed; steady-state GC churn gone. Pure `FrameGeometry` helper with unit tests.
 - **YOLO26 only, raw head + in-app NMS.** `Fast` (yolo26n, 9 MB) and `Sharp` (yolo26s, default). Measured 1.5× faster than the end-to-end export on CPU and more accelerator-friendly. yolo11s (36 MB, unused by default) and un-bundled picker entries removed. See `docs/MODEL_CHOICE.md`.
 
