@@ -369,6 +369,18 @@ private fun ControlDock(
                 contentAlignment = Alignment.Center
             ) { Text(if (expanded) "▾" else "⚙", color = NB.Sub, fontSize = 18.sp) }
         }
+        // Maker credit — sits beneath the History / settings controls, outside their tap targets.
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "Made by Krishav" },
+            horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(5.dp).clip(NB.PillShape).background(NB.Accent))
+            Spacer(Modifier.width(7.dp))
+            Text("BY", color = NB.Sub, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 2.2.sp)
+            Spacer(Modifier.width(5.dp))
+            Text("KRISHAV", color = NB.Ink, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.6.sp)
+        }
     }
 }
 

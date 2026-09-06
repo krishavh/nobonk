@@ -2,6 +2,8 @@
 
 ## 1.0 (unreleased) — 2026-09-06 "look up" pass
 
+- **Maker credit.** A small "BY KRISHAV" line sits beneath the History/settings controls in the dock, always visible while the app is open (TalkBack: "Made by Krishav").
+
 ### Review fixes (2026-09-06 evening, from Astra's source review)
 - **Boxes line up with the preview.** Preview and ImageAnalysis now share one `ViewPort` (`UseCaseGroup`), and the frame path honours the analysis `cropRect` (`FrameGeometry` crop-aware overload), so normalized boxes map 1:1 onto the FILL_CENTER preview on tall screens. Previously the overlay assumed the analysis frame and the preview had the same field of view.
 - **Honest status wording.** The dock says *No objects detected* (grey) instead of *Clear ahead* (green), and shows *Starting… / Camera blocked / Point phone forward / Paused — battery too low* whenever the pipeline is not actually watching.
