@@ -7,7 +7,7 @@
 
 ## TL;DR — what you need to know
 
-NoBonk is a genuinely well-built app for an 8th grader: clean architecture (Compose → ViewModel → Service → ML → Data), **fully offline** (no `INTERNET` permission — verified), no ads/trackers, `allowBackup=false`. The engineering is real.
+NoBonk is a genuinely well-built app for a student who started it in 8th grade (now 9th): clean architecture (Compose → ViewModel → Service → ML → Data), **fully offline** (no `INTERNET` permission — verified), no ads/trackers, `allowBackup=false`. The engineering is real.
 
 **But it is not release-ready, and — more importantly — its core safety feature largely doesn't fire.** Three themes dominate:
 

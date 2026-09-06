@@ -67,8 +67,8 @@ review risk on a safety-themed app.
 >   stays on your phone. Clear your history anytime.
 >
 > **Made by a student**
-> NoBonk was built by Krishav, an 8th-grade student, for the 2026 Alameda County
-> Science & Engineering Fair. It's a real, working prototype — and an honest one.
+> NoBonk was built by Krishav, a 9th-grade student who started it in 8th grade for
+> the 2026 Alameda County Science & Engineering Fair. It's a real, working prototype — and an honest one.
 >
 > **⚠️ Important — please read**
 > NoBonk is a student-built assistive prototype, **not a certified safety

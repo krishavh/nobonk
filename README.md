@@ -10,7 +10,7 @@ NoBonk is an Android app that taps you on the shoulder before you walk into some
 ![Language](https://img.shields.io/badge/kotlin-100%25-purple)
 ![Awards](https://img.shields.io/badge/STEM4All-1st%20Place%20%2B%20IEEE%20Award-gold)
 
-Built by **Krishav**, an 8th grader, for the 2026 Alameda County Science & Engineering Fair (Project MS-SOFT-241).
+Built by **Krishav**, now a 9th grader, who started NoBonk as an 8th grader for the 2026 Alameda County Science & Engineering Fair (Project MS-SOFT-241) and is continuing it for the 2026 Congressional App Challenge.
 
 > **Don't be a smombie.** NoBonk's on-device AI keeps an eye on the path ahead so a glance at your phone doesn't end in a collision.
 
