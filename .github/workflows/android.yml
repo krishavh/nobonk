@@ -17,7 +17,7 @@ jobs:
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
       - name: Release AAB (unsigned) + 16 KB alignment check
         run: |
-          ./gradlew --no-daemon bundleRelease
+          ./gradlew --no-daemon bundleRelease -Pbundle
           bash scripts/check_16kb_alignment.sh
       - uses: actions/upload-artifact@v4
         with:
