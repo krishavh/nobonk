@@ -18,6 +18,10 @@ class FrameCadenceTest {
         assertEquals(FrameCadence.BASE_MS * 2, FrameCadence.intervalMs(AlertLevel.NONE, false, 3_000, 80))
         assertEquals(FrameCadence.BASE_MS * 3, FrameCadence.intervalMs(AlertLevel.NONE, false, 12_000, 80))
     }
+    @Test fun blockedLensIdlesAtHalfSecondRegardless() {
+        assertEquals(FrameCadence.BLOCKED_MS, FrameCadence.intervalMs(AlertLevel.NONE, false, 0, 100, cameraBlocked = true))
+        assertEquals(FrameCadence.BLOCKED_MS, FrameCadence.intervalMs(AlertLevel.HIGH, true, 0, 5, cameraBlocked = true))
+    }
     @Test fun lowBatteryStretchesIdleOnly() {
         val idle = FrameCadence.intervalMs(AlertLevel.NONE, false, 20_000, 10)
         assertEquals((FrameCadence.BASE_MS * 3 * FrameCadence.LOW_BATTERY_FACTOR).toLong(), idle)

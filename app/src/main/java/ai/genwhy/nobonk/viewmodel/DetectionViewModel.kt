@@ -153,6 +153,7 @@ class DetectionViewModel : ViewModel() {
     @Volatile private var cadenceAlert = AlertLevel.NONE
     @Volatile private var cadenceHadDetections = false
     @Volatile private var lastSeenAt = 0L
+    @Volatile private var cadenceBlocked = false
     private val _processingGate = AtomicBoolean(false)
 
     companion object {
@@ -357,7 +358,7 @@ class DetectionViewModel : ViewModel() {
     fun processFrame(imageProxy: ImageProxy) {
         if (isInitializing || batteryLevel < 10) { imageProxy.close(); return }
         val now = System.currentTimeMillis()
-        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryLevel)
+        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryLevel, cadenceBlocked)
         if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!_processingGate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
@@ -369,6 +370,7 @@ class DetectionViewModel : ViewModel() {
                 val result = eng.process(imageProxy, cfg)
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()
+                cadenceBlocked = result.cameraBlocked
                 if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
 
                 for (d in result.detections) if (d.alertLevel != AlertLevel.NONE) logEvent(d)

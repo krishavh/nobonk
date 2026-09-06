@@ -24,19 +24,24 @@ object FrameCadence {
     /** Battery threshold below which every interval is stretched by [LOW_BATTERY_FACTOR]. */
     const val LOW_BATTERY_PCT = 20
     const val LOW_BATTERY_FACTOR = 1.5f
+    /** Interval while the lens is covered (pocket, hand, face-down): just watch for light to return. */
+    const val BLOCKED_MS = 500L
 
     /**
      * @param lastAlert         alert level of the previous processed frame
      * @param lastHadDetections whether the previous processed frame contained any object
      * @param idleMs            time since the last frame that contained an object
      * @param batteryPct        current battery percentage (0..100)
+     * @param cameraBlocked     previous frame was judged blocked (dark AND flat)
      */
     fun intervalMs(
         lastAlert: AlertLevel,
         lastHadDetections: Boolean,
         idleMs: Long,
-        batteryPct: Int
+        batteryPct: Int,
+        cameraBlocked: Boolean = false
     ): Long {
+        if (cameraBlocked) return BLOCKED_MS
         var ms = when {
             lastAlert == AlertLevel.HIGH || lastAlert == AlertLevel.MEDIUM -> BASE_MS
             lastHadDetections -> BASE_MS
