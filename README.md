@@ -83,6 +83,18 @@ yolo export model=yolo26s.pt format=onnx imgsz=416 opset=17 simplify=True && mv 
 
 The exported graph outputs `[1, 84, 3549]` (cx, cy, w, h + 80 class scores per candidate); `ml/Nms.kt` keeps the eight classes NoBonk cares about and suppresses duplicates. Provenance, the AGPL §13 obligations, and why YOLO26 over the alternatives we evaluated (RF-DETR, D-FINE, YOLOX) are in [`docs/MODEL.md`](docs/MODEL.md) and [`docs/MODEL_CHOICE.md`](docs/MODEL_CHOICE.md).
 
+## Try it on your phone (sideload)
+
+A **test-signed** arm64 build of the current `main` is published for family testing at
+`https://projects.oipie.com/apps/nobonk-arm64-testsigned.apk` (access-gated). It is the release build signed with a debug key so it installs directly:
+
+1. Download the APK on the phone, open it, and allow "install unknown apps" for your browser when asked.
+2. Grant **Camera**; grant **Notifications** and **Display over other apps** when you try *Run in background*.
+3. Open ⚙ → **Cues** and tap **▶ Test** to feel/hear what an alert is like before you walk.
+4. Watch the small `N fps · M ms` line under the status pill; those two numbers are what we want reported per phone.
+
+Uninstall this test build before installing the Play version: they carry different signatures. Play builds are signed by the account holder from the AAB that CI produces on every push to `main`.
+
 ## Building it yourself
 
 1. Install [Android Studio](https://developer.android.com/studio).
