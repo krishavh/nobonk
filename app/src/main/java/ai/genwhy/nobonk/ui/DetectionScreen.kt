@@ -527,7 +527,7 @@ fun CameraBlockedOverlay() {
     }
 }
 
-/** NoBonk wordmark: an eye-like mark plus the name. Drawn, not an asset, so it scales anywhere. */
+/** NoBonk wordmark: the approved NoBonk icon (R.drawable.nobonk_brand, same image as the launcher/store icon) plus the name. Formerly a drawn eye-like mark; kept as one composable so it scales anywhere. */
 @Composable
 fun Wordmark(size: Int = 64) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {

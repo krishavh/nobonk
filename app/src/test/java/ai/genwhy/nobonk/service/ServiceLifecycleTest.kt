@@ -59,6 +59,20 @@ class ServiceLifecycleTest {
             assertEquals(Phase.STOPPED, l.phase); assertFalse(l.mayBindCamera()); assertFalse(l.mayPostAlerts())
         }
     }
+    @Test fun stopOnlyInstanceIsNotAUserStopOfASession() {
+        // In-app Stop with no background service running: Android creates a transient service
+        // that only receives ACTION_STOP. It must not be remembered as "the user stopped a session".
+        val l = ServiceLifecycle(); l.stop(StopReason.USER)
+        assertFalse(l.everStarted); assertFalse(l.stoppedByUser); assertTrue(l.isStopped)
+    }
+    @Test fun userStopDuringModelLoadOrWhileRunningIsAUserStop() {
+        val loading = ServiceLifecycle(); loading.onStartRequested(); loading.stop(StopReason.USER)
+        assertTrue(loading.stoppedByUser)                          // START queued/in flight, then Stop
+        val run = running(); run.stop(StopReason.USER); assertTrue(run.stoppedByUser)
+    }
+    @Test fun handoffStopIsNeverAUserStop() {
+        val l = running(); l.stop(StopReason.HANDOFF); assertFalse(l.stoppedByUser)
+    }
     @Test fun stopIsIdempotentAndFirstReasonWins() {
         val l = running(); l.stop(StopReason.USER); l.stop(StopReason.HANDOFF)
         assertEquals(StopReason.USER, l.stopReason)

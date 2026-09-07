@@ -115,6 +115,7 @@ class DetectionViewModel : ViewModel() {
     fun startScanning() {
         if (cleared.get()) return
         cameraError = null
+        ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = false   // explicit new session: obsolete stop memory cleared
         session.start(); engine?.muted = false; engine?.startSensors(); scanningEnabled = true
         if (locationTaggingEnabled) appContext?.let { enableLocationTagging(it) }
         if (!modelReady && !isInitializing) appContext?.let { requestModel(it, accuracyMode) }

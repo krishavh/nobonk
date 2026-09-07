@@ -26,6 +26,7 @@ class ServiceLifecycle {
     @Synchronized fun onStartRequested(): Boolean {
         if (isStopped) return false
         if (phase == Phase.IDLE) phase = Phase.LOADING_MODEL
+        startedBeforeStop = true
         return true
     }
     /** Model finished loading. False = a Stop arrived meanwhile: release the engine, do NOT bind the camera. */
@@ -54,5 +55,15 @@ class ServiceLifecycle {
     @Synchronized fun sticky(): Boolean = !isStopped
 
     /** The user pressed Stop (app button or notification) — the activity must not silently resume scanning. */
-    val stoppedByUser: Boolean get() = synchronized(this) { stopReason == StopReason.USER }
+    /** True once a start was actually accepted on this instance (a stop-only instance never leaves IDLE). */
+    val everStarted: Boolean get() = synchronized(this) { phase != Phase.IDLE && (stopReason == null || startedBeforeStop) }
+    private var startedBeforeStop = false
+
+    /**
+     * The user pressed Stop on a session that had actually started (model loading, camera binding
+     * or running). A Stop delivered to a transient instance that only ever received ACTION_STOP
+     * (nothing was running) is NOT a user stop of a session and must not make the app resume in
+     * the stopped state later.
+     */
+    val stoppedByUser: Boolean get() = synchronized(this) { stopReason == StopReason.USER && startedBeforeStop }
 }
