@@ -15,7 +15,7 @@ Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision Pe
 | Cues | Visual indication, optional sound and haptics, with Earlier/Balanced/Closer sensitivity. These use apparent image size, not metres. |
 | Quick access | Siri/App Shortcuts plus supported Action button, Control Center and Lock Screen controls open setup. Acknowledgment and explicit Start still apply. |
 
-**0.2.1 (build 3)** was installed and launched on the owner’s HRD iPhone on September 7, 2026. This is a development installation, not a public App Store or TestFlight release. The Android closed-test link does not install the iPhone app.
+**0.2.3 (build 5)** was installed and launched on a registered iPhone 16 Plus on September 7, 2026. HRD received0.2.1 earlier; the0.2.3 update is ready but awaits reconnection. This is a development installation, not a public App Store or TestFlight release. The Android closed-test link does not install the iPhone app.
 
 ## Start deliberately; stop predictably
 
@@ -56,9 +56,9 @@ Installing on an actual iPhone requires the owner's signing team and Developer M
 ## Validation on September 7, 2026
 
 - **34 Swift core tests pass**, covering the safety gates, generation invalidation, detector preprocessing/decoding, native session ownership, pacing, preview geometry and deterministic audio cancellation.
-- Three hosted quick-access tests pass. Six real WebKit tests pass with zero skips, including actual navigation rejection, a permission callback forwarded to production denial, draft-address preservation and prevention of script-driven playback after persistent suspension. See [WebKit tests](WebKitTests/README.md).
-- Generic device and simulator builds pass. The signed 0.2.1 Release build passes strict signature verification and is installed and launched on HRD. Earlier previews were installed on another development iPhone. Simulator checks cover layout and permissions, not detection effectiveness or haptic feel.
-- An initial synthetic Fast probe on iPhone 16 Plus passed CPU/Core ML numerical smoke checks. A later physical rerun exited its XCTest host before completion and is under investigation; do not treat that rerun or the sustained probe as passed. [Device benchmark instructions and limitations](DeviceBenchmarks/README.md) keep synthetic timings separate from real-camera accuracy, battery life and hardware placement.
+- Three hosted quick-access tests pass. Nine real WebKit tests pass with zero skips, including actual navigation rejection, a permission callback forwarded to production denial, lazy browser creation, draft-address preservation and prevention of script-driven playback after persistent suspension. See [WebKit tests](WebKitTests/README.md).
+- Generic device and simulator builds pass. The signed0.2.3 Release build passes strict signature verification and is installed and launched on a registered iPhone16Plus. HRD still has0.2.1 pending reconnection. Simulator checks cover layout and permissions, including iPhoneSE/iOS17 at the largest accessibility text size with a software keyboard. Preview and Start/Stop remain pinned; status and browser errors can scroll without clipping. These are not detection-effectiveness or haptic-feel results.
+- An initial synthetic Fast probe on iPhone 16 Plus passed CPU/Core ML numerical smoke checks. Later physical reruns exited before completion, including a normal app launch outside XCTest, and are under investigation; do not treat that rerun or the sustained probe as passed. [Device benchmark instructions and limitations](DeviceBenchmarks/README.md) keep synthetic timings separate from real-camera accuracy, battery life and hardware placement.
 - Real-world missed detections, low light, full-screen video, supported web chat, audio routes, text scaling, heat and older physical phones still need validation. Device installation is not evidence that all these cases work.
 
 ## Why foreground-only

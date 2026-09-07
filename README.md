@@ -80,7 +80,7 @@ Sound and voice are **stereo-panned toward the hazard** (constant-power pan law,
 ## Privacy by design
 
 - **No video or photos are ever recorded, stored, or transmitted.** Camera frames are processed in memory and immediately discarded — nothing from the camera is ever written to disk or sent anywhere.
-- **Everything runs on-device.** Camera analysis has no `INTERNET` permission and works offline. Optional system text-to-speech and Google Play updates are handled by those separate services under their policies. Camera frames and history are not sent to them.
+- **Android camera analysis runs on-device.** The Android app has no `INTERNET` permission and camera analysis works offline. Optional system text-to-speech and Google Play updates are handled by those separate services under their policies. Camera frames and history are not sent to them. The separate iPhone preview also analyzes camera frames locally, while websites explicitly opened in Browse & scan connect to the internet under their own policies.
 - **Foreground detection-event history is encrypted locally**, kept only in private storage and never uploaded. The app also stores settings, the safety acknowledgment and update/execution-provider preferences. You can clear it at any time from within the app.
 - **Location is optional, approximate, and off by default.** If — and only if — you turn it on, NoBonk tags those history events with your *coarse* (approximate) location so the history screen can map roughly where your close calls happen. It stays *on your phone only*. Deny or leave it off and everything else still works.
 - **`allowBackup` is disabled** (and backup/transfer rules explicitly exclude the history file) so nothing is swept into cloud backups.
