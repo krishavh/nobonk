@@ -1,6 +1,7 @@
 import AVFoundation
 import Vision
 import SwiftUI
+import OSLog
 
 
 // Capture and Vision work stay on one serial queue; UI never receives image data.
@@ -19,14 +20,22 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     let generation = CaptureGeneration()
     private var activeToken: UInt64 = 0
     private var imageOrientation: CGImagePropertyOrientation = .up
+    private var firstResultPending = false
+    private var startedAt = 0.0
+    private let diagnostics = Logger(subsystem: "ai.genwhy.nobonk", category: "CameraAccess")
     var onBoxes: ((UInt64, [PersonBox], Double, Double, Double) -> Void)?
     var onState: ((UInt64, Bool, String) -> Void)?
     func start(token: UInt64) {
         queue.async { [self] in
             guard generation.accepts(token) else { return }
             activeToken = token
+            startedAt = ProcessInfo.processInfo.systemUptime
+            firstResultPending = true
             do {
                 if !configured { try configure() }
+                #if DEBUG
+                diagnostics.notice("Camera capability: multitasking supported=\(self.session.isMultitaskingCameraAccessSupported), enabled=\(self.session.isMultitaskingCameraAccessEnabled)")
+                #endif
                 guard generation.accepts(token) else { return }
                 session.startRunning()
                 guard generation.accepts(token) else { session.stopRunning(); return }
@@ -36,6 +45,9 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     }
     func stop() {
         generation.stop()
+        #if DEBUG
+        diagnostics.notice("Scan stopped; pending results invalidated")
+        #endif
         queue.async { [self] in
             if session.isRunning { session.stopRunning() }
             cadence.reset()
@@ -97,6 +109,13 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             let width = Double(CVPixelBufferGetWidth(buffer)), height = Double(CVPixelBufferGetHeight(buffer))
             let aspect = imageOrientation == .up ? width / height : height / width
             if generation.accepts(token) {
+                #if DEBUG
+                if firstResultPending {
+                    firstResultPending = false
+                    let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+                    diagnostics.notice("First analyzed frame after Start: \(elapsed, format: .fixed(precision: 3)) seconds")
+                }
+                #endif
                 onBoxes?(token, boxes, aspect, cadence.averageDuration,
                          cadence.interval(pressure: pressure, lowPower: lowPower))
             }
@@ -143,7 +162,12 @@ final class CameraModel: ObservableObject {
             Task { @MainActor in
                 guard let self, self.engine.generation.accepts(token), self.wanted else { return }
                 self.starting = false
-                if running { self.running = true; self.status = status }
+                if running {
+                    self.running = true; self.status = status
+                    // Avoid auto-lock silently ending a deliberately started scan.
+                    // Explicit locking, leaving the app and Stop still end capture.
+                    UIApplication.shared.isIdleTimerDisabled = true
+                }
                 else { self.stop(message: status) } // failed start must release the retry latch
             }
         }
@@ -186,6 +210,7 @@ final class CameraModel: ObservableObject {
         } catch { /* Visual and haptic cues remain available if audio cannot start. */ }
     }
     func stop(message: String = "Paused — not scanning") {
+        UIApplication.shared.isIdleTimerDisabled = false
         wanted = false; starting = false; running = false; boxes = []; policy.reset(); alertUntil = .distantPast
         audio?.stop()
         analysisMilliseconds = 0; analysisRate = 0

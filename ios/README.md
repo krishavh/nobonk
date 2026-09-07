@@ -11,6 +11,8 @@ Native SwiftUI / AVFoundation / Apple Vision starting point, built locally on th
 - A cue when a person occupies the selected central portion of the image for three consecutive analyzed frames. Three-second cooldown. This is image size, **not a calibrated distance or collision prediction**.
 - Generation tokens reject late camera callbacks after Stop or a new session; failed starts release the retry latch. The owned audio cue also stops immediately when scanning or sound is disabled. Camera stops on inactive/background transitions and interruptions. Returning requires the reminder after backgrounding; scanning is always started explicitly. Permission denial has a Settings action. Permission callbacks cannot silently start capture.
 - No frame recording, history, location, microphone, photo-library, telemetry or background modes. Only the notice version is persisted locally. Required-reason API declarations cover local preferences and elapsed-time cooldowns.
+- App Shortcuts and an iOS 18+ Control widget open the setup screen after device authentication. They preserve the acknowledgment and explicit Start; see [Quick access](QUICK-ACCESS.md).
+- A deliberately started scan keeps the screen awake. Stop, leaving the app, locking the phone or a capture interruption ends scanning and restores ordinary auto-lock behavior. Debug builds log local capability and first-frame timing without logging camera images.
 
 This prototype is not Android feature parity and is not ready for App Store/TestFlight distribution. It does **not** detect cars, pets, walls, potholes or general obstacles. The UI makes that limit explicit. Test on a real iPhone before relying on any behavior; NoBonk is never a safety device.
 
@@ -34,19 +36,22 @@ xcodebuild -project NoBonk.xcodeproj -scheme NoBonk \
   -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
-Installing on an actual iPhone requires choosing the owner's signing team in Xcode and enabling Developer Mode on the device. No signing identity or paid membership is configured by this change. Simulator builds cannot validate real-camera detection or haptics.
+Installing on an actual iPhone requires the owner's signing team and Developer Mode on the device. A development build of the app and Control extension has now signed successfully with the owner's existing identity; no new membership was purchased. The local development IPA is limited to devices in its provisioning profile, and is not a public download or TestFlight release. Signing credentials and the IPA are not committed. Simulator builds cannot validate real-camera detection or haptics.
 
 ## Validation on September 7, 2026
 
 - Fifteen Swift package tests pass: safety gates, reopen behavior, persistent-person cues and cooldown, invalid/peripheral boxes, sensitivity, concurrent generation invalidation, retry, PCM cue payload, preview geometry, adaptive pacing, heat/Low Power Mode, and cold initialization.
+- Three hosted quick-access tests pass: opening preserves acknowledgment state and the reminder, and requires foreground presentation plus device authentication.
 - Full Xcode simulator build succeeds with Xcode 26.6 and the installed iOS 26.5 runtime. The earlier SDK/runtime registration blocker is resolved.
 - iPhone 17 Pro (iOS 26.5) and iPhone SE (iOS 17.0) simulators launch successfully. Visual checks cover the safety acknowledgment, compact/expanded layouts, permission denial with a Settings action, and larger text on the smaller screen. No live detection is simulated or claimed from these screenshots.
-- Property lists pass `plutil -lint`. No installable IPA or TestFlight release has been produced.
+- Property lists pass `plutil -lint`. Generic-device build and strict code-signature verification pass for the app and Control extension. Both paired iPhones were unavailable when checked, so installation, system-control invocation and real-camera performance remain unverified.
 
 
 ## Why foreground-only
 
-Apple documents camera interruption when an ordinary app moves into the background. Multitasking camera access has specific eligibility (supported iPad multitasking, approved entitlement, or applicable VoIP use). NoBonk is not a VoIP app. Do not add fake calling, silent audio, location or Picture in Picture modes to keep the camera alive. Fable independently reviewed this approach.
+Apple documents camera interruption when an ordinary app moves into the background. Multitasking camera access has specific eligibility (supported iPad multitasking, approved entitlement, or applicable VoIP use). NoBonk is not a VoIP app. A visible ordinary Picture in Picture renderer is being investigated separately; displaying a floating view does not itself grant camera access. Do not add fake calling, silent audio or unrelated location modes to keep the process alive.
+
+Isolated [experiments](Experiments/README.md) investigate fresh-frame delivery in ordinary PiP, background CPU execution and consenting nearby phones. These targets are not included in the NoBonk app, and their builds do not establish working background obstacle detection.
 
 - [Camera unavailable in background](https://developer.apple.com/documentation/avfoundation/avcapturesession/interruptionreason/videodevicenotavailableinbackground)
 - [Multitasking-camera support conditions](https://developer.apple.com/documentation/avfoundation/avcapturesession/ismultitaskingcameraaccesssupported)
