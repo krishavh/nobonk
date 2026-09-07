@@ -1,4 +1,5 @@
 import CoreVideo
+import UIKit
 import Darwin
 import Foundation
 import XCTest
@@ -328,4 +329,59 @@ private enum SustainedFastProbe {
         return pixels
     }
     private enum ProbeError: Error { case pixels }
+}
+
+/// Diagnoses hosted-process survival independently of detector/provider execution.
+/// The ordinary production host still initializes; no app behavior is suppressed.
+final class NoInferenceHostHeartbeatTests: XCTestCase {
+    func testHostSurvivesFiveSecondsWithoutInference() async throws {
+        guard ProcessInfo.processInfo.environment["NOBONK_RUN_HOST_HEARTBEAT"] == "1" else {
+            throw XCTSkip("Opt in with TEST_RUNNER_NOBONK_RUN_HOST_HEARTBEAT=1.")
+        }
+        let worker = Task.detached(priority: .userInitiated) { () throws -> Data in
+            var samples: [HeartbeatSample] = []
+            func record(_ sample: HeartbeatSample) {
+                samples.append(sample)
+                if let encoded = try? JSONEncoder().encode(sample) {
+                    print("NOBONK_HOST_HEARTBEAT_PROGRESS \(String(decoding: encoded,as: UTF8.self))")
+                }
+            }
+            record(HeartbeatSample(phase:"worker_start",tick:0))
+            for tick in 0..<5 {
+                try Task.checkCancellation()
+                record(HeartbeatSample(phase:"worker_before_main",tick:tick))
+                let main = await MainActor.run { () -> HeartbeatSample in
+                    let state: String
+                    switch UIApplication.shared.applicationState {
+                    case .active: state = "active"
+                    case .inactive: state = "inactive"
+                    case .background: state = "background"
+                    @unknown default: state = "unknown"
+                    }
+                    return HeartbeatSample(phase:"main_acknowledged",tick:tick,applicationState:state)
+                }
+                record(main)
+                try await Task.sleep(for: .seconds(1))
+            }
+            record(HeartbeatSample(phase:"worker_end",tick:5))
+            return try JSONEncoder().encode(samples)
+        }
+        let data = try await withTaskCancellationHandler(operation: { try await worker.value },onCancel: { worker.cancel() })
+        let attachment = XCTAttachment(data:data,uniformTypeIdentifier:"public.json")
+        attachment.name = "NoBonk-host-heartbeat-no-inference.json"; attachment.lifetime = .keepAlways
+        add(attachment)
+        print("NOBONK_HOST_HEARTBEAT_COMPLETE \(String(decoding:data,as:UTF8.self))")
+        let samples = try JSONDecoder().decode([HeartbeatSample].self,from:data)
+        XCTAssertEqual(samples.filter { $0.phase == "main_acknowledged" }.count,5)
+        XCTAssertGreaterThanOrEqual((samples.last?.uptime ?? 0)-(samples.first?.uptime ?? 0),5)
+    }
+    private struct HeartbeatSample: Codable, Sendable {
+        let phase: String, tick: Int, uptime: Double, dateUTC: String, isMainThread: Bool, applicationState: String?
+        init(phase: String, tick: Int, applicationState: String? = nil) {
+            self.phase = phase; self.tick = tick; self.applicationState = applicationState
+            uptime = ProcessInfo.processInfo.systemUptime
+            dateUTC = ISO8601DateFormatter().string(from:Date())
+            isMainThread = Thread.isMainThread
+        }
+    }
 }
