@@ -58,22 +58,8 @@ class ObjectDetector(
     companion object {
         private const val TAG = "ObjectDetector"
 
-        /** COCO class ids we actually map to a display name — scanning only these
-         *  (instead of all 80) shortens the per-box post-processing loop ~10× (PERF-P04). */
-        private val RELEVANT_CLASS_IDS = intArrayOf(0, 1, 2, 3, 5, 7, 16, 17)
-
         /** COCO id → display name. Only the classes we care about for a walker are named. */
-        fun classNameFor(classId: Int): String = when (classId) {
-            0 -> "person"
-            1 -> "bicycle"
-            2 -> "car"
-            3 -> "motorcycle"
-            5 -> "bus"
-            7 -> "truck"
-            16 -> "dog"
-            17 -> "cat"
-            else -> "object"
-        }
+        fun classNameFor(classId: Int): String = CocoRawHeadDecoder.classNameFor(classId)
     }
 
     init {
@@ -218,29 +204,8 @@ class ObjectDetector(
 
     private fun parseAllObjects(
         output: Array<Array<FloatArray>>, isStandard: Boolean, numClasses: Int, t: Letterbox.Transform
-    ): List<Detection> {
-        val detections = mutableListOf<Detection>()
-        val numBoxes = if (isStandard) output[0][0].size else output[0].size
-        for (i in 0 until numBoxes) {
-            var maxScore = 0f
-            var classId = -1
-            // Only score the handful of COCO classes we display, not all ~80.
-            for (c in RELEVANT_CLASS_IDS) {
-                if (c >= numClasses) continue
-                val score = if (isStandard) output[0][4 + c][i] else output[0][i][4 + c]
-                if (score > maxScore) { maxScore = score; classId = c }
-            }
-            if (maxScore >= confidenceThreshold) {
-                val xc = if (isStandard) output[0][0][i] else output[0][i][0]
-                val yc = if (isStandard) output[0][1][i] else output[0][i][1]
-                val w  = if (isStandard) output[0][2][i] else output[0][i][2]
-                val h  = if (isStandard) output[0][3][i] else output[0][i][3]
-                // center/size in model px → corner px → inverse-map to original normalized
-                val box = Letterbox.boxToOriginalNorm(xc - w / 2f, yc - h / 2f, xc + w / 2f, yc + h / 2f, t)
-                detections.add(makeDetection(box, maxScore, classId))
-            }
-        }
-        return detections
+    ): List<Detection> = CocoRawHeadDecoder.decode(output, isStandard, numClasses, t, confidenceThreshold) { box, name ->
+        estimateDistance(box.height, box.width, name)
     }
 
     private fun parseYolo26(output: Array<Array<FloatArray>>, t: Letterbox.Transform): List<Detection> {

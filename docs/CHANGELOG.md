@@ -1,3 +1,11 @@
+# 1.0.12 (versionCode 13) — September 7, 2026
+
+- Correct the class mapping against the bundled YOLO model metadata: cats use COCO class 15, dogs remain class 16, and class 17 (horse) is excluded from the selected classes. Previously, cats were omitted and horse detections could be labeled as cats.
+- Share raw-head class selection and labels in the decoder. Regression tests feed model-shaped tensors through that production decoder and NMS using class IDs extracted from the pinned model metadata; they cover cats, dogs, horse exclusion and existing people/vehicle classes.
+- Model weights, confidence/NMS thresholds, scanning lifecycle and launcher artwork are unchanged. This is a separate follow-up to version 1.0.11; the submitted vc12 artifact is not replaced.
+
+---
+
 # Review release — 1.0.11 (versionCode 12), September 7, 2026
 
 - Faster repeat startup: cache the measured execution-provider choice per model/device/runtime/app version, verify it before reuse, rebenchmark on failure or expiry. Fast is the initial model for new installations; saved preferences are preserved.
