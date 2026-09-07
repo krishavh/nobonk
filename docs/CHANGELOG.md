@@ -1,5 +1,8 @@
 # Changelog
 
+## Next maintenance build (queued, not in 1.0 vc1 @ 2a4092b)
+- **Backup-exclusion rules name the old file.** `res/xml/backup_rules.xml` and `res/xml/data_extraction_rules.xml` exclude `detection_events.json`; the history file has been `detection_events.enc` since encryption-at-rest landed. No exposure today (`allowBackup="false"` disables backup/transfer outright, and the file is AES-256-GCM encrypted with a non-exportable Keystore key), but update both rules to `detection_events.enc` (keep the `.json` line for legacy installs) in the next build. History stays.
+
 ## 1.0 (unreleased) — 2026-09-06 "look up" pass
 
 - **Maker credit.** A small "BY KRISHAV" line sits beneath the History/settings controls in the dock, always visible while the app is open (TalkBack: "Made by Krishav").
