@@ -85,6 +85,36 @@ Validation at review: **151 JVM tests passed; lint 0 errors / 57 existing warnin
 debug app, instrumentation APK and unsigned release AAB build successfully. Native parity
 and battery integration passed. Final source review and release version assignment are separate.
 
+### Actual CameraX / UI handoff check
+
+The debug APK built from `b5a066c3751cb3c1d2c22ad639583b45f5b1a76c` was also exercised
+through actual camera and overlay UI, in addition to the native/JVM tests:
+
+- Foreground scanning → Run in background → edge indicator / Open NoBonk pill → Open →
+  continued foreground scanning → Stop → explicit Start passed. The background handoff
+  left one sensor owner; Stop removed the service and all NoBonk sensor connections.
+- A fresh emulator run using `-camera-back emulated -gpu swiftshader_indirect` passed
+  foreground scanning → background service → notification Stop → reopen → top safety
+  reminder → OK → **Stopped — tap Start scanning**. `dumpsys activity services` reported
+  no NoBonk service and `dumpsys sensorservice` showed only system sensor connections.
+  The run's event log contained no `am_anr` or `am_crash` entries.
+- A second reviewer independently traced the production diff's native-buffer lifetime,
+  duplicate starts, foreground handoff, Stop and battery recovery; no concrete defect was found.
+
+One earlier repetition with the default graphics backend and virtual-scene camera did
+produce an input-timeout ANR. The captured main-thread stack waited in framework
+`HardwareRenderer.nCreateProxy` while adding the existing return pill; RenderThread was
+blocked in emulator `libEGL_emulation` / `qemu_pipe_read` / `glBufferDataSyncAEMU`.
+The emulator reported 92% CPU pressure and its virtual-camera provider consumed 63% CPU.
+The trace did not show an ONNX runner or scan-session lock in that chain. Repeating with
+the simpler camera and software renderer passed as above. This is evidence of an emulator
+graphics stall, not a claim that physical-device ANRs are impossible. No speculative
+production rendering workaround was added; real-phone handoff remains a release-device check.
+
+Local evidence: `/private/tmp/nobonk-round2-anr-trace.txt`,
+`/private/tmp/nobonk-software-ui.xml`, `/private/tmp/nobonk-software-events.txt`,
+`/private/tmp/nobonk-software-sensors-stopped.txt`. These are test-only emulator artifacts.
+
 ## Experiments and remaining limits
 
 - **Thread spinning:** an opt-in Android-native experiment compared default, disabled and
