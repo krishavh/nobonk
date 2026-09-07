@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.9 (versionCode 10) — 2026-09-06 every-launch reminder on warm reopen
+- On Android 12+ Back moves the root task to the background without finishing, so a warm reopen gets no `onCreate`. The gate now resets in `onStop` (unless a configuration change, a hand-off we started — permission dialog, overlay-settings screen, *Run in background* — or an authorized background session) and is re-evaluated in `onStart`, so Back/Home → launcher → reopen shows the reminder. Exercised on an Android 15 emulator profile.
+
 ## 1.0.8 (versionCode 9) — 2026-09-06 safety prominence (UI only)
 - Full notice: the safety warning and the acknowledgment checkbox are now the first content at the top (below a compact wordmark); feature cards follow. Reminder: warning at the top with **OK — continue** directly under it. No text or gate changes.
 

@@ -104,6 +104,15 @@ class AckGate {
     /** Opening the full notice from the reminder: no state change by design. */
     fun onReadFull() {}
     fun onActivityFinished() { if (!serviceActive) cleared = false }
+    /**
+     * The activity was stopped (Back/Home → launcher, another app) without an authorized
+     * background session and not for a config change or an in-app hand-off (permission dialog,
+     * settings screen we opened). Android 12+ Back does not finish the root activity, so a warm
+     * reopen gets no onCreate — the reset must happen here so the reminder shows on onStart.
+     */
+    fun onLeftApp() { if (!serviceActive) cleared = false }
+    /** Screen to show when the activity starts again without onCreate (warm reopen). */
+    fun screenOnStart(ackVersion: Int): SafetyNotice.Screen = SafetyNotice.screenFor(ackVersion, cleared, serviceActive)
     /** Service reports an authorized, successful ACTION_START. */
     fun onServiceStarted() { serviceActive = true }
     /** Service stopped (Stop action, hand-off or transient stop-only instance). */

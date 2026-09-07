@@ -36,6 +36,10 @@ class MainActivity : ComponentActivity() {
     // Safety-notice gate: persisted acknowledged version + which screen to show now.
     private var ackVersion by mutableIntStateOf(0)
     private var noticeScreen by mutableStateOf(ai.genwhy.nobonk.safety.SafetyNotice.Screen.FULL_NOTICE)
+    // True while we expect to come straight back from something we launched ourselves
+    // (permission dialogs, the overlay-settings screen, starting the background session):
+    // those stops are hand-offs, not the user leaving the app.
+    private var expectingReturn = false
     // Incremented on every onResume so CameraPreview knows to rebind.
     // Wrapping CameraPreview in key(cameraRebindKey) forces Compose to fully
     // recreate the AndroidView — re-running the factory lambda which re-calls
@@ -143,6 +147,7 @@ class MainActivity : ComponentActivity() {
                                     onClearHistory = { viewModel.clearHistory() },
                                     locationTaggingEnabled = viewModel.locationTaggingEnabled,
                                     onEnableLocation = {
+                                        expectingReturn = true
                                         requestLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
                                     },
                                     onDisableLocation = { viewModel.disableLocationTagging() },
@@ -177,6 +182,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() { super.onPause(); ai.genwhy.nobonk.safety.SessionState.gate.activityResumed = false }
 
+    override fun onStop() {
+        super.onStop()
+        // Back (Android 12+ moves the root task to the background without finishing), Home,
+        // or switching apps: unless this is a config change, a hand-off we initiated, or an
+        // authorized background session is running, the launch is over → re-prompt on return.
+        if (!isChangingConfigurations && !expectingReturn) ai.genwhy.nobonk.safety.SessionState.gate.onLeftApp()
+        expectingReturn = false
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Warm reopen (no onCreate): re-evaluate the gate so the reminder shows when required.
+        val gate = ai.genwhy.nobonk.safety.SessionState.gate
+        if (noticeScreen == ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE) noticeScreen = gate.screenOnStart(ackVersion)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         // A finished activity (Back / Not now / task removed) is a genuine end of launch: re-prompt next time.
@@ -185,6 +206,7 @@ class MainActivity : ComponentActivity() {
 
     /** Requests only camera (+ notifications on 13+). Location stays opt-in, in-context. */
     private fun requestCorePermissions() {
+        expectingReturn = true   // system permission dialog: not the user leaving
         val permissions = mutableListOf(Manifest.permission.CAMERA)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -204,6 +226,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestOverlayPermission() {
+        expectingReturn = true   // Settings screen we opened: hand-off, not leaving
         val intent = Intent(
             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
             Uri.parse("package:$packageName")
@@ -213,6 +236,7 @@ class MainActivity : ComponentActivity() {
 
     private fun startDetectionService() {
         if (!ai.genwhy.nobonk.safety.SessionState.gate.cameraAllowed(ackVersion)) return   // never start detection past a pending gate
+        expectingReturn = true   // we are about to move the task back for an authorized session
         val mode = viewModel.accuracyMode
         val intent = Intent(this, DetectionService::class.java).apply {
             action = DetectionService.ACTION_START

@@ -75,6 +75,17 @@ class AckGateTest {
         g.onServiceStopped()                                  // Stop from the notification, app not in front
         assertEquals(Screen.REMINDER, g.screenOnCreate(V, null))
     }
+    @Test fun backOrHomeToLauncherThenWarmReopenReprompts() {
+        val g = AckGate(); g.screenOnCreate(V, null); g.onAcknowledged()
+        g.onLeftApp()                                          // onStop without config change / hand-off / session
+        assertEquals(Screen.REMINDER, g.screenOnStart(V)); assertFalse(g.cameraAllowed(V))
+        g.onAcknowledged(); assertEquals(Screen.NONE, g.screenOnStart(V))
+    }
+    @Test fun leavingWithAuthorizedBackgroundSessionKeepsGateForReturn() {
+        val g = AckGate(); g.screenOnCreate(V, null); g.onAcknowledged(); g.onServiceStarted()
+        g.onLeftApp()                                          // Run in background moved the task back
+        assertEquals(Screen.NONE, g.screenOnStart(V)); assertTrue(g.cameraAllowed(V))
+    }
     @Test fun handoffStopWhileActivityResumedKeepsGate() {
         val g = AckGate(); g.screenOnCreate(V, null); g.onAcknowledged(); g.onServiceStarted()
         g.activityResumed = true; g.onServiceStopped()        // onResume stopped the service (camera hand-off)
