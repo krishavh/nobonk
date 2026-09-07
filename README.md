@@ -1,6 +1,8 @@
-# NoBonk 🚶📱
+# NoBonk
 
-**Your phone watches where you're going, because you won't.**
+![NoBonk — on-device obstacle detection, illustrated with a phone and a stylized pedestrian](docs/images/nobonk-blender-banner.png)
+
+**A little more awareness for the path ahead.**
 
 NoBonk is an Android app that taps you on the shoulder before you walk into someone. It uses an on-device AI vision model to spot approaching people, walls, and ground hazards through your phone's back camera — and warns you with vibration and on-screen alerts — all while you're still staring at your screen.
 
