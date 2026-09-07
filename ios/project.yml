@@ -13,8 +13,8 @@ settings:
     EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     TARGETED_DEVICE_FAMILY: "1"
     CODE_SIGN_STYLE: Automatic
-    CURRENT_PROJECT_VERSION: "2"
-    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "3"
+    MARKETING_VERSION: "0.2.1"
 targets:
   NoBonk:
     type: application
@@ -35,8 +35,8 @@ targets:
       path: NoBonk/Info.plist
       properties:
         CFBundleDisplayName: NoBonk
-        CFBundleShortVersionString: "0.2.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.2.1"
+        CFBundleVersion: "3"
         LSRequiresIPhoneOS: true
         NSCameraUsageDescription: NoBonk uses the rear camera to detect people and selected objects on this iPhone. Camera frames are processed locally and are never saved or uploaded.
         UILaunchScreen: {}
