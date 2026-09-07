@@ -43,21 +43,14 @@ fun SafetyNoticeScreen(onAccept: () -> Unit, onNotNow: () -> Unit) {
         Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0B1220), NB.Night))).statusBarsPadding().navigationBarsPadding()
     ) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
-            Spacer(Modifier.height(28.dp))
-            Wordmark(size = 56)
-            Spacer(Modifier.height(20.dp))
-            Text("A little more awareness for the path ahead.", color = NB.Ink, fontSize = 26.sp, lineHeight = 31.sp, fontWeight = FontWeight.ExtraBold,
+            Spacer(Modifier.height(16.dp))
+            // Compact wordmark/title only — the safety warning is the first substantive content.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Wordmark(size = 40)
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("Please read before you start", color = NB.Ink, fontSize = 22.sp, lineHeight = 27.sp, fontWeight = FontWeight.ExtraBold,
                 modifier = Modifier.semantics { heading() })
-            Spacer(Modifier.height(12.dp))
-            Text(SafetyNotice.INTRO, color = NB.Sub, fontSize = 16.sp, lineHeight = 24.sp)
-            Spacer(Modifier.height(22.dp))
-            SectionLabel("What it does")
-            Spacer(Modifier.height(10.dp))
-            ValueCard("👀", "Tries to spot people, bikes, cars and pets", "An on-device vision model looks at each frame and estimates how close things are and whether they are closing in. It will miss some.", NB.Accent)
-            ValueCard("🔒", "Nothing leaves the phone", "No photos, no video, no uploads, no internet permission. Frames live in memory for a few milliseconds and are gone.", NB.Safe)
-            ValueCard("🎧", "Cues you can hear and feel", "Vibration, a short sound panned toward the hazard and, if you turn it on, a spoken warning. Each can be switched off.", NB.Watch)
-            Spacer(Modifier.height(18.dp))
-            SectionLabel("Please read before you start")
             Spacer(Modifier.height(10.dp))
             Column(
                 Modifier.fillMaxWidth().clip(NB.CardShape).background(NB.Watch.copy(alpha = 0.10f)).border(1.5.dp, NB.Watch.copy(alpha = 0.7f), NB.CardShape).padding(16.dp)
@@ -67,7 +60,8 @@ fun SafetyNoticeScreen(onAccept: () -> Unit, onNotNow: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Text(SafetyNotice.MAIN_TEXT, color = NB.Ink, fontSize = 15.sp, lineHeight = 23.sp)
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
+            // Acknowledgment immediately follows the warning.
             Row(
                 Modifier.fillMaxWidth().clip(NB.CardShape).background(Color.White.copy(alpha = 0.05f))
                     .toggleable(value = checked, role = Role.Checkbox, onValueChange = { checked = it })
@@ -78,6 +72,14 @@ fun SafetyNoticeScreen(onAccept: () -> Unit, onNotNow: () -> Unit) {
                 Spacer(Modifier.width(6.dp))
                 Text(SafetyNotice.CHECKBOX_TEXT, color = NB.Ink, fontSize = 15.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
             }
+            Spacer(Modifier.height(22.dp))
+            SectionLabel("What NoBonk does")
+            Spacer(Modifier.height(8.dp))
+            Text(SafetyNotice.INTRO, color = NB.Sub, fontSize = 15.sp, lineHeight = 22.sp)
+            Spacer(Modifier.height(12.dp))
+            ValueCard("👀", "Tries to spot people, bikes, cars and pets", "An on-device vision model looks at each frame and estimates how close things are and whether they are closing in. It will miss some.", NB.Accent)
+            ValueCard("🔒", "Nothing leaves the phone", "No photos, no video, no uploads, no internet permission. Frames live in memory for a few milliseconds and are gone.", NB.Safe)
+            ValueCard("🎧", "Cues you can hear and feel", "Vibration, a short sound panned toward the hazard and, if you turn it on, a spoken warning. Each can be switched off.", NB.Watch)
             Spacer(Modifier.height(16.dp))
         }
         Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, NB.Night))).padding(horizontal = 22.dp).padding(top = 8.dp, bottom = 16.dp)) {
@@ -96,19 +98,21 @@ fun SafetyNoticeScreen(onAccept: () -> Unit, onNotNow: () -> Unit) {
 @Composable
 fun StayAwareReminder(onContinue: () -> Unit, onReadFull: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().background(NB.Night).statusBarsPadding().navigationBarsPadding().padding(horizontal = 22.dp),
-        verticalArrangement = Arrangement.Center
+        Modifier.fillMaxSize().background(NB.Night).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp),
+        verticalArrangement = Arrangement.Top
     ) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).clip(NB.CardShape).background(NB.Watch.copy(alpha = 0.10f)).border(1.5.dp, NB.Watch.copy(alpha = 0.7f), NB.CardShape).padding(20.dp)
+        Spacer(Modifier.height(16.dp))
+        Column(Modifier.fillMaxWidth().clip(NB.CardShape).background(NB.Watch.copy(alpha = 0.10f)).border(1.5.dp, NB.Watch.copy(alpha = 0.7f), NB.CardShape).padding(20.dp)
             .semantics { contentDescription = SafetyNotice.REMINDER_TITLE + ". " + SafetyNotice.REMINDER_TEXT }) {
             Text("⚠️  " + SafetyNotice.REMINDER_TITLE.uppercase(), color = NB.Watch, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp)
             Spacer(Modifier.height(10.dp))
             Text(SafetyNotice.REMINDER_TEXT, color = NB.Ink, fontSize = 17.sp, lineHeight = 25.sp)
         }
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
         Button(onClick = onContinue, modifier = Modifier.fillMaxWidth().height(56.dp), shape = NB.ChipShape,
             colors = ButtonDefaults.buttonColors(containerColor = NB.Safe, contentColor = Color(0xFF04140D))) { Text(SafetyNotice.REMINDER_OK_LABEL, fontSize = 17.sp, fontWeight = FontWeight.Black) }
         TextButton(onClick = onReadFull, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Read the full safety notice", color = NB.Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

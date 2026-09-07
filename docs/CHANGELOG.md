@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.8 (versionCode 9) — 2026-09-06 safety prominence (UI only)
+- Full notice: the safety warning and the acknowledgment checkbox are now the first content at the top (below a compact wordmark); feature cards follow. Reminder: warning at the top with **OK — continue** directly under it. No text or gate changes.
+
 ## 1.0.7 (versionCode 8) — 2026-09-06 final closed-test candidate
 - **Corrected launcher icon** (lower-right bracket now inward-facing); same #101B1E background, no other artwork changes.
 - **Gate edges from review of vc7:** saved instance state is trusted only with a matching per-process token, so a task restored after process death shows the reminder while same-process rotation preserves it; an explicit `ACTION_START` now requires the gate cleared in this launch (plus the current notice version), while a sticky null-intent restart of an already-authorized session is allowed on the persisted version alone. Tests added for both.
