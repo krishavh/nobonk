@@ -1,5 +1,7 @@
 # NoBonk
 
+<img src="docs/images/nobonk-icon.png" width="96" height="96" alt="NoBonk app icon: a lime path around an amber obstacle, framed by inward-facing corners">
+
 ![NoBonk — on-device obstacle detection, illustrated with a phone and a stylized pedestrian](docs/images/nobonk-blender-banner.png)
 
 **A little more awareness for the path ahead.**
