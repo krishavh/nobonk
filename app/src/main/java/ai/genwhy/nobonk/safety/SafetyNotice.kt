@@ -65,7 +65,50 @@ object SafetyNotice {
     fun acknowledgedVersion(): Int = VERSION
 }
 
-/** Process-lifetime state (not persisted): survives rotation and screen changes, resets on a cold launch. */
+/**
+ * The acknowledgment gate as an explicit state machine (unit-tested; owned process-wide by
+ * [SessionState.gate]). "Cleared" means the user pressed OK / accepted *in this launch*.
+ *
+ *  - Reading the full notice from the reminder never clears the gate; Back returns to the
+ *    pending reminder.
+ *  - Camera permission requests, camera start and background start are allowed only while
+ *    the gate is cleared for the current launch AND the persisted version is current.
+ *  - A genuine new launch (the activity finished, or an idle background session stopped)
+ *    resets the gate, so every launch re-prompts. Only configuration recreation (restored
+ *    instance state) and returning to a live, authorized background session preserve it.
+ */
+class AckGate {
+    var cleared: Boolean = false
+        private set
+    /** True while the background service is running detection after an authorized start. */
+    var serviceActive: Boolean = false
+        private set
+    /** True while the activity is in the foreground (used to tell a hand-off from an idle stop). */
+    var activityResumed: Boolean = false
+
+    /** Decide the screen at activity creation. [restoredCleared] is the saved-instance value (null on a fresh create). */
+    fun screenOnCreate(ackVersion: Int, restoredCleared: Boolean?): SafetyNotice.Screen {
+        if (restoredCleared == true && ackVersion >= SafetyNotice.VERSION) cleared = true      // config recreation
+        if (serviceActive && ackVersion >= SafetyNotice.VERSION) cleared = true              // return to a live session
+        return SafetyNotice.screenFor(ackVersion, cleared, serviceActive)
+    }
+    /** User pressed "OK — continue" on the reminder, or accepted the full notice. */
+    fun onAcknowledged() { cleared = true }
+    /** Opening the full notice from the reminder: no state change by design. */
+    fun onReadFull() {}
+    fun onActivityFinished() { if (!serviceActive) cleared = false }
+    /** Service reports an authorized, successful ACTION_START. */
+    fun onServiceStarted() { serviceActive = true }
+    /** Service stopped (Stop action, hand-off or transient stop-only instance). */
+    fun onServiceStopped() { serviceActive = false; if (!activityResumed) cleared = false }
+
+    fun cameraAllowed(ackVersion: Int): Boolean = cleared && ackVersion >= SafetyNotice.VERSION
+    fun permissionRequestAllowed(ackVersion: Int): Boolean = cameraAllowed(ackVersion)
+    /** Defensive check inside the service: never run detection for an unacknowledged install. */
+    fun serviceMayStart(ackVersion: Int): Boolean = ackVersion >= SafetyNotice.VERSION
+}
+
+/** Process-lifetime holder for the gate. */
 object SessionState {
-    @Volatile var acknowledgedThisProcess: Boolean = false
+    val gate = AckGate()
 }

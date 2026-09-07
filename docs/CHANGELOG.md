@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.6 (versionCode 7) — 2026-09-06 gate hardening (review of vc6)
+- Reading the full notice from the reminder no longer acknowledges anything; Back returns to the pending reminder and only **OK — continue** clears it.
+- Camera permission is requested only from the OK / accept callbacks (or on return to a live authorized session), never from a persisted version alone; camera start and background start are guarded by the same per-launch gate.
+- "Every launch" means every launch: finishing the app (Back / Not now) or stopping an idle background session resets the gate; only configuration recreation (saved state) and returning to a live, authorized background session preserve it (`safety/AckGate.kt`, `AckGateTest`).
+- Service marks itself active only after an authorized, successful start (not for a stop-only instance) and refuses to start detection if the current notice version is not acknowledged.
+
 ## 1.0.5 (versionCode 6) — 2026-09-06 startup safety notice with explicit acknowledgment
 - **Full safety notice before anything else.** New wording (experimental student-built tool; can miss or misidentify hazards; no alert does not mean the path is clear; never rely on it for roads, driving, cycling or dangerous areas; not a certified safety device). An initially **unchecked** checkbox ("I understand that NoBonk may fail to warn me…") enables *I understand — continue*; *Not now* exits. Camera permission, camera start and background detection are all gated on this acknowledgment (`safety/SafetyNotice.kt`).
 - **Versioned local acknowledgment** (`safety_ack_version` in app-private prefs, no upload/analytics): fresh installs and upgrades from earlier builds that only stored `first_run_done` see the notice once; a future wording change bumps the version and re-asks.

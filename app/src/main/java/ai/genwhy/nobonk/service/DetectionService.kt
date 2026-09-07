@@ -84,15 +84,12 @@ class DetectionService : LifecycleService() {
         const val EXTRA_SOUND = "extra_sound"
         const val EXTRA_HAPTICS = "extra_haptics"
         const val EXTRA_VOICE = "extra_voice"
-        /** True while the background session is alive in this process (used to skip the launch reminder). */
-        @Volatile var isRunning: Boolean = false
     }
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
-        isRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -109,7 +106,14 @@ class DetectionService : LifecycleService() {
         }
         when (intent?.action) {
             ACTION_STOP -> stopSelf()
-            else -> startForegroundService()   // ACTION_START or null (restarted)
+            else -> {
+                // Defensive: never run detection for an install that has not acknowledged the
+                // current safety notice (the UI gate is the first line, this is the second).
+                val ack = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
+                if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack)) { Dbg.w(TAG, "start refused: safety notice not acknowledged"); stopSelf(); return START_NOT_STICKY }
+                startForegroundService()   // ACTION_START or null (restarted)
+                ai.genwhy.nobonk.safety.SessionState.gate.onServiceStarted()
+            }
         }
         return START_STICKY
     }
@@ -357,7 +361,7 @@ class DetectionService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        isRunning = false
+        ai.genwhy.nobonk.safety.SessionState.gate.onServiceStopped()
         knightRiderAnimator?.cancel()
         updateHud(null)
         removeReturnControl()

@@ -69,10 +69,10 @@ class MainActivity : ComponentActivity() {
         // Safety notice: the current version must be acknowledged before any camera request
         // or camera start (fresh installs and upgrades from first_run_done-only builds alike).
         ackVersion = prefs.getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
-        // Returning to a live background session (Open NoBonk pill / notification) must not
-        // interrupt it with a reminder — the session itself proves acknowledgment this process.
-        if (ai.genwhy.nobonk.service.DetectionService.isRunning) ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess = true
-        noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.screenFor(ackVersion, ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess, ai.genwhy.nobonk.service.DetectionService.isRunning)
+        // Gate decision for THIS launch: config recreation (saved state) and a live, authorized
+        // background session keep it cleared; anything else re-prompts (every launch).
+        val gate = ai.genwhy.nobonk.safety.SessionState.gate
+        noticeScreen = gate.screenOnCreate(ackVersion, savedInstanceState?.getBoolean(STATE_GATE_CLEARED))
         // A returning user may already have granted camera — reflect that so we don't
         // pointlessly re-prompt or get stuck on a blank screen.
         hasPermission = ContextCompat.checkSelfPermission(
@@ -85,7 +85,9 @@ class MainActivity : ComponentActivity() {
 
         // Only request permissions immediately for returning users; first-run users are
         // prompted after they read the rationale and tap "continue".
-        if (ai.genwhy.nobonk.safety.SafetyNotice.cameraAllowed(ackVersion) && !hasPermission) requestCorePermissions()
+        // Permissions are requested only once the gate is cleared for this launch (return to a
+        // live session); otherwise they are requested from the OK / accept callbacks below.
+        if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
         viewModel.initialize(applicationContext)
 
         setContent {
@@ -96,16 +98,19 @@ class MainActivity : ComponentActivity() {
                 ) {
                     canDrawOverlays = Settings.canDrawOverlays(this)
 
-                    if (noticeScreen == ai.genwhy.nobonk.safety.SafetyNotice.Screen.FULL_NOTICE) {
+                    if (showLicenses && noticeScreen != ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE) {
+                        // Full text requested from the reminder — read-only, gate still pending.
+                        LicensesScreen(onBack = { showLicenses = false })
+                    } else if (noticeScreen == ai.genwhy.nobonk.safety.SafetyNotice.Screen.FULL_NOTICE) {
                         // ── Full safety notice + explicit acknowledgment (gates the camera) ──
                         SafetyNoticeScreen(
                             onAccept = {
                                 val v = ai.genwhy.nobonk.safety.SafetyNotice.acknowledgedVersion()
                                 prefs.edit().putInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, v).putBoolean(PREF_FIRST_RUN_DONE, true).apply()
                                 ackVersion = v
-                                ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess = true
+                                gate.onAcknowledged()
                                 noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE
-                                if (!hasPermission) requestCorePermissions()
+                                if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
                             },
                             onNotNow = { finish() }
                         )
@@ -113,10 +118,12 @@ class MainActivity : ComponentActivity() {
                         // ── Concise stay-aware reminder on a genuine cold launch ──
                         StayAwareReminder(
                             onContinue = {
-                                ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess = true
+                                gate.onAcknowledged()
                                 noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE
+                                if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
                             },
-                            onReadFull = { ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess = true; noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE; showLicenses = true }
+                            // Reading never acknowledges: About opens over the pending reminder and Back returns to it.
+                            onReadFull = { gate.onReadFull(); showLicenses = true }
                         )
                     } else if (hasPermission) {
                         when {
@@ -162,6 +169,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_GATE_CLEARED, ai.genwhy.nobonk.safety.SessionState.gate.cleared)
+    }
+
+    override fun onPause() { super.onPause(); ai.genwhy.nobonk.safety.SessionState.gate.activityResumed = false }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // A finished activity (Back / Not now / task removed) is a genuine end of launch: re-prompt next time.
+        if (isFinishing) ai.genwhy.nobonk.safety.SessionState.gate.onActivityFinished()
+    }
+
     /** Requests only camera (+ notifications on 13+). Location stays opt-in, in-context. */
     private fun requestCorePermissions() {
         val permissions = mutableListOf(Manifest.permission.CAMERA)
@@ -173,6 +193,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        ai.genwhy.nobonk.safety.SessionState.gate.activityResumed = true
         // Stop the background service so the camera is released back to the activity.
         stopDetectionService()
         canDrawOverlays = Settings.canDrawOverlays(this)
@@ -190,6 +211,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startDetectionService() {
+        if (!ai.genwhy.nobonk.safety.SessionState.gate.cameraAllowed(ackVersion)) return   // never start detection past a pending gate
         val mode = viewModel.accuracyMode
         val intent = Intent(this, DetectionService::class.java).apply {
             action = DetectionService.ACTION_START
@@ -222,5 +244,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val PREF_FIRST_RUN_DONE = "first_run_done"
+        private const val STATE_GATE_CLEARED = "state_gate_cleared"
     }
 }
