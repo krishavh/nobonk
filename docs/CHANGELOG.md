@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.7 (versionCode 8) — 2026-09-06 final closed-test candidate
+- **Corrected launcher icon** (lower-right bracket now inward-facing); same #101B1E background, no other artwork changes.
+- **Gate edges from review of vc7:** saved instance state is trusted only with a matching per-process token, so a task restored after process death shows the reminder while same-process rotation preserves it; an explicit `ACTION_START` now requires the gate cleared in this launch (plus the current notice version), while a sticky null-intent restart of an already-authorized session is allowed on the persisted version alone. Tests added for both.
+
 ## 1.0.6 (versionCode 7) — 2026-09-06 gate hardening (review of vc6)
 - Reading the full notice from the reminder no longer acknowledges anything; Back returns to the pending reminder and only **OK — continue** clears it.
 - Camera permission is requested only from the OK / accept callbacks (or on return to a live authorized session), never from a persisted version alone; camera start and background start are guarded by the same per-launch gate.

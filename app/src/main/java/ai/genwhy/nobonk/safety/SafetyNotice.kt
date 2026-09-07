@@ -78,6 +78,9 @@ object SafetyNotice {
  *    instance state) and returning to a live, authorized background session preserve it.
  */
 class AckGate {
+    /** Random per-process token: saved instance state is trusted only if it came from THIS process
+     *  (rotation/config recreation). State restored after process death carries a different token. */
+    val processToken: String = java.util.UUID.randomUUID().toString()
     var cleared: Boolean = false
         private set
     /** True while the background service is running detection after an authorized start. */
@@ -86,9 +89,13 @@ class AckGate {
     /** True while the activity is in the foreground (used to tell a hand-off from an idle stop). */
     var activityResumed: Boolean = false
 
-    /** Decide the screen at activity creation. [restoredCleared] is the saved-instance value (null on a fresh create). */
-    fun screenOnCreate(ackVersion: Int, restoredCleared: Boolean?): SafetyNotice.Screen {
-        if (restoredCleared == true && ackVersion >= SafetyNotice.VERSION) cleared = true      // config recreation
+    /**
+     * Decide the screen at activity creation. [restoredCleared]/[restoredToken] are the saved-instance
+     * values (null on a fresh create). Restored state counts only when [restoredToken] matches
+     * [processToken]: same-process recreation (rotation) preserves, process-death restore re-prompts.
+     */
+    fun screenOnCreate(ackVersion: Int, restoredCleared: Boolean?, restoredToken: String? = null): SafetyNotice.Screen {
+        if (restoredCleared == true && restoredToken == processToken && ackVersion >= SafetyNotice.VERSION) cleared = true
         if (serviceActive && ackVersion >= SafetyNotice.VERSION) cleared = true              // return to a live session
         return SafetyNotice.screenFor(ackVersion, cleared, serviceActive)
     }
@@ -104,8 +111,16 @@ class AckGate {
 
     fun cameraAllowed(ackVersion: Int): Boolean = cleared && ackVersion >= SafetyNotice.VERSION
     fun permissionRequestAllowed(ackVersion: Int): Boolean = cameraAllowed(ackVersion)
-    /** Defensive check inside the service: never run detection for an unacknowledged install. */
-    fun serviceMayStart(ackVersion: Int): Boolean = ackVersion >= SafetyNotice.VERSION
+    /**
+     * Defensive check inside the service.
+     *  - explicit ACTION_START: requires the current notice version AND a gate cleared in this
+     *    launch (the UI cannot legitimately start detection past a pending reminder).
+     *  - sticky null-intent restart (system re-creating the service after a process kill): the
+     *    in-memory gate is gone, but such a restart only happens for a service that was already
+     *    authorized and never stopped by the user; allow it if the persisted version is current.
+     */
+    fun serviceMayStart(ackVersion: Int, explicitStart: Boolean): Boolean =
+        ackVersion >= SafetyNotice.VERSION && (cleared || !explicitStart)
 }
 
 /** Process-lifetime holder for the gate. */

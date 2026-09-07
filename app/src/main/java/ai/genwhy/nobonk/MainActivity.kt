@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
         // Gate decision for THIS launch: config recreation (saved state) and a live, authorized
         // background session keep it cleared; anything else re-prompts (every launch).
         val gate = ai.genwhy.nobonk.safety.SessionState.gate
-        noticeScreen = gate.screenOnCreate(ackVersion, savedInstanceState?.getBoolean(STATE_GATE_CLEARED))
+        noticeScreen = gate.screenOnCreate(ackVersion, savedInstanceState?.getBoolean(STATE_GATE_CLEARED), savedInstanceState?.getString(STATE_GATE_TOKEN))
         // A returning user may already have granted camera — reflect that so we don't
         // pointlessly re-prompt or get stuck on a blank screen.
         hasPermission = ContextCompat.checkSelfPermission(
@@ -172,6 +172,7 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(STATE_GATE_CLEARED, ai.genwhy.nobonk.safety.SessionState.gate.cleared)
+        outState.putString(STATE_GATE_TOKEN, ai.genwhy.nobonk.safety.SessionState.gate.processToken)
     }
 
     override fun onPause() { super.onPause(); ai.genwhy.nobonk.safety.SessionState.gate.activityResumed = false }
@@ -245,5 +246,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val PREF_FIRST_RUN_DONE = "first_run_done"
         private const val STATE_GATE_CLEARED = "state_gate_cleared"
+        private const val STATE_GATE_TOKEN = "state_gate_token"
     }
 }

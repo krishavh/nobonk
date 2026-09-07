@@ -110,7 +110,8 @@ class DetectionService : LifecycleService() {
                 // Defensive: never run detection for an install that has not acknowledged the
                 // current safety notice (the UI gate is the first line, this is the second).
                 val ack = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
-                if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack)) { Dbg.w(TAG, "start refused: safety notice not acknowledged"); stopSelf(); return START_NOT_STICKY }
+                val explicit = intent != null   // null = sticky restart after a process kill
+                if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack, explicitStart = explicit)) { Dbg.w(TAG, "start refused: safety gate not cleared (explicit=$explicit)"); stopSelf(); return START_NOT_STICKY }
                 startForegroundService()   // ACTION_START or null (restarted)
                 ai.genwhy.nobonk.safety.SessionState.gate.onServiceStarted()
             }

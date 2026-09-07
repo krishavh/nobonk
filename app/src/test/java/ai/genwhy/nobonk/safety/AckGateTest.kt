@@ -27,7 +27,7 @@ class AckGateTest {
     @Test fun fullNoticeNotAcknowledgedBlocksEverythingRegardlessOfSession() {
         val g = AckGate(); g.onAcknowledged()   // even a stale "cleared" flag
         assertEquals(Screen.FULL_NOTICE, g.screenOnCreate(0, true))
-        assertFalse(g.cameraAllowed(0)); assertFalse(g.serviceMayStart(0)); assertFalse(g.serviceMayStart(V - 1)); assertTrue(g.serviceMayStart(V))
+        assertFalse(g.cameraAllowed(0)); assertFalse(g.serviceMayStart(0, true)); assertFalse(g.serviceMayStart(V - 1, true)); assertTrue(g.serviceMayStart(V, true))
     }
     @Test fun finishAndRelaunchInSameProcessRepromptsEveryLaunch() {
         val g = AckGate(); g.screenOnCreate(V, null); g.onAcknowledged(); g.activityResumed = true
@@ -37,8 +37,26 @@ class AckGateTest {
     }
     @Test fun configurationRecreationPreservesClearedGate() {
         val g = AckGate(); g.screenOnCreate(V, null); g.onAcknowledged()
-        // recreated with saved instance state (cleared=true) → no prompt, camera allowed
-        assertEquals(Screen.NONE, g.screenOnCreate(V, restoredCleared = true)); assertTrue(g.cameraAllowed(V))
+        // recreated in the SAME process with saved state (cleared=true, matching token) → no prompt
+        assertEquals(Screen.NONE, g.screenOnCreate(V, restoredCleared = true, restoredToken = g.processToken)); assertTrue(g.cameraAllowed(V))
+    }
+    @Test fun processDeathRestoreRepromptsDespiteSavedClearedFlag() {
+        val old = AckGate(); old.onAcknowledged()
+        val fresh = AckGate()                                  // new process, new token
+        assertEquals(Screen.REMINDER, fresh.screenOnCreate(V, restoredCleared = true, restoredToken = old.processToken))
+        assertFalse(fresh.cameraAllowed(V))
+        assertEquals(Screen.REMINDER, fresh.screenOnCreate(V, restoredCleared = true, restoredToken = null))
+    }
+    @Test fun explicitActionStartRefusedWhileGatePending() {
+        val g = AckGate(); g.screenOnCreate(V, null)           // reminder pending, version current
+        assertFalse(g.serviceMayStart(V, explicitStart = true))
+        g.onAcknowledged(); assertTrue(g.serviceMayStart(V, explicitStart = true))
+        assertFalse(g.serviceMayStart(V - 1, explicitStart = true)); assertFalse(g.serviceMayStart(0, explicitStart = true))
+    }
+    @Test fun stickyRestartAllowedOnlyWithCurrentPersistedVersion() {
+        val g = AckGate()                                      // fresh process after a kill: no in-memory gate
+        assertTrue(g.serviceMayStart(V, explicitStart = false))
+        assertFalse(g.serviceMayStart(V - 1, explicitStart = false)); assertFalse(g.serviceMayStart(0, explicitStart = false))
     }
     @Test fun returnToLiveAuthorizedBackgroundSessionDoesNotReprompt() {
         val g = AckGate(); g.screenOnCreate(V, null); g.onAcknowledged(); g.activityResumed = true
