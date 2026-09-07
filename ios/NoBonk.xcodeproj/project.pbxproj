@@ -17,6 +17,7 @@
 		42279A6CB434B81D603FD1DC /* FastModelContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43392EB14E71827B90A965F9 /* FastModelContract.swift */; };
 		55A49D77C5B7990CD977B52D /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = 4E625A590850A2C1F4160976 /* onnxruntime */; };
 		57715A849545E3180293B5CB /* OpenNoBonkIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662E23CD886FC9C4858EC556 /* OpenNoBonkIntent.swift */; };
+		57C9D2E1EDB4F5C48FA8C94F /* fast-graph-reference.json in Resources */ = {isa = PBXBuildFile; fileRef = 8B6DD54394AD218F99D8B263 /* fast-graph-reference.json */; };
 		699BB4DE68303ACD6BECDFD3 /* FastObjectDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A5E0D57B25AE8551C3A913 /* FastObjectDetector.swift */; };
 		6D514DAC2772D6829E9CCBA2 /* SafetyGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD02B9EEC141C9974293F6D /* SafetyGate.swift */; };
 		6D5800AE5A15340C8C868E3C /* BrowserDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26EE62D73A5376D4FE695B81 /* BrowserDestination.swift */; };
@@ -38,6 +39,7 @@
 		DC58C24B4B509A209D79F0BC /* SafetyGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD02B9EEC141C9974293F6D /* SafetyGate.swift */; };
 		DFF0740B13AE2CD09C0C5CC3 /* QuickAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9440888C99F481DC979FDF23 /* QuickAccessTests.swift */; };
 		EDA95E5E7F28511206790D2E /* AudioCueController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE04D4519870FF4E91600091 /* AudioCueController.swift */; };
+		FA857B6FD3642C7051C2D78B /* FastDeviceBenchmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB35E66848BBD8D5B883E4F3 /* FastDeviceBenchmarkTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,11 +88,13 @@
 		80DBC17AEB03D0A24F116F87 /* NoBonk.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NoBonk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		81A5E0D57B25AE8551C3A913 /* FastObjectDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FastObjectDetector.swift; sourceTree = "<group>"; };
 		8482C5F050091DBED235E512 /* DetectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionPolicy.swift; sourceTree = "<group>"; };
+		8B6DD54394AD218F99D8B263 /* fast-graph-reference.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "fast-graph-reference.json"; sourceTree = "<group>"; };
 		9440888C99F481DC979FDF23 /* QuickAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAccessTests.swift; sourceTree = "<group>"; };
 		95706265DA659DD3D69229CD /* FastPreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FastPreprocessor.swift; sourceTree = "<group>"; };
 		BA69C0659000DDE4AFB63D86 /* CuePlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CuePlayback.swift; sourceTree = "<group>"; };
 		BAD02B9EEC141C9974293F6D /* SafetyGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyGate.swift; sourceTree = "<group>"; };
 		BE04D4519870FF4E91600091 /* AudioCueController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCueController.swift; sourceTree = "<group>"; };
+		CB35E66848BBD8D5B883E4F3 /* FastDeviceBenchmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FastDeviceBenchmarkTests.swift; sourceTree = "<group>"; };
 		CC3362E46BF6668DDB66321B /* NoBonkApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoBonkApp.swift; sourceTree = "<group>"; };
 		DA165399BA849D6DFC2C18B0 /* DetectorModePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectorModePicker.swift; sourceTree = "<group>"; };
 		DBAF85E5999C760C8D1DE3C4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -129,10 +133,21 @@
 			path = NoBonk;
 			sourceTree = "<group>";
 		};
+		155B918448354F09370B7CDA /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				8B6DD54394AD218F99D8B263 /* fast-graph-reference.json */,
+			);
+			name = Fixtures;
+			path = Tests/Fixtures;
+			sourceTree = "<group>";
+		};
 		16C72CB76E56C6E89ECC3115 = {
 			isa = PBXGroup;
 			children = (
 				5EFF9EAC910BCE97D93F4F04 /* Models */,
+				71AEE60A22BD0BAB5ABCEF81 /* DeviceBenchmarks */,
+				155B918448354F09370B7CDA /* Fixtures */,
 				0D991441796F164CA48AB8CB /* NoBonk */,
 				ED1DB0A63D9EA102E4905097 /* NoBonkControls */,
 				AD613D09953915605693947D /* QuickAccess */,
@@ -162,6 +177,14 @@
 				9440888C99F481DC979FDF23 /* QuickAccessTests.swift */,
 			);
 			path = QuickAccessTests;
+			sourceTree = "<group>";
+		};
+		71AEE60A22BD0BAB5ABCEF81 /* DeviceBenchmarks */ = {
+			isa = PBXGroup;
+			children = (
+				CB35E66848BBD8D5B883E4F3 /* FastDeviceBenchmarkTests.swift */,
+			);
+			path = DeviceBenchmarks;
 			sourceTree = "<group>";
 		};
 		8B70E8B000408CBA555940D1 /* Products */ = {
@@ -220,6 +243,7 @@
 			buildConfigurationList = C512B38259293F3C9E508C6F /* Build configuration list for PBXNativeTarget "NoBonkQuickAccessTests" */;
 			buildPhases = (
 				DD82A0523A040F7CFBED13F8 /* Sources */,
+				A43DB41572FD305C3702FDE4 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -350,6 +374,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A43DB41572FD305C3702FDE4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				57C9D2E1EDB4F5C48FA8C94F /* fast-graph-reference.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -387,6 +419,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA857B6FD3642C7051C2D78B /* FastDeviceBenchmarkTests.swift in Sources */,
 				DFF0740B13AE2CD09C0C5CC3 /* QuickAccessTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

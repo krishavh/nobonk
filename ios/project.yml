@@ -92,6 +92,10 @@ targets:
     platform: iOS
     sources:
       - path: QuickAccessTests
+      - path: DeviceBenchmarks
+        excludes: [README.md]
+      - path: Tests/Fixtures/fast-graph-reference.json
+        buildPhase: resources
     dependencies:
       - target: NoBonk
     settings:
