@@ -40,6 +40,11 @@ struct NoBonkView: View {
             syncBrowserVisibility()
         }
         .onChange(of: browsing) { _, _ in syncBrowserVisibility() }
+        .onChange(of: browser.hasPage) { _, hasPage in
+            // Close suspends the discarded page. Reopening must reapply the
+            // actual foreground/acknowledgment gate, not unconditionally play.
+            if hasPage { syncBrowserVisibility() }
+        }
         .onChange(of: gate.screen) { _, _ in syncBrowserVisibility() }
         .onChange(of: showComposer) { _, _ in syncBrowserVisibility() }
         .sheet(isPresented: $showComposer) {
