@@ -1,3 +1,13 @@
+# 1.0.13 (versionCode 14) — September 7, 2026
+
+- Reuse native input/output tensor storage through model warmup and scanning, removing the large copied output array on each frame. Verify provider selection and both Fast/Sharp models through the same inference path.
+- Refresh battery state during use. Foreground scanning pauses below 10%, clears stale alerts and releases the camera and sensors; recovery respects a user's Stop. Background scanning keeps its existing reduced-cadence policy.
+- Release foreground sensor and cue ownership when the setup screen is hidden or hands off to background mode. Reject late results across Stop, screen changes and power pauses, and ignore duplicate background-start commands.
+- Use elapsed time for scanning and alert intervals so clock changes do not stall detection. Reset and synchronize motion state between sessions.
+- Verified with 151 unit tests, native model-output parity tests and actual emulator camera/background/Open/notification Stop flows. Physical-phone startup, temperature and battery-energy measurements remain separate; no measured phone-speed claim is made.
+
+---
+
 # 1.0.12 (versionCode 13) — September 7, 2026
 
 - Correct the class mapping against the bundled YOLO model metadata: cats use COCO class 15, dogs remain class 16, and class 17 (horse) is excluded from the selected classes. Previously, cats were omitted and horse detections could be labeled as cats.
@@ -113,4 +123,3 @@ Physical-device camera timing, accuracy, thermal behavior and Google Play instal
 - ONNX Runtime 1.21.1 → 1.29.0 (all native libs 16 KB-aligned; Play requirement). Per-ABI sideload APKs; AAB for Play.
 - GitHub Actions CI: unit tests, debug APK, unsigned release AAB, 16 KB check.
 - README model section and acknowledgments brought current; `docs/MODEL_CHOICE.md` added.
-
