@@ -17,7 +17,7 @@ review risk on a safety-themed app.
 | Default language | English (United States) |
 | Category | **Tools** |
 | Tags | safety, camera, walking, pedestrian |
-| Contact email | `<GUARDIAN_CONTACT_EMAIL>` (adult account holder) |
+| Contact email | support@genwhy.ai (Haarith, parent and account holder) |
 | Website (optional) | repo or GitHub Pages URL |
 | Privacy policy URL | published `docs/PRIVACY_POLICY.md` (GitHub Pages) |
 

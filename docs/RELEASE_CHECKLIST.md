@@ -240,7 +240,7 @@ everything that can be committed:
 - 👤/🔧 **Real store graphics** (512² icon PNG, 1024×500 feature graphic, device
   screenshots) — specs and copy are written; images are binary, produced on
   device.
-- 👤 **Publishing the privacy policy URL** and filling `<GUARDIAN_CONTACT_EMAIL>`.
+- 👤 **Publishing the privacy policy URL** and using support@genwhy.ai as the contact.
 - 👤 **Closed test (12 testers / 14 days)** and **production application** (§4).
 - ⏳ **Confirm T-SEC-LOCATION landed** (coarse, opt-in) before submit (§5); if
   not, adjust privacy/Data-Safety wording.
