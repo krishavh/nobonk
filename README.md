@@ -28,6 +28,13 @@ Built by **Krishav**, now a 9th grader, who started NoBonk as an 8th grader for 
 
 Krishav saw students at school bump into each other—or into walls—while looking at their phones. He wanted to explore whether the phone could give people a useful heads-up without requiring them to keep a dedicated camera app on screen. That observation shaped NoBonk’s focus on Android background detection.
 
+## Creator videos
+
+- **[Current Android walkthrough](https://www.youtube.com/watch?v=uj7l9rwRWSQ)** — September 7, 2026 · 1:57. Krishav walks through the settings and alert cues, then shows background use. [Jump to the background demo at 1:14](https://www.youtube.com/watch?v=uj7l9rwRWSQ&t=74).
+- **[Original project presentation](https://www.youtube.com/watch?v=MhQoMuKx1zM)** — February 16, 2026 · 1:31. The school-hallway idea, early prototype and exploration of ultrasonic alternatives. This is the historical project pitch, not a specification for the current release.
+
+Current Android distance estimates are approximate, and hazards may be missed. Neither video establishes a guarantee of accurate distances or collision prevention; always stay aware of your surroundings.
+
 ## Set up in the foreground. Use it in the background.
 
 1. **Open NoBonk to set up and test.** Acknowledge the safety reminder, allow the camera, check what your phone detects, and adjust sensitivity and sound, vibration or voice cues in a safe space.
