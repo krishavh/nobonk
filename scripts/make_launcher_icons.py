@@ -41,6 +41,8 @@ def save(im, rel):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--art', required=True); ap.add_argument('--symbol'); ap.add_argument('--bg')
+    ap.add_argument('--foreground', help='ready-made transparent adaptive foreground (108 dp canvas, symbol already inside the safe zone)')
+    ap.add_argument('--play512', help='ready-made Play store icon; copied as-is instead of downscaling ART')
     a = ap.parse_args()
     art = sq(Image.open(a.art).convert('RGBA'))
     if art.size[0] < 1024: sys.exit('artwork must be >= 1024 px')
@@ -51,20 +53,26 @@ def main():
         cs = [px.getpixel((2, 2)), px.getpixel((s-3, 2)), px.getpixel((2, s-3)), px.getpixel((s-3, s-3))]
         bg = tuple(sum(c[i] for c in cs) // 4 for i in range(3))
     # adaptive layers (108 dp canvas)
+    fg = sq(Image.open(a.foreground).convert('RGBA')) if a.foreground else art
     for d, m in DENS.items():
         n = int(108 * m)
-        save(art.resize((n, n), Image.LANCZOS), f'mipmap-{d}/ic_launcher_foreground.png')
+        save(fg.resize((n, n), Image.LANCZOS), f'mipmap-{d}/ic_launcher_foreground.png')
         save(Image.new('RGBA', (n, n), bg + (255,)), f'mipmap-{d}/ic_launcher_background.png')
     # monochrome layer: white symbol on transparent, symbol occupies the inner ~66 dp
     if a.symbol:
         sym = sq(Image.open(a.symbol).convert('RGBA'))
         alpha = sym.split()[3]
+    elif a.foreground:
+        alpha = None   # use the foreground's own alpha on the full 108 dp canvas (already in the safe zone)
     else:
         g = ImageOps.autocontrast(art.convert('L'))
         alpha = g.point(lambda v: 255 if v > 140 else 0)
     for d, m in DENS.items():
         n = int(108 * m); inner = int(66 * m)
         layer = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+        if alpha is None:
+            white = Image.new('RGBA', (n, n), (255, 255, 255, 255)); white.putalpha(fg.split()[3].resize((n, n), Image.LANCZOS))
+            save(white, f'mipmap-{d}/ic_launcher_monochrome.png'); continue
         mask = alpha.resize((inner, inner), Image.LANCZOS)
         white = Image.new('RGBA', (inner, inner), (255, 255, 255, 255)); white.putalpha(mask)
         layer.paste(white, ((n - inner) // 2, (n - inner) // 2), white)
@@ -88,6 +96,9 @@ def main():
         if os.path.exists(p): os.remove(p); print('removed drawable/' + old)
     # Play store icon
     out = os.path.join(os.path.dirname(__file__), '..', 'build', 'nobonk-play-icon-512.png'); os.makedirs(os.path.dirname(out), exist_ok=True)
-    art.convert('RGBA').resize((512, 512), Image.LANCZOS).save(out, optimize=True); print('wrote', os.path.relpath(out))
+    if a.play512:
+        import shutil; shutil.copyfile(a.play512, out); print('copied Play 512 as-is ->', os.path.relpath(out))
+    else:
+        art.convert('RGBA').resize((512, 512), Image.LANCZOS).save(out, optimize=True); print('wrote', os.path.relpath(out))
 
 if __name__ == '__main__': main()
