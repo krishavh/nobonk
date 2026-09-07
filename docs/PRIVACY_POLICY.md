@@ -1,9 +1,10 @@
 # NoBonk — Privacy Policy
 
-**Last updated:** 2026-08-23
+**Last updated:** 2026-09-06
 **App:** NoBonk (`ai.genwhy.nobonk`)
 **Developer:** Published by a parent/guardian on behalf of Krishav (student author).
-**Contact:** `<GUARDIAN_CONTACT_EMAIL>` — *(fill in the adult account holder's email; this must match the contact email in the Play Console listing.)*
+**Contact:** the Play Console listing's developer email (account holder: Haarith Devarajan, parent), or an issue at github.com/krishavh/nobonk.
+**Public URL of this policy:** https://krishavh.github.io/privacy/nobonk.html (short-form page; this file is the long-form text).
 
 > **Plain-language summary:** NoBonk runs entirely on your phone. It uses the
 > back camera to watch the path ahead and warn you before you walk into
@@ -28,7 +29,7 @@ parent/guardian, who is the data controller for the purposes of this policy.
 NoBonk uses your phone's back camera and an on-device AI vision model to detect
 people, obstacles, walls, and ground hazards in real time, and alerts you with
 vibration and on-screen warnings so a glance at your phone doesn't end in a
-collision. All processing happens **on the device**.
+collision. Alerts are vibration, an on-screen warning, a short alert sound, and — only if you switch it on — a spoken phrase such as "Person on your left. Look up." All processing happens **on the device**.
 
 ## 3. Camera data — never recorded
 
@@ -71,7 +72,15 @@ can be erased at any time (see §7).
 - **No internet.** The app declares **no `INTERNET` permission** and makes no
   network connections. It cannot send your data anywhere even if it wanted to.
 - **No accounts, no sign-in, no advertising, no analytics, no third-party SDKs,
-  no trackers.**
+  no trackers.** The only libraries are open-source on-device components (ONNX
+  Runtime, CameraX, Jetpack Compose).
+- **No microphone.** NoBonk never requests audio recording.
+- **Motion sensors** (accelerometer/gravity) are read in memory to tell whether the
+  phone is pointed forward and whether you are walking; readings are never stored.
+- **Optional spoken alerts** hand a short phrase (for example "Person on your left.
+  Look up.") to your phone's own text-to-speech engine, which is separate software
+  covered by its maker's policy. The phrase contains no personal data, and NoBonk
+  itself still has no network access. Voice alerts are off by default.
 - **No data selling or sharing.** Because nothing leaves the device, there is
   nothing to sell or share.
 
@@ -91,9 +100,8 @@ information from children, and in any case collects no data off the device.
 ## 9. Security
 
 On-device history is stored in the app's private, sandboxed storage, excluded
-from backups. If optional coarse location is stored, encryption-at-rest via the
-Android Keystore is the planned hardening (tracked in the project's security
-backlog).
+from backups, and encrypted at rest with an Android Keystore-backed AES-256-GCM key
+(`androidx.security.crypto`).
 
 ## 10. Changes to this policy
 
@@ -107,9 +115,6 @@ Questions or requests: `<GUARDIAN_CONTACT_EMAIL>`.
 ---
 
 ### Publication note (for the developer)
-
-Google Play requires a **publicly reachable URL** for this policy. Publish this
-file via **GitHub Pages** (e.g. enable Pages on the repo and link to
-`https://<user>.github.io/nobonk/PRIVACY_POLICY` or the rendered Markdown), then
-paste that URL into **Play Console → App content → Privacy policy**. Ensure
-`<GUARDIAN_CONTACT_EMAIL>` is filled in and matches the store listing contact.
+The public short-form page is https://krishavh.github.io/privacy/nobonk.html (repo
+`krishavh/krishavh.github.io`); Play Console → App content → Privacy policy points at it.
+Keep this file and that page in agreement whenever permissions or stored data change.

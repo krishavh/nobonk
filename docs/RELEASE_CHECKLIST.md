@@ -11,17 +11,17 @@ Status legend: ✅ done in repo · 🔧 needs a build machine · 👤 human/Cons
 
 | # | Item | Who | Status |
 |---|---|---|---|
-| B01 | Adult, ID-verified Play developer account | 👤 guardian | pending (§1) |
+| B01 | Adult, ID-verified Play developer account | 👤 guardian | ✅ done 2026-09-06 (app `ai.genwhy.nobonk` created, closed alpha draft) |
 | B02 | minSdk/targetSdk/compileSdk | release-eng | ✅ minSdk 29, target/compile 36 |
-| B03 | Release signing config (no secrets committed) | release-eng | ✅ config done; 🔧 keystore must be generated (§2) |
-| B04 | AGPL / YOLO model licensing decision | author+guardian | ✅ decision recorded (§6); 🔧 commit the model/recipe |
-| R1 | Privacy policy published at a public URL | 👤 | ✅ drafted `docs/PRIVACY_POLICY.md`; 👤 publish + link |
+| B03 | Release signing config (no secrets committed) | release-eng | ✅ upload key on the guardian's laptop; AAB `2a4092b` upload-signed and accepted 2026-09-06 |
+| B04 | AGPL / YOLO model licensing decision | author+guardian | ✅ recipe in README + exact `.onnx` files attached to release `v1.0-rc-2a4092b` |
+| R1 | Privacy policy published at a public URL | 👤 | ✅ https://krishavh.github.io/privacy/nobonk.html |
 | R2 | Data Safety form | 👤 | ✅ answers in `docs/DATA_SAFETY.md`; 👤 enter |
 | R3 | Foreground-service (camera) declaration | 👤 | ✅ text in `docs/DATA_SAFETY.md`; 👤 enter + demo video |
-| R4 | 16 KB `.so` alignment verified | 🔧 | ✅ script + doc; 🔧 run once (`docs/PLAY_16KB_CHECK.md`) |
-| R5 | Store assets (icon 512², feature 1024×500, screenshots) | 👤 | ✅ specs/copy in `docs/STORE_LISTING.md`; 🔧 produce images |
-| R6 | Location reconciliation (T-SEC-LOCATION, coarse+opt-in) | core agent | ⏳ verify before submit (§5) |
-| T1 | Closed test: 12 testers × 14 days (new personal accounts) | 👤 | ⏳ plan ~2+ weeks lead (§4) |
+| R4 | 16 KB `.so` alignment verified | 🔧 | ✅ PASS on every CI run and on `2a4092b` (20/20) |
+| R5 | Store assets (icon 512², feature 1024×500, screenshots) | 👤 | ✅ icon + feature graphic attached to release `v1.0-rc-2a4092b`; ⏳ phone screenshots (HD, Pixel 9a) |
+| R6 | Location reconciliation (T-SEC-LOCATION, coarse+opt-in) | core agent | ✅ shipped: `ACCESS_COARSE_LOCATION` only, opt-in from History |
+| T1 | Closed test: 12 testers × 14 days | 👤 | ⏳ in progress: group nobonk-android-testers@googlegroups.com, signup https://nobonk.genwhy.ai/#testers |
 
 ---
 
@@ -159,7 +159,7 @@ significant work and change the measured results. Complying is cheap here.
    identifiable and reproducible.
 2. **Model availability.** The `.onnx` weights are "corresponding source" for the
    detector. Because the file is large and generated, satisfy this by **either**
-   (a) committing/releasing the exact `yolo11n.onnx` used (e.g. as a GitHub
+   (a) committing/releasing the exact `yolo26n_416.onnx` / `yolo26s_416.onnx` used (e.g. as a GitHub
    Release asset tied to the version tag), **or** (b) committing the **exact,
    reproducible export recipe** — pinned `ultralytics` version + `yolo export`
    command + source weights identifier — so anyone can regenerate the identical

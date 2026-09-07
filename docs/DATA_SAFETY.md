@@ -45,6 +45,9 @@ internal note so the answers stay defensible if reviewed:
 | Camera frames (real-time, in memory) | No — discarded immediately | No |
 | Detection-event history (local file) | No — on-device only | No |
 | Approximate/coarse location (optional, off by default) | No — on-device only | No |
+| Settings (alert distance, model, cue toggles) in app-private SharedPreferences | No — on-device only | No |
+| Motion-sensor readings (phone angle, walking/still) in memory | No — never stored | No |
+| Alert phrase handed to the phone's own text-to-speech engine (voice cue, off by default) | No — local IPC to the system TTS engine; no personal data in the phrase | No |
 
 ---
 
@@ -79,7 +82,7 @@ declaration for apps that use FGS (Android 14+/API 34). NoBonk declares
 >
 > **What is the feature / why the app needs it:**
 > NoBonk is a walk-safety aid. Its core function is to watch the path ahead
-> through the back camera and warn the user (vibration + on-screen alert) before
+> through the back camera and warn the user (vibration + alert sound + on-screen alert, optional spoken alert) before
 > they walk into a person, wall, or ground hazard while looking at their phone.
 > To do this the camera must keep analyzing frames **while the app is in the
 > background / the screen shows another app** — that is the entire purpose of the

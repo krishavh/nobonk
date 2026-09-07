@@ -84,9 +84,10 @@ review risk on a safety-themed app.
 
 ## Graphic assets — exact specs
 
-Produce these on the build machine (they are binary and not committed here). The
-in-app adaptive icon already exists in `res/`; the Play **store** icon below is a
-separate 512×512 asset.
+The store icon and feature graphic are rendered from the adaptive-icon vectors and
+published as immutable assets on GitHub release `v1.0-rc-2a4092b`
+(`nobonk-play-icon-512.png`, `nobonk-feature-graphic-1024x500.png`, checksums in
+`STORE-ASSETS-SHA256SUMS.txt`). Phone screenshots come from the Pixel 9a.
 
 | Asset | Spec | Notes |
 |---|---|---|
