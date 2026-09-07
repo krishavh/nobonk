@@ -283,11 +283,16 @@ class DetectionService : LifecycleService() {
                 if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
                 // A frame that was in flight when Stop arrived must not re-create the HUD or re-post
                 // the notification from a stopped service (this was the visible "Stop didn't work").
-                if (!life.mayPostAlerts()) return@launch
-                mainHandler.post { updateHud(result.hudMessage); edge?.setLevel(result.highestAlert, result.cameraBlocked) }
-                if (result.highestAlert != AlertLevel.NONE) {
-                    val n = result.detections.size
-                    updateNotification("${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · $n object${if (n == 1) "" else "s"} in view")
+                // All publication (HUD, edge colour, notification) happens in ONE main-thread block with
+                // the lifecycle check inside it, so it serializes with shutdown() (also main-thread): a
+                // Stop that lands first removes this post or makes the check fail; nothing is re-posted.
+                mainHandler.post {
+                    if (!life.mayPostAlerts()) return@post
+                    updateHud(result.hudMessage); edge?.setLevel(result.highestAlert, result.cameraBlocked)
+                    if (result.highestAlert != AlertLevel.NONE) {
+                        val n = result.detections.size
+                        updateNotification("${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · $n object${if (n == 1) "" else "s"} in view")
+                    }
                 }
             } catch (e: Exception) {
                 Dbg.e(TAG, "Frame processing error: ${e.message}", e)

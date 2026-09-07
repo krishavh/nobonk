@@ -98,11 +98,12 @@ class DetectionViewModel : ViewModel() {
         session.stop()
         engine?.muted = true
         engine?.silence()   // cancel a chirp / speech / vibration already playing
+        engine?.stopSensors()   // no accelerometer/gravity sampling while stopped
         scanningEnabled = false
         detections = emptyList(); frameAlert = AlertLevel.NONE; lookUpLabel = null; bearingPan = null
         isWallDetected = false; isGroundHazardDetected = false
     }
-    fun startScanning() { session.start(); engine?.muted = false; scanningEnabled = true }
+    fun startScanning() { session.start(); engine?.muted = false; engine?.startSensors(); scanningEnabled = true }
 
     /** Stereo pan of the current top hazard, −1 (left) … +1 (right); null when clear. */
     var bearingPan by mutableStateOf<Float?>(null)
