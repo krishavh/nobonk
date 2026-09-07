@@ -1,10 +1,11 @@
 import SwiftUI
 import WebKit
 
-/// A user-opened web pane, not access to other native apps. No page loads at launch.
+/// A user-opened web pane, not access to other native apps. Neither a WKWebView
+/// nor a page is created until the user opens a valid website address.
 @MainActor
 final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate {
-    let webView: WKWebView
+    private(set) var webView: WKWebView?
     @Published var address = ""
     var editingAddress = false
     private var lastLocation: URL?
@@ -15,21 +16,30 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     @Published var message: String?
     var onCameraCovered: (() -> Void)?
     private var observations: [NSKeyValueObservation] = []
+    private var playbackSuspended = true
+    private let loadPage: @MainActor (WKWebView, URLRequest) -> Void
 
-    override init() {
+    /// The optional loader supplies local documents to hosted WebKit tests;
+    /// production uses URLRequest loading with the same configuration/delegates.
+    init(loadPage: @escaping @MainActor (WKWebView, URLRequest) -> Void = { view, request in view.load(request) }) {
+        self.loadPage = loadPage
+        super.init()
+    }
+    private func createWebViewIfNeeded() -> WKWebView {
+        if let webView { return webView }
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = .all
         configuration.allowsPictureInPictureMediaPlayback = false
-        webView = WKWebView(frame: .zero, configuration: configuration)
-        super.init()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        self.webView = webView
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
         webView.isOpaque = false
         webView.backgroundColor = .secondarySystemBackground
-        webView.setAllMediaPlaybackSuspended(true, completionHandler: nil)
+        webView.setAllMediaPlaybackSuspended(playbackSuspended, completionHandler: nil)
         observations = [
             webView.observe(\.isLoading) { [weak self] _, _ in Task { @MainActor in self?.refresh() } },
             webView.observe(\.canGoBack) { [weak self] _, _ in Task { @MainActor in self?.refresh() } },
@@ -40,8 +50,10 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
                 Task { @MainActor in if covering { self?.onCameraCovered?() } }
             }
         ]
+        return webView
     }
     private func refresh() {
+        guard let webView else { return }
         loading = webView.isLoading; canGoBack = webView.canGoBack; canGoForward = webView.canGoForward
         if let url = webView.url, BrowserDestination.allows(url), url != lastLocation {
             lastLocation = url
@@ -53,20 +65,24 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
             message = "Enter a website address, such as example.org. Only secure HTTPS pages can open here."
             return
         }
-        message = nil; hasPage = true; webView.load(URLRequest(url: url))
+        let webView = createWebViewIfNeeded()
+        message = nil; hasPage = true; loadPage(webView, URLRequest(url: url))
     }
     func pause() {
+        playbackSuspended = true
+        guard let webView else { return }
         webView.stopLoading()
         webView.pauseAllMediaPlayback(completionHandler: nil)
         webView.setAllMediaPlaybackSuspended(true, completionHandler: nil)
     }
     func resume() {
-        webView.setAllMediaPlaybackSuspended(false, completionHandler: nil)
+        playbackSuspended = false
+        webView?.setAllMediaPlaybackSuspended(false, completionHandler: nil)
     }
     func close() {
         pause(); hasPage = false; address = ""; lastLocation = nil; message = nil
         // Discard the visible document; website data uses a nonpersistent store.
-        webView.loadHTMLString("", baseURL: nil)
+        webView?.loadHTMLString("", baseURL: nil)
     }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { decisionHandler(.cancel); return }
@@ -101,8 +117,8 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 }
 
 private struct EmbeddedBrowser: UIViewRepresentable {
-    let model: BrowserModel
-    func makeUIView(context: Context) -> WKWebView { model.webView }
+    let webView: WKWebView
+    func makeUIView(context: Context) -> WKWebView { webView }
     func updateUIView(_ view: WKWebView, context: Context) {}
 }
 
@@ -125,14 +141,14 @@ struct BrowserPane: View {
             if let message = model.message {
                 Text(message).font(.caption).foregroundStyle(.orange).padding(10).frame(maxWidth: .infinity, alignment: .leading)
             }
-            if model.hasPage {
-                EmbeddedBrowser(model: model)
+            if model.hasPage, let webView = model.webView {
+                EmbeddedBrowser(webView: webView)
                 HStack(spacing: 8) {
-                    Button { model.webView.goBack() } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }.disabled(!model.canGoBack).accessibilityLabel("Back")
-                    Button { model.webView.goForward() } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }.disabled(!model.canGoForward).accessibilityLabel("Forward")
+                    Button { webView.goBack() } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }.disabled(!model.canGoBack).accessibilityLabel("Back")
+                    Button { webView.goForward() } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }.disabled(!model.canGoForward).accessibilityLabel("Forward")
                     Spacer()
                     if model.loading { ProgressView().controlSize(.small) }
-                    Button { if model.loading { model.webView.stopLoading() } else { model.webView.reload() } } label: { Image(systemName: model.loading ? "xmark" : "arrow.clockwise").frame(width: 44, height: 44) }.accessibilityLabel(model.loading ? "Stop loading page" : "Reload page")
+                    Button { if model.loading { webView.stopLoading() } else { webView.reload() } } label: { Image(systemName: model.loading ? "xmark" : "arrow.clockwise").frame(width: 44, height: 44) }.accessibilityLabel(model.loading ? "Stop loading page" : "Reload page")
                     Button { model.close() } label: { Image(systemName: "trash").frame(width: 44, height: 44) }.accessibilityLabel("Close page")
                 }.padding(.horizontal, 6).background(.white.opacity(0.04))
             } else {
