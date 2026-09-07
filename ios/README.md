@@ -1,16 +1,31 @@
-# NoBonk for iPhone — foreground prototype
+# NoBonk for iPhone — Browse & scan preview
 
 Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision People is the default; an optional, checksum-pinned ONNX Fast Objects model adds eight selected classes through the free official ONNX Runtime SDK. No cloud inference, paid SDK, account, subscription or inference network client. It reuses NoBonk's corrected Blender icon and credits Krishav.
 
-## Working scope
+## What you can do
+
+| Capability | Current development preview |
+| --- | --- |
+| Browse & scan | A compact live camera panel above a secure website inside NoBonk; Start/Stop stays visible. |
+| Reading and web video | User-opened HTTPS pages and compatible inline media. Full-screen media or leaving the app stops scanning. Particular sites, sign-ins and DRM need testing. |
+| Web chat | Compatible chat websites can be opened in the browsing pane. Service support varies; this does not embed other native apps. |
+| Messages | **Write a message** opens Apple’s standard composer on a configured phone. Camera scanning pauses; tap Start after returning. NoBonk cannot read or display the Apple Messages inbox. |
+| People | Apple Vision detects people locally. |
+| Fast Objects | Optional verified graph detects people, bicycles, cars, motorcycles, buses, trucks, cats and dogs locally. |
+| Cues | Visual indication, optional sound and haptics, with Earlier/Balanced/Closer sensitivity. These use apparent image size, not metres. |
+| Quick access | Siri/App Shortcuts plus supported Action button, Control Center and Lock Screen controls open setup. Acknowledgment and explicit Start still apply. |
+
+**0.2.1 (build 3)** was installed and launched on the owner’s HRD iPhone on September 7, 2026. This is a development installation, not a public App Store or TestFlight release. The Android closed-test link does not install the iPhone app.
+
+## Start deliberately; stop predictably
 
 - Full first-use safety notice with an unchecked acknowledgment switch. Existing acknowledgment versions are rechecked when the notice version changes.
 - Short warning at the top with **OK — continue** on every fresh launch and after leaving for another app.
-- Compact camera dashboard with an expandable preview, a persistent Start/Stop button, a top safety reminder, and sound/haptic controls. This leaves space for NoBonk’s setup controls; it does not put another app below the camera.
+- Compact camera dashboard with an expandable preview, a persistent Start/Stop button, a top safety reminder, and sound/haptic controls. The Set up tab holds detector and cue controls; Browse & scan puts a website below the camera. Other native apps cannot occupy that pane.
 - Local **People** or optional **Fast Objects** detection with bounding boxes fitted to preview letterboxing. Earlier/Balanced/Closer cues use apparent image size, not metres. See [Fast model setup, provenance and validation](FAST-OBJECTS.md).
 - A cue when the same supported class occupies the selected central portion of the image for three consecutive analyzed frames. Three-second cooldown. This is image size, **not a calibrated distance or collision prediction**.
 - Generation tokens reject late camera callbacks after Stop or a new session; failed starts release the retry latch. The owned audio cue also stops immediately when scanning or sound is disabled. Camera stops on inactive/background transitions and interruptions. Returning requires the reminder after backgrounding; scanning is always started explicitly. Permission denial has a Settings action. Permission callbacks cannot silently start capture.
-- No frame recording, history, location, microphone, photo-library, telemetry or background modes. The notice version and optional compiled-model cache are persisted locally; camera frames are not. Required-reason API declarations cover local preferences and elapsed-time cooldowns.
+- No frame recording, detection history, location, microphone capture, photo-library access, telemetry or background modes. The notice version and optional compiled-model cache are persisted locally; camera frames are not. Website traffic is separate: user-opened pages connect to the internet, follow their own privacy policies and use a nonpersistent WebKit data store. Website camera, microphone and motion permission requests are denied. The message composer remains Apple’s system interface; NoBonk does not inspect recipients or message text. Required-reason API declarations cover local preferences and elapsed-time cooldowns.
 - App Shortcuts and an iOS 18+ Control widget open the setup screen after device authentication. They preserve the acknowledgment and explicit Start; see [Quick access](QUICK-ACCESS.md).
 - A deliberately started scan keeps the screen awake. Stop, leaving the app, locking the phone or a capture interruption ends scanning and restores ordinary auto-lock behavior. Debug builds log local capability and first-frame timing without logging camera images.
 
@@ -40,12 +55,11 @@ Installing on an actual iPhone requires the owner's signing team and Developer M
 
 ## Validation on September 7, 2026
 
-- Twenty-five Swift package tests pass (including ten Fast decoder/preprocessing/metadata tests): safety gates, reopen behavior, persistent-person cues and cooldown, invalid/peripheral boxes, sensitivity, concurrent generation invalidation, retry, PCM cue payload, preview geometry, adaptive pacing, heat/Low Power Mode, and cold initialization.
-- Three hosted quick-access tests pass: opening preserves acknowledgment state and the reminder, and requires foreground presentation plus device authentication.
-- Full Xcode simulator build succeeds with Xcode 26.6 and the installed iOS 26.5 runtime. The earlier SDK/runtime registration blocker is resolved.
-- iPhone 17 Pro (iOS 26.5) and iPhone SE (iOS 17.0) simulators launch successfully. Visual checks cover the safety acknowledgment, compact/expanded layouts, permission denial with a Settings action, and larger text on the smaller screen. No live detection is simulated or claimed from these screenshots.
-- Property lists pass `plutil -lint`. Generic-device build and strict code-signature verification pass for the app and Control extension. Both paired iPhones were unavailable when checked, so installation, system-control invocation and real-camera performance remain unverified.
-
+- **34 Swift core tests pass**, covering the safety gates, generation invalidation, detector preprocessing/decoding, native session ownership, pacing, preview geometry and deterministic audio cancellation.
+- Three hosted quick-access tests pass. Six real WebKit tests pass with zero skips, including actual navigation rejection, a permission callback forwarded to production denial, draft-address preservation and prevention of script-driven playback after persistent suspension. See [WebKit tests](WebKitTests/README.md).
+- Generic device and simulator builds pass. The signed 0.2.1 Release build passes strict signature verification and is installed and launched on HRD. Earlier previews were installed on another development iPhone. Simulator checks cover layout and permissions, not detection effectiveness or haptic feel.
+- An initial synthetic Fast probe on iPhone 16 Plus passed CPU/Core ML numerical smoke checks. A later physical rerun exited its XCTest host before completion and is under investigation; do not treat that rerun or the sustained probe as passed. [Device benchmark instructions and limitations](DeviceBenchmarks/README.md) keep synthetic timings separate from real-camera accuracy, battery life and hardware placement.
+- Real-world missed detections, low light, full-screen video, supported web chat, audio routes, text scaling, heat and older physical phones still need validation. Device installation is not evidence that all these cases work.
 
 ## Why foreground-only
 
@@ -58,8 +72,16 @@ Isolated [experiments](Experiments/README.md) investigate fresh-frame delivery i
 - [App Review Guidelines, 2.5.4](https://developer.apple.com/app-store/review/guidelines/)
 - [Required privacy reasons](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitypereasons)
 
+## Try it on the installed phone
+
+1. Set up while standing still. Accept the safety notice, choose People or Fast Objects, then tap **Start** and allow the camera if prompted.
+2. Point the rear camera toward a person or a supported object in good light. Compare labels and cues with what you actually see. Leave plenty of space; do not walk toward hazards to test it.
+3. Try **Browse & scan**, enter a secure web address and keep the camera visible. Inline content compatibility varies. If video opens full screen or another app, expect scanning to stop and require Start again.
+4. Try **Write a message** only if configured on the phone. Scanning pauses while Apple’s composer is open. Send/cancel is your choice; after returning, tap Start to scan again.
+5. Try Stop, Home/reopen, lock/unlock, changing modes, Sound/Haptics and larger text. Report the phone model, iOS/app version, what you tried and what happened. Keep personal messages and account details out of recordings.
+
 ## Next milestones
 
-1. Physical iPhone check: acknowledgment, grant/deny camera, Start/Stop, Home/reopen, lock/unlock, interruption, text scaling, VoiceOver, preview/box alignment and thermal behavior.
-2. Export the existing licensed YOLO26 weights to Core ML and integrate the verified model outputs, labels and preprocessing. Port Android's tested alert policy and calibration before exposing metres or approach estimates. Preserve model license notices.
-3. Compare detection/alert quality on-device, then prepare privacy and accessibility review, signing and TestFlight under the owner's existing Apple account. No fee is authorized by this prototype.
+Finish physical lifecycle and sustained-performance investigation, compare real detection/alert quality across phones, and validate accessibility, audio and web-media behavior. A separate Messages camera-panel experiment asks whether useful scanning can coexist with a visible Messages conversation; compact extensions replace the keyboard, so simultaneous typing is not promised. It is not included in this app.
+
+Prepare the remaining privacy, licensing and distribution review before public TestFlight/App Store availability. Existing development signing is used; no new paid service or membership was purchased.
