@@ -65,6 +65,8 @@ class DetectionService : LifecycleService() {
     private lateinit var windowManager: WindowManager
     private var hudView: View? = null
     private var scanningView: View? = null
+    /** Small always-available 'Open NoBonk' pill (top-end) shown for the whole background session. */
+    private var returnView: View? = null
     private var knightRiderAnimator: ObjectAnimator? = null
 
     companion object {
@@ -117,6 +119,7 @@ class DetectionService : LifecycleService() {
             startForeground(NOTIFICATION_ID, notification)
         }
         showScanningIndicator()
+        showReturnControl()
 
         lifecycleScope.launch(Dispatchers.Default) {
             try {
@@ -157,6 +160,71 @@ class DetectionService : LifecycleService() {
             }
         } catch (e: Exception) {
             Dbg.e(TAG, "Failed to show scanning indicator", e)
+        }
+    }
+
+    /** Top inset (status bar + display cutout) in px, so overlay windows never sit under the clock. */
+    private fun topInsetPx(): Int = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            windowManager.currentWindowMetrics.windowInsets
+                .getInsetsIgnoringVisibility(WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()).top
+        } else {
+            val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+            if (id > 0) resources.getDimensionPixelSize(id) else (24 * resources.displayMetrics.density).toInt()
+        }
+    } catch (_: Exception) { (24 * resources.displayMetrics.density).toInt() }
+
+    /**
+     * 'Open NoBonk' return control. Its own tiny overlay window: only the pill consumes
+     * touches (the window IS the pill), everything else passes through to the app below.
+     * Tapping brings the existing NoBonk task forward; the activity then takes over the
+     * camera from this service (its onResume stops the service), so detection continues in
+     * the foreground with a single camera client. Removed in onDestroy.
+     */
+    private fun showReturnControl() {
+        if (returnView != null) return
+        val d = resources.displayMetrics.density
+        val pill = android.widget.TextView(this).apply {
+            text = "Open NoBonk"
+            contentDescription = "Open NoBonk controls"
+            setTextColor(android.graphics.Color.parseColor("#FF04140D"))
+            textSize = 14f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            minHeight = (48 * d).toInt(); minWidth = (48 * d).toInt()   // accessible touch target
+            setPadding((16 * d).toInt(), 0, (16 * d).toInt(), 0)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 24 * d; setColor(android.graphics.Color.parseColor("#FF2EE6A6"))
+                setStroke((2 * d).toInt(), android.graphics.Color.parseColor("#FF0B1220"))
+            }
+            elevation = 6 * d
+            isClickable = true; isFocusable = true
+            setOnClickListener { openApp() }
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.TOP or Gravity.END; x = (12 * d).toInt(); y = topInsetPx() + (8 * d).toInt() }
+        try { windowManager.addView(pill, params); returnView = pill } catch (e: Exception) { Dbg.e(TAG, "return control add error", e) }
+    }
+
+    private fun removeReturnControl() {
+        returnView?.let { v -> try { windowManager.removeView(v) } catch (_: Exception) {} }
+        returnView = null
+    }
+
+    /** Bring the existing NoBonk task to the front (no new instance, no camera duplication). */
+    private fun openApp() {
+        try {
+            val i = Intent(this, MainActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+            startActivity(i)
+        } catch (e: Exception) {
+            Dbg.e(TAG, "openApp failed (notification tap remains the fallback)", e)
         }
     }
 
@@ -228,7 +296,7 @@ class DetectionService : LifecycleService() {
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                     PixelFormat.TRANSLUCENT
-                ).apply { gravity = Gravity.TOP; y = 100 }
+                ).apply { gravity = Gravity.TOP; y = topInsetPx() + (8 * resources.displayMetrics.density).toInt() }
                 try {
                     hudView = LayoutInflater.from(this).inflate(R.layout.layout_collision_warning, null)
                     windowManager.addView(hudView, params)
@@ -288,6 +356,7 @@ class DetectionService : LifecycleService() {
         super.onDestroy()
         knightRiderAnimator?.cancel()
         updateHud(null)
+        removeReturnControl()
         if (scanningView != null) {
             try { windowManager.removeView(scanningView) } catch (_: Exception) {}
             scanningView = null

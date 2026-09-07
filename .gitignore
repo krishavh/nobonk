@@ -17,3 +17,4 @@ nobonk-upload.jks
 # AGPL YOLO model weights — exported per docs/MODEL.md, never committed
 app/src/main/assets/*.onnx
 .kotlin/
+__pycache__/

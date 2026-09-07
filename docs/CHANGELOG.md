@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3 (versionCode 4) — in progress
+- **"Open NoBonk" return control in background mode.** A small green pill at the top-end of the screen (its own tiny overlay window, so only the pill takes touches; the app underneath keeps working) stays available for the whole background session, between alerts too, inset below the status bar/cutout with a 48 dp touch target. Tapping brings the existing NoBonk task forward; the activity takes over the camera from the service (single camera client, detection continues in the foreground). Removed when the service stops (Stop action or returning to the app). Notification tap and Stop remain as fallback. The red warning line now sits below the status bar and leaves room for the pill.
+- New Blender launcher icon (pending assets).
+
 ## 1.0.2 (versionCode 3) — 2026-09-06 review follow-up
 - **History rows can no longer scroll under the system bars.** vc2 put the status-bar padding inside the scrolling header, so once the header scrolled away the Tap location / Clear history row sat under the clock again. The inset now lives on the LazyColumn viewport (`windowInsetsPadding(systemBars)`), with the header's duplicate padding removed.
 - **Plain wording.** "camera heuristic" replaced with *surface warning* and "no object recognised" with *object not identified* in the dock and banner.
