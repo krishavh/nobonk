@@ -2,18 +2,51 @@ import AVFoundation
 import Foundation
 import OSLog
 
-/// Session configuration/start/stop and capture callbacks share one serial queue.
-final class CaptureProbe: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+/// The owner serializes run creation/teardown. Each producer has immutable identity,
+/// so an old notification or queued sample cannot be attributed to a newer Start.
+final class CaptureProbe: @unchecked Sendable {
     let journal = ProbeJournal()
-    private let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "ai.genwhy.nobonk.camerapiplab.capture", qos: .userInitiated)
+    private var run: CaptureRun?
+
+    @discardableResult
+    func start() -> UInt64 {
+        let generation = journal.begin()
+        queue.async { [self] in
+            guard journal.accepts(generation) else { return }
+            run?.stop()
+            let next = CaptureRun(generation: generation, journal: journal, queue: queue)
+            run = next
+            next.start()
+        }
+        return generation
+    }
+    func stop(generation: UInt64? = nil, message: String = "Stopped by user") {
+        let stopped = generation ?? journal.snapshot().generation
+        guard journal.invalidate(generation: stopped, message: message) else { return }
+        queue.async { [self] in
+            guard run?.generation == stopped else { return }
+            run?.stop()
+            run = nil
+        }
+    }
+}
+
+/// A new session AND output delegate per run. Immutable generation is captured by
+/// every notification and frame callback; none reads the current owner's token.
+private final class CaptureRun: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+    private let epoch: CaptureEpoch
+    var generation: UInt64 { epoch.generation }
+    private let journal: ProbeJournal
+    private let queue: DispatchQueue
+    private let session = AVCaptureSession()
     private let logger = Logger(subsystem: "ai.genwhy.nobonk.camerapiplab", category: "Capture")
-    private var configured = false
-    private var token: UInt64 = 0
     private var observers: [NSObjectProtocol] = []
     private var lastLog = 0.0
 
-    override init() {
+    init(generation: UInt64, journal: ProbeJournal, queue: DispatchQueue) {
+        self.epoch = CaptureEpoch(generation: generation, journal: journal)
+        self.journal = journal; self.queue = queue
         super.init()
         for name in [AVCaptureSession.wasInterruptedNotification,
                      AVCaptureSession.interruptionEndedNotification,
@@ -26,14 +59,14 @@ final class CaptureProbe: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
                     ? "Interrupted: reason \(reason.map(String.init) ?? "unknown")"
                     : (name == AVCaptureSession.runtimeErrorNotification ? "Runtime error: \(error ?? "unknown")" : "Interruption ended; OS may resume")
                 self.queue.async { [weak self] in
-                    guard let self else { return }
-                    self.journal.update(self.token) {
+                    guard let self, self.journal.accepts(self.generation) else { return }
+                    self.journal.update(self.generation) {
                         if let reason { $0.interruptionReason = reason }
                         $0.interruption = description
                     }
-                    self.logger.notice("\(description, privacy: .public)")
-                    if name == AVCaptureSession.runtimeErrorNotification {
-                        self.journal.invalidate(message: "Camera error — Stop, then retry")
+                    self.logger.notice("run=\(self.generation) \(description, privacy: .public)")
+                    if name == AVCaptureSession.runtimeErrorNotification,
+                       self.epoch.fail("Camera error — tap Start to retry") {
                         self.session.stopRunning()
                     }
                 }
@@ -41,36 +74,28 @@ final class CaptureProbe: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         }
     }
     deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
-
     func start() {
-        let next = journal.begin()
-        queue.async { [self] in
-            guard journal.accepts(next) else { return }
-            token = next
-            lastLog = 0
-            do {
-                if !configured { try configure() }
-                // Deliberately observe the default. No entitlement or enable override.
-                let supported = session.isMultitaskingCameraAccessSupported
-                let enabled = session.isMultitaskingCameraAccessEnabled
-                journal.update(next) { $0.supported = supported; $0.enabled = enabled }
-                logger.notice("Capability supported=\(supported), enabled=\(enabled)")
-                guard journal.accepts(next) else { return }
-                session.startRunning()
-                guard journal.accepts(next) else { session.stopRunning(); return }
-                journal.update(next) { $0.status = session.isRunning ? "Camera session running" : "Camera did not start" }
-                if !session.isRunning { journal.invalidate(message: "Camera did not start — tap Start again") }
-            } catch {
-                if journal.accepts(next) { journal.invalidate(message: "Camera unavailable: \(error.localizedDescription)") }
-            }
-        }
+        guard journal.accepts(generation) else { return }
+        do {
+            try configure()
+            // Observe the default; no entitlement or enable override.
+            let supported = session.isMultitaskingCameraAccessSupported
+            let enabled = session.isMultitaskingCameraAccessEnabled
+            journal.update(generation) { $0.supported = supported; $0.enabled = enabled }
+            logger.notice("run=\(self.generation) supported=\(supported), enabled=\(enabled)")
+            guard journal.accepts(generation) else { return }
+            session.startRunning()
+            guard journal.accepts(generation) else { session.stopRunning(); return }
+            journal.update(generation) { $0.status = session.isRunning ? "Camera session running" : "Camera did not start" }
+            if !session.isRunning { epoch.fail("Camera did not start — tap Start again") }
+        } catch { epoch.fail("Camera unavailable: \(error.localizedDescription)") }
     }
-    func stop(message: String = "Stopped by user") {
-        journal.invalidate(message: message)
-        queue.async { [self] in
-            if session.isRunning { session.stopRunning() }
-            logger.notice("Stopped; old frame generation invalidated")
+    func stop() {
+        if session.isRunning { session.stopRunning() }
+        for output in session.outputs.compactMap({ $0 as? AVCaptureVideoDataOutput }) {
+            output.setSampleBufferDelegate(nil, queue: nil)
         }
+        logger.notice("run=\(self.generation) producer stopped")
     }
     private func configure() throws {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
@@ -96,18 +121,17 @@ final class CaptureProbe: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
                 device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 15)
                 device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 15)
                 device.unlockForConfiguration()
-            } catch { /* Default capture cadence remains a valid probe. */ }
+            } catch { /* Default cadence remains a valid probe. */ }
         }
-        configured = true
     }
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard journal.accepts(token), CMSampleBufferDataIsReady(sampleBuffer) else { return }
+        guard journal.accepts(generation), CMSampleBufferDataIsReady(sampleBuffer) else { return }
         let now = ProcessInfo.processInfo.systemUptime
-        journal.append(sampleBuffer, token: token, now: now)
+        epoch.append(sampleBuffer, now: now)
         if now - lastLog >= 1 {
             lastLog = now
             let s = journal.snapshot()
-            logger.notice("frames=\(s.frameCount) pts=\(s.lastPTS) background=\(s.inBackground) backgroundFrames=\(s.backgroundFrames) after1s=\(s.backgroundFramesAfterOneSecond)")
+            logger.notice("run=\(self.generation) frames=\(s.frameCount) pts=\(s.lastPTS) background=\(s.inBackground) backgroundFrames=\(s.backgroundFrames) after1s=\(s.backgroundFramesAfterOneSecond)")
         }
     }
     private enum ProbeError: LocalizedError {

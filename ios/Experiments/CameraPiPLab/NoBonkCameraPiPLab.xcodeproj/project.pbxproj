@@ -8,12 +8,18 @@
 
 /* Begin PBXBuildFile section */
 		2B0CFF08DF1F499A48D640C5 /* ProbeJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA4CC65FB0DAE06C315E4BD /* ProbeJournal.swift */; };
+		2B750373C0813C64184A0B0C /* ProbeLifecycleBoundary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27CA5DE710DB3562CCF1E19B /* ProbeLifecycleBoundary.swift */; };
 		61ABCA8DF7D92E8CEFAFA642 /* CaptureProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBB4188E4A731CEF30A1DB3B /* CaptureProbe.swift */; };
 		787A563C9D5076BD09A459B9 /* CameraPiPLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCDFA9F53479F43B6A4F391 /* CameraPiPLab.swift */; };
+		D0651B3B27A2A1F14AC10571 /* PiPTrialGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142C5D459D6410C0154170A8 /* PiPTrialGate.swift */; };
+		F3701B0D7485F96925651092 /* CaptureEpoch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 791AF9BDE980A1D65FBFA73C /* CaptureEpoch.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		142C5D459D6410C0154170A8 /* PiPTrialGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPTrialGate.swift; sourceTree = "<group>"; };
 		1DA4CC65FB0DAE06C315E4BD /* ProbeJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbeJournal.swift; sourceTree = "<group>"; };
+		27CA5DE710DB3562CCF1E19B /* ProbeLifecycleBoundary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbeLifecycleBoundary.swift; sourceTree = "<group>"; };
+		791AF9BDE980A1D65FBFA73C /* CaptureEpoch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureEpoch.swift; sourceTree = "<group>"; };
 		ACCDFA9F53479F43B6A4F391 /* CameraPiPLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPiPLab.swift; sourceTree = "<group>"; };
 		CBB4188E4A731CEF30A1DB3B /* CaptureProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureProbe.swift; sourceTree = "<group>"; };
 		D5A90ACCC001DD598E58B287 /* NoBonkCameraPiPLab.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NoBonkCameraPiPLab.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -24,8 +30,11 @@
 			isa = PBXGroup;
 			children = (
 				ACCDFA9F53479F43B6A4F391 /* CameraPiPLab.swift */,
+				791AF9BDE980A1D65FBFA73C /* CaptureEpoch.swift */,
 				CBB4188E4A731CEF30A1DB3B /* CaptureProbe.swift */,
+				142C5D459D6410C0154170A8 /* PiPTrialGate.swift */,
 				1DA4CC65FB0DAE06C315E4BD /* ProbeJournal.swift */,
+				27CA5DE710DB3562CCF1E19B /* ProbeLifecycleBoundary.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -105,8 +114,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				787A563C9D5076BD09A459B9 /* CameraPiPLab.swift in Sources */,
+				F3701B0D7485F96925651092 /* CaptureEpoch.swift in Sources */,
 				61ABCA8DF7D92E8CEFAFA642 /* CaptureProbe.swift in Sources */,
+				D0651B3B27A2A1F14AC10571 /* PiPTrialGate.swift in Sources */,
 				2B0CFF08DF1F499A48D640C5 /* ProbeJournal.swift in Sources */,
+				2B750373C0813C64184A0B0C /* ProbeLifecycleBoundary.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

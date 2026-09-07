@@ -14,10 +14,11 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
     AVPictureInPictureSampleBufferPlaybackDelegate {
     let displayLayer = AVSampleBufferDisplayLayer()
     private let camera = CaptureProbe()
+    private let pipGate = PiPTrialGate()
     private let logger = Logger(subsystem: "ai.genwhy.nobonk.camerapiplab", category: "PiP")
     private var controller: AVPictureInPictureController?
     private var timer: Timer?
-    private var observations: [NSObjectProtocol] = []
+    private var lifecycleBoundary: ProbeLifecycleBoundary?
     private var timebase: CMTimebase?
     private var wantsCapture = false
     private var startedClock = false
@@ -33,6 +34,7 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
     @Published var renderedCount = 0
     @Published var lastFrameAge = "No frames"
     @Published var running = false
+    @Published var tearingDownPiP = false
     @Published var lifecycle = "Foreground"
 
     override init() {
@@ -44,19 +46,14 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
             timebase = clock
             displayLayer.controlTimebase = clock
         }
-        if AVPictureInPictureController.isPictureInPictureSupported() {
-            controller = AVPictureInPictureController(contentSource: .init(sampleBufferDisplayLayer: displayLayer, playbackDelegate: self))
-            controller?.delegate = self
-            controller?.canStartPictureInPictureAutomaticallyFromInline = false
-            controller?.requiresLinearPlayback = true
-        } else { pipStatus = "PiP unsupported on this device" }
-
-        observations.append(NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.enteredBackground() }
-        })
-        observations.append(NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.enteredForeground() }
-        })
+        if !AVPictureInPictureController.isPictureInPictureSupported() { pipStatus = "PiP unsupported on this device" }
+        lifecycleBoundary = ProbeLifecycleBoundary(journal: camera.journal,
+            background: UIApplication.didEnterBackgroundNotification,
+            foreground: UIApplication.willEnterForegroundNotification) { [weak self] entering in
+                Task { @MainActor in
+                    if entering { self?.enteredBackground() } else { self?.enteredForeground() }
+                }
+            }
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -64,10 +61,9 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
     isolated deinit {
         timer?.invalidate()
         camera.stop(message: "Probe closed")
-        for observation in observations { NotificationCenter.default.removeObserver(observation) }
     }
     func startCamera() {
-        guard acknowledged, !wantsCapture, UIApplication.shared.applicationState == .active else { return }
+        guard acknowledged, !wantsCapture, !tearingDownPiP, UIApplication.shared.applicationState == .active else { return }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             permissionMessage = ""
@@ -76,7 +72,8 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
             renderedCount = 0
             startedClock = false
             displayLayer.sampleBufferRenderer.flush()
-            camera.start()
+            let generation = camera.start()
+            prepareController(generation: generation)
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
                 Task { @MainActor in
@@ -87,9 +84,21 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
             permissionMessage = "Camera denied. Enable it in Settings."
         }
     }
+    private func prepareController(generation: UInt64) {
+        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        let next = AVPictureInPictureController(contentSource: .init(sampleBufferDisplayLayer: displayLayer, playbackDelegate: self))
+        guard pipGate.install(ObjectIdentifier(next), generation: generation) else { return }
+        // Every camera trial and failed-attempt retry gets a fresh controller and
+        // UUID binding. Late callbacks cannot target a replacement controller.
+        controller?.delegate = nil
+        controller = next
+        next.delegate = self
+        next.canStartPictureInPictureAutomaticallyFromInline = false
+        next.requiresLinearPlayback = true
+    }
     func startPiP() {
-        guard wantsCapture, UIApplication.shared.applicationState == .active else { return }
-        guard let controller else { pipStatus = "PiP unsupported"; return }
+        guard wantsCapture, !tearingDownPiP, UIApplication.shared.applicationState == .active else { return }
+        guard let controller, let binding = pipGate.binding(for: ObjectIdentifier(controller)) else { pipStatus = "PiP unavailable"; return }
         do {
             // Standard visible video-playback session. No microphone, audio engine,
             // silent samples, or recording exists in this experiment.
@@ -103,6 +112,7 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
                 deactivateAudio()
                 return
             }
+            guard pipGate.requestStart(binding) else { return }
             pipStatus = "Requesting visible PiP…"
             controller.startPictureInPicture()
         } catch { pipStatus = "Video session failed: \(error.localizedDescription)"; deactivateAudio() }
@@ -111,7 +121,11 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
         wantsCapture = false
         running = false
         camera.stop()
-        if controller?.isPictureInPictureActive == true { controller?.stopPictureInPicture() }
+        tearingDownPiP = pipGate.requestStop()
+        if tearingDownPiP {
+            pipStatus = "Camera stopped. Waiting for PiP to close before another trial…"
+            controller?.stopPictureInPicture()
+        }
         controller?.invalidatePlaybackState()
         displayLayer.sampleBufferRenderer.flush(removingDisplayedImage: true)
         startedClock = false
@@ -124,8 +138,8 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
         audioSessionActive = false
     }
     private func enteredBackground() {
+        guard camera.journal.snapshot().inBackground, UIApplication.shared.applicationState != .active else { return }
         lifecycle = "Background"
-        camera.journal.background(true, now: ProcessInfo.processInfo.systemUptime)
         logger.notice("HOME/LOCK: PiP active=\(self.controller?.isPictureInPictureActive ?? false), count=\(self.camera.journal.snapshot().frameCount)")
         // Only the explicit, visible PiP trial intentionally leaves capture requested.
         // The OS may interrupt it; never automatically start/retry camera in background.
@@ -135,7 +149,7 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
         }
     }
     private func enteredForeground() {
-        camera.journal.background(false, now: ProcessInfo.processInfo.systemUptime)
+        guard !camera.journal.snapshot().inBackground else { return }
         lifecycle = "Foreground again"
         let result = camera.journal.snapshot()
         logger.notice("RETURN: backgroundFrames=\(result.backgroundFrames), after1s=\(result.backgroundFramesAfterOneSecond), duration=\(result.lastBackgroundDuration)")
@@ -168,59 +182,66 @@ final class PiPProbeModel: NSObject, ObservableObject, AVPictureInPictureControl
             controller?.invalidatePlaybackState()
         }
         if wantsCapture && !snapshot.active {
-            wantsCapture = false
-            running = false
-            controller?.stopPictureInPicture()
-            deactivateAudio()
+            stop()
         }
     }
     nonisolated func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        guard let binding = pipGate.binding(for: ObjectIdentifier(pictureInPictureController)) else { return }
         Task { @MainActor [weak self] in
-            guard let self else { return }
-            guard self.wantsCapture else { self.controller?.stopPictureInPicture(); return }
+            guard let self, self.pipGate.accepts(binding) else { return }
+            guard self.wantsCapture, self.pipGate.didStart(binding) else { self.controller?.stopPictureInPicture(); return }
             self.pipStatus = "PiP visible — now press Home and watch for frozen frames"
             self.pipActive = true
             self.logger.notice("PiP started")
         }
     }
     nonisolated func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, failedToStartPictureInPictureWithError error: Error) {
+        guard let binding = pipGate.binding(for: ObjectIdentifier(pictureInPictureController)) else { return }
         let message = error.localizedDescription
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, self.pipGate.finish(binding) else { return }
             self.pipStatus = "PiP failed: \(message)"
             self.pipActive = false
+            self.tearingDownPiP = false
             self.deactivateAudio()
+            if self.wantsCapture { self.prepareController(generation: binding.generation) }
             self.logger.notice("PiP failed: \(message, privacy: .public)")
         }
     }
     nonisolated func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
-        camera.stop(message: "PiP ended") // Invalidate before waiting for the UI actor.
+        guard let binding = pipGate.binding(for: ObjectIdentifier(pictureInPictureController)) else { return }
+        camera.stop(generation: binding.generation, message: "PiP ended")
         Task { @MainActor [weak self] in
-            self?.pipActive = false
-            self?.pipStatus = "PiP ended — camera stopped; report retained"
-            self?.stop()
+            guard let self, self.pipGate.finish(binding) else { return }
+            self.pipActive = false
+            self.tearingDownPiP = false
+            self.stop()
+            self.pipStatus = "PiP ended — camera stopped; report retained"
         }
     }
     nonisolated func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
-        completionHandler(true) // The single existing probe scene is the restoration UI.
+        completionHandler(pipGate.binding(for: ObjectIdentifier(pictureInPictureController)) != nil)
     }
     nonisolated func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, setPlaying playing: Bool) {
         // Play cannot restart the camera from a background PiP control. Reopen and Start.
-        if !playing { camera.stop(message: "Paused from PiP") }
+        guard let binding = pipGate.binding(for: ObjectIdentifier(pictureInPictureController)) else { return }
+        if !playing { camera.stop(generation: binding.generation, message: "Paused from PiP") }
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, self.pipGate.accepts(binding) else { return }
             if !playing { self.stop() }
             else if !self.wantsCapture { self.pipStatus = "Reopen the app and tap Start camera" }
             self.controller?.invalidatePlaybackState()
         }
     }
     nonisolated func pictureInPictureControllerTimeRangeForPlayback(_ pictureInPictureController: AVPictureInPictureController) -> CMTimeRange {
+        guard let binding = pipGate.binding(for: ObjectIdentifier(pictureInPictureController)) else { return .invalid }
         let s = camera.journal.snapshot()
-        return s.active && s.frameCount > 0 ? CMTimeRange(start: .zero, duration: .positiveInfinity) : .invalid
+        return s.active && s.generation == binding.generation && s.frameCount > 0 ? CMTimeRange(start: .zero, duration: .positiveInfinity) : .invalid
     }
     nonisolated func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
+        guard let binding = pipGate.binding(for: ObjectIdentifier(pictureInPictureController)) else { return true }
         let s = camera.journal.snapshot()
-        return !s.active || s.lastArrival == 0 || ProcessInfo.processInfo.systemUptime - s.lastArrival > 1
+        return !s.active || s.generation != binding.generation || s.lastArrival == 0 || ProcessInfo.processInfo.systemUptime - s.lastArrival > 1
     }
     nonisolated func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, didTransitionToRenderSize newRenderSize: CMVideoDimensions) {}
     nonisolated func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, skipByInterval skipInterval: CMTime, completion: @escaping () -> Void) { completion() }
@@ -243,12 +264,12 @@ private struct ProbeView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                     HStack {
                         Button("Start camera", systemImage: "camera") { model.startCamera() }
-                            .disabled(!model.acknowledged || model.running)
+                            .disabled(!model.acknowledged || model.running || model.tearingDownPiP)
                         Button("Stop", systemImage: "stop.fill", role: .destructive) { model.stop() }
                             .disabled(!model.running && !model.pipActive)
                     }.buttonStyle(.borderedProminent)
                     Button("Open visible PiP", systemImage: "pip.enter") { model.startPiP() }
-                        .buttonStyle(.bordered).disabled(!model.running || model.pipActive)
+                        .buttonStyle(.bordered).disabled(!model.running || model.pipActive || model.tearingDownPiP)
                     Text(model.permissionMessage.isEmpty ? model.pipStatus : model.permissionMessage)
                         .font(.subheadline).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 8) {

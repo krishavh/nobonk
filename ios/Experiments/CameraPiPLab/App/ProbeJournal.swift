@@ -39,12 +39,15 @@ final class ProbeJournal: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return value.active && value.generation == token
     }
-    func invalidate(message: String) {
+    @discardableResult
+    func invalidate(generation: UInt64? = nil, message: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
+        if let generation, (!value.active || value.generation != generation) { return false }
         value.active = false
         value.generation &+= 1
         value.status = message
         latest = nil
+        return true
     }
     func snapshot() -> ProbeSnapshot {
         lock.lock(); defer { lock.unlock() }

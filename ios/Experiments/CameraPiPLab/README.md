@@ -10,9 +10,9 @@ The experiment is not integrated into NoBonk, App Store ready, or verified on a 
 - Ordinary `AVPictureInPictureController.ContentSource(sampleBufferDisplayLayer:playbackDelegate:)`, visible **Open PiP**, and a live/infinite playback time range. Automatic inline PiP is disabled.
 - Standard `audio` background-mode capability for visible video PiP and a `.playback` / `.moviePlayback` audio-session category. There are no audio samples, players, recorder, microphone input or silent playback loop. The category is not used to claim camera access and is released when PiP ends or cannot start.
 - Reports the camera session's default `isMultitaskingCameraAccessSupported` and `isMultitaskingCameraAccessEnabled` values, without changing them.
-- Serial capture ownership, native frames, approximately 15 fps when supported, and a one-frame display mailbox. Stop synchronously invalidates the frame generation before queued capture teardown. Old frames/callbacks cannot restart a stopped session.
+- Serial capture ownership, a fresh session/output delegate with an immutable epoch for every Start, native frames, approximately 15 fps when supported, and a one-frame display mailbox. Stop synchronously invalidates that generation before queued teardown. Old frames/errors retain their producer's identity. PiP uses a distinct controller/UUID binding; restart stays unavailable with a visible message until pending PiP teardown resolves, and stale callbacks are rechecked after UI hops.
 - Increasing camera presentation timestamps, total capture count, display submission count, last frame age, largest arrival gap, interruptions and one retained Home/lock report. Duplicate or older timestamps do not count as new frames. Display submission is not proof that a frame was actually shown in PiP.
-- The Home report separately counts frames arriving after the first second, and freezes the last-frame age **at return**, so resumed foreground capture cannot erase evidence of a background freeze.
+- The Home report separately counts frames arriving after the first second, and freezes the last-frame age **synchronously when the foreground notification arrives**, before scheduling UI work, so resumed foreground capture cannot erase evidence of a background freeze.
 - OSLog metadata at most once per second, subsystem `ai.genwhy.nobonk.camerapiplab`. No frame content is logged. The in-app report is memory only and is lost on force-quit.
 
 Leaving without active PiP stops capture. During the deliberate PiP trial, the experiment leaves the original capture request in place and observes what iOS permits. It does not retry or start capture from background. iOS itself can resume an interrupted session on returning to foreground; this is documented behavior and must not be mistaken for background success. Stop or ending PiP ends the trial and retains its report.
@@ -28,7 +28,7 @@ xcodebuild -project NoBonkCameraPiPLab.xcodeproj -scheme NoBonkCameraPiPLab -des
 xcodebuild -project NoBonkCameraPiPLab.xcodeproj -scheme NoBonkCameraPiPLab -destination 'generic/platform=iOS' -derivedDataPath /private/tmp/nobonk-camerapiplab-device CODE_SIGNING_ALLOWED=NO build
 ```
 
-`swift test` runs three macOS journal tests using synthetic Core Media buffers: stale/duplicate rejection, Stop/new-generation rejection, and a background freeze that stays visible after foreground frames return. It does not open a camera or simulator. The unsigned device build is not an installable signed distribution.
+`swift test` runs seven macOS regression tests using synthetic Core Media buffers: stale/duplicate rejection, Stop/new-generation rejection, background-freeze reporting, old PiP terminal callbacks after a new trial, cancellation during PiP startup/identity reuse, old producer runtime errors/frames, and synchronous notification measurement before delayed UI work. These exercise the same gates/epochs/boundary observer used by the app; they do not emulate AVKit or prove physical capture behavior. They open no camera or simulator. The unsigned device build is not an installable signed distribution.
 
 ## Physical iPhone protocol
 
