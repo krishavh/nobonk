@@ -51,6 +51,7 @@ class DetectionEngine(private val appContext: Context) {
         val soundEnabled: Boolean = true,
         val hapticsEnabled: Boolean = true,
         val voiceEnabled: Boolean = false,
+        val sessionToken: Int = 0,
         /** Evaluated immediately before any cue is emitted: the caller's per-frame validity (session
          *  generation / service lifecycle). A frame whose session ended during inference emits nothing. */
         val cuesAllowed: () -> Boolean = { true }
@@ -124,6 +125,7 @@ class DetectionEngine(private val appContext: Context) {
     // Alert-level hysteresis (fixes ML-11 flicker): escalate immediately, but hold the
     // level for LINGER_MS before de-escalating so overlay/sound/HUD don't strobe when an
     // object hovers right at a ladder boundary.
+    private var processedSessionToken: Int? = null
     private var heldAlert = AlertLevel.NONE
     private var heldUntil = 0L
     private var heldLabel: String? = null
@@ -134,9 +136,11 @@ class DetectionEngine(private val appContext: Context) {
 
     /** (Re)load the model. Safe to call off the main thread. */
     fun loadModel(modelName: String, inputPx: Int, skipNms: Boolean) {
-        val replacement = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
+        // Caller has drained inference under its owner lock. Release the old graph
+        // before opening candidates so model switching does not double native memory.
         objectDetector?.close()
-        objectDetector = replacement
+        objectDetector = null
+        objectDetector = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
     }
 
     /** Normalized focal length in use by the distance estimator (see [CameraIntrinsics]). */
@@ -277,6 +281,14 @@ class DetectionEngine(private val appContext: Context) {
         if (halted) {
             imageProxy.close()
             return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
+        }
+        if (processedSessionToken != config.sessionToken) {
+            // Executed under the caller's native-work ownership, after any old frame
+            // drains. A rapid Stop/Start must not inherit its alert linger or tracks.
+            processedSessionToken = config.sessionToken
+            approachTracker.reset(); boxSmoother.reset(); highMute.reset()
+            heldAlert = AlertLevel.NONE; heldUntil = 0; heldLabel = null
+            lastAnyCueTime = 0; lastSpokenAt = 0; lastMeanBrightness = 128f
         }
         val detector = objectDetector
         val work = try {

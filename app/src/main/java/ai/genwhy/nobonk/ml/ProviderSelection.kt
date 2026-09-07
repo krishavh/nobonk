@@ -8,36 +8,33 @@ object ProviderSelection {
         providers: List<String>, cached: String?, create: (String) -> T,
         verify: (T) -> Unit, measure: (T) -> Double
     ): Choice<T> {
-        val candidates = linkedMapOf<String, T>()
         val timings = linkedMapOf<String, Double>()
-        var handedOff: T? = null
-        try {
-            if (cached in providers) {
-                var resource: T? = null
-                try {
-                    resource = create(cached!!)
-                    verify(resource)
-                    handedOff = resource
-                    return Choice(cached, resource, true)
-                } catch (_: Exception) { runCatching { resource?.close() } }
-            }
-            for (name in providers) {
-                var resource: T? = null
-                try {
-                    resource = create(name)
-                    verify(resource)
+        fun verified(name: String): T {
+            val resource = create(name)
+            try { verify(resource); return resource }
+            catch (failure: Exception) { runCatching { resource.close() }; throw failure }
+        }
+        if (cached in providers) {
+            try { return Choice(cached!!, verified(cached), true) }
+            catch (_: Exception) { /* Re-measure when an OS driver cannot restore a cached choice. */ }
+        }
+        // Keep only one native model session alive. Retaining three candidates is
+        // expensive on older phones even when the eventual winner is a small CPU model.
+        for (name in providers) {
+            try {
+                verified(name).use { resource ->
                     val elapsed = EpChooser.median(List(3) { measure(resource) })
                     require(elapsed.isFinite() && elapsed > 0)
-                    candidates[name] = resource
                     timings[name] = elapsed
-                } catch (_: Exception) { runCatching { resource?.close() } }
-            }
-            val winner = EpChooser.pick(timings) ?: error("No execution provider could run the model")
-            handedOff = candidates.getValue(winner)
-            return Choice(winner, handedOff, false)
-        } finally {
-            candidates.values.filter { it !== handedOff }.forEach { runCatching { it.close() } }
+                }
+            } catch (_: Exception) { /* Unsupported or failed providers are not candidates. */ }
         }
+        while (timings.isNotEmpty()) {
+            val winner = EpChooser.pick(timings)!!
+            try { return Choice(winner, verified(winner), false) }
+            catch (_: Exception) { timings.remove(winner) }
+        }
+        error("No execution provider could run the model")
     }
 
     fun validCache(savedAt: Long, now: Long): Boolean = savedAt > 0 && now >= savedAt && now - savedAt < 30L * 24 * 60 * 60 * 1000

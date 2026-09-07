@@ -445,7 +445,7 @@ class DetectionViewModel : ViewModel() {
             var handedToEngine = false
             try {
                 // Cues are validated per frame inside the engine (Stop+Start cannot unmute a stale inference).
-                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled, cuesAllowed = { session.isCurrent(gen) })
+                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled, cuesAllowed = { session.isCurrent(gen) }, sessionToken = gen)
                 val result = engineMutex.withLock {
                     if (cleared.get() || !session.isCurrent(gen) || isInitializing) {
                         return@launch

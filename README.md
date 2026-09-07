@@ -99,7 +99,7 @@ The detector weights are **not** committed (large binaries; Ultralytics distribu
 | `yolo26n_416.onnx` | **Fast** (default for new installs) | ~9 MB | nano; best battery, everyday default on mid-range phones |
 | `yolo26s_416.onnx` | **Sharp** | ~36 MB | small; sharper on far/small objects |
 
-Reproduce them with the pinned recipe (ultralytics 8.4.142 torch 2.14.0+cpu):
+Install the exact shipped assets from the checksum-verified release bundle:
 
 ```bash
 python3 scripts/install_verified_models.py

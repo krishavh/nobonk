@@ -33,6 +33,19 @@ class ApproachTrackerTest {
         assertTrue("HIGH within ~0.6s (frame $highFrame)", highFrame in 0..6)
     }
 
+    @Test fun `a returning box cannot revive an expired approach track`() {
+        var now = 0L
+        val tracker = ApproachTracker(clock = { now })
+        for (fill in listOf(0.2f, 0.35f, 0.5f, 0.7f)) {
+            now += 100
+            tracker.update(listOf(person("before", 0.5f, fill)))
+        }
+        now += 2_000
+        val result = tracker.update(listOf(person("after", 0.5f, 0.85f)))
+        assertFalse(result.contains("after"))
+        assertTrue(tracker.trackIdFor("after") == null)
+    }
+
     @Test fun `static person in a two-person scene is never falsely flagged approaching`() {
         var now = 0L
         val tracker = ApproachTracker(clock = { now })

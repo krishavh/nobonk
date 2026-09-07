@@ -21,7 +21,7 @@ Before replacing these assets, record upstream checkpoint hashes, the complete e
 
 ## Execution and startup
 
-The Android runtime measures XNNPACK (optimized CPU), NNAPI and the standard CPU provider using a warm-up plus three timed inferences. XNNPACK wins close results; another provider must be over 15% faster. NNAPI CPU-reference fallback is disabled, but unsupported graph nodes can still run in ONNX Runtime on the CPU. **NNAPI selection does not prove GPU/NPU placement.** The interface labels it NNAPI, not NPU.
+Benchmark candidates are opened and closed one at a time to limit peak memory; the verified winner is then reopened. Model switches drain inference and release the old graph before loading a replacement. The Android runtime measures XNNPACK (optimized CPU), NNAPI and the standard CPU provider using a warm-up plus three timed inferences. XNNPACK wins close results; another provider must be over 15% faster. NNAPI CPU-reference fallback is disabled, but unsupported graph nodes can still run in ONNX Runtime on the CPU. **NNAPI selection does not prove GPU/NPU placement.** The interface labels it NNAPI, not NPU.
 
 The measured choice is kept privately for at most 30 days, keyed by model bytes, Android build fingerprint, ONNX Runtime version, app version and selection-policy revision. Subsequent loads verify that choice with one inference instead of benchmarking every provider again. A verification failure triggers fresh selection. A separate full preprocessing/decode warm-up checks the complete image path. Fast uses the smaller model for lower latency and memory use; Sharp trades more processing for finer detection. No frame-rate guarantee is made without measurements on the actual phone.
 

@@ -24,6 +24,14 @@ class ProviderSelectionTest {
         }
         assertEquals(2, opened.size); assertTrue(opened.all { it.closed })
     }
+    @Test fun benchmarkNeverKeepsTwoNativeModelsAlive() {
+        var live = 0
+        class NativeModel : AutoCloseable { init { live++; assertEquals(1, live) }; override fun close() { live-- } }
+        val result = ProviderSelection.select(listOf("XNNPACK", "NNAPI", "CPU"), null, { NativeModel() }, {}, { 10.0 })
+        assertEquals(1, live)
+        result.resource.close()
+        assertEquals(0, live)
+    }
     @Test fun cacheExpiresAndRejectsClockRollback() {
         assertFalse(ProviderSelection.validCache(0, 100))
         assertFalse(ProviderSelection.validCache(200, 100))
