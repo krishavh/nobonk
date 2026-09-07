@@ -68,8 +68,8 @@ struct NoBonkView: View {
                     } else { gate.continueFromReminder() }
                 }.buttonStyle(PrimaryButton()).disabled(gate.screen == .fullNotice && !checked)
                 Button("Read the full safety notice") { showFull = true }.frame(maxWidth: .infinity)
-                Label("People detection, on this iPhone", systemImage: "person.crop.rectangle").font(.headline)
-                Text("This early iPhone build detects people only. It does not yet detect cars, pets, walls or ground hazards. Camera frames are processed on-device, never saved or uploaded.").foregroundStyle(.secondary)
+                Label("Detection on this iPhone", systemImage: "person.crop.rectangle").font(.headline)
+                Text("People mode uses Apple Vision. Builds with Fast Objects also offer an early preview for people, bicycles, selected vehicles, cats and dogs. Neither mode detects every obstacle, walls or ground hazards. Camera frames are processed on-device, never saved or uploaded.").foregroundStyle(.secondary)
                 Label("Keep NoBonk open to scan", systemImage: "iphone").font(.headline)
                 Text("Scanning stops when you leave the app or the camera is interrupted. No background camera scanning is included.").foregroundStyle(.secondary)
                 quickAccessGuide
@@ -93,12 +93,13 @@ struct NoBonkView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(camera.running ? "Your scan, your pace." : "Find your comfortable setup.")
                                 .font(.title3.bold())
-                            Text("People only · Keep NoBonk open")
+                            Text("\(camera.detectorMode.rawValue) · Keep NoBonk open")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 4)
                         Image(systemName: "slider.horizontal.3").foregroundStyle(mint)
                     }
+                    DetectorModePicker(camera: camera)
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
                             Text("WHEN TO CUE").font(.caption2.bold()).tracking(1.7)
@@ -108,7 +109,7 @@ struct NoBonkView: View {
                         Picker("Cue sensitivity", selection: $camera.sensitivity) {
                             ForEach(AlertSensitivity.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                         }.pickerStyle(.segmented)
-                        Text("Earlier notices smaller people in the center of the view. Try each setting while standing still.")
+                        Text("Earlier cues on smaller detections in the center of the view. This is apparent image size, not calibrated distance. Try each setting while standing still.")
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         Divider().overlay(.white.opacity(0.06))
                         HStack(spacing: 20) {
@@ -123,7 +124,7 @@ struct NoBonkView: View {
                     }
                     DisclosureGroup {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("All frames stay on this phone. Apple Vision chooses the available computing hardware; NoBonk adapts the analysis pace to the work and temperature.")
+                            Text("Camera frames stay on this phone. People mode uses Apple Vision. Fast Objects prefers Core ML when available, with CPU fallback; that does not prove GPU or Neural Engine use. NoBonk adapts analysis pace to the work and temperature.")
                             if camera.analysisMilliseconds > 0 {
                                 Text("Recent analysis: \(camera.analysisMilliseconds) ms · target up to \(camera.analysisRate) frames/s")
                                     .monospacedDigit().foregroundStyle(mint)
@@ -234,7 +235,7 @@ struct NoBonkView: View {
             TimelineView(.periodic(from: .now, by: 0.5)) { tick in
                 if tick.date < camera.alertUntil {
                     VStack {
-                        Label("Person ahead — look up", systemImage: "exclamationmark.triangle.fill")
+                        Label(camera.alertText, systemImage: "exclamationmark.triangle.fill")
                             .font(.subheadline.bold()).foregroundStyle(.black).padding(12)
                             .background(Color.orange, in: RoundedRectangle(cornerRadius: 14))
                         Spacer()

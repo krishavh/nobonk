@@ -1,26 +1,26 @@
 # NoBonk for iPhone — foreground prototype
 
-Native SwiftUI / AVFoundation / Apple Vision starting point, built locally on the Mac. No cloud inference, paid SDK, external dependency, account, subscription or network client. It reuses NoBonk's corrected Blender icon and credits Krishav.
+Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision People is the default; an optional, checksum-pinned ONNX Fast Objects model adds eight selected classes through the free official ONNX Runtime SDK. No cloud inference, paid SDK, account, subscription or inference network client. It reuses NoBonk's corrected Blender icon and credits Krishav.
 
 ## Working scope
 
 - Full first-use safety notice with an unchecked acknowledgment switch. Existing acknowledgment versions are rechecked when the notice version changes.
 - Short warning at the top with **OK — continue** on every fresh launch and after leaving for another app.
 - Compact camera dashboard with an expandable preview, a persistent Start/Stop button, a top safety reminder, and sound/haptic controls. This leaves space for NoBonk’s setup controls; it does not put another app below the camera.
-- Local **people-only** detection with bounding boxes correctly fitted to the preview’s letterboxing. Earlier/Balanced/Closer cues use apparent person size, not metres.
-- A cue when a person occupies the selected central portion of the image for three consecutive analyzed frames. Three-second cooldown. This is image size, **not a calibrated distance or collision prediction**.
+- Local **People** or optional **Fast Objects** detection with bounding boxes fitted to preview letterboxing. Earlier/Balanced/Closer cues use apparent image size, not metres. See [Fast model setup, provenance and validation](FAST-OBJECTS.md).
+- A cue when the same supported class occupies the selected central portion of the image for three consecutive analyzed frames. Three-second cooldown. This is image size, **not a calibrated distance or collision prediction**.
 - Generation tokens reject late camera callbacks after Stop or a new session; failed starts release the retry latch. The owned audio cue also stops immediately when scanning or sound is disabled. Camera stops on inactive/background transitions and interruptions. Returning requires the reminder after backgrounding; scanning is always started explicitly. Permission denial has a Settings action. Permission callbacks cannot silently start capture.
-- No frame recording, history, location, microphone, photo-library, telemetry or background modes. Only the notice version is persisted locally. Required-reason API declarations cover local preferences and elapsed-time cooldowns.
+- No frame recording, history, location, microphone, photo-library, telemetry or background modes. The notice version and optional compiled-model cache are persisted locally; camera frames are not. Required-reason API declarations cover local preferences and elapsed-time cooldowns.
 - App Shortcuts and an iOS 18+ Control widget open the setup screen after device authentication. They preserve the acknowledgment and explicit Start; see [Quick access](QUICK-ACCESS.md).
 - A deliberately started scan keeps the screen awake. Stop, leaving the app, locking the phone or a capture interruption ends scanning and restores ordinary auto-lock behavior. Debug builds log local capability and first-frame timing without logging camera images.
 
-This prototype is not Android feature parity and is not ready for App Store/TestFlight distribution. It does **not** detect cars, pets, walls, potholes or general obstacles. The UI makes that limit explicit. Test on a real iPhone before relying on any behavior; NoBonk is never a safety device.
+This prototype is not Android feature parity and is not ready for App Store/TestFlight distribution. People mode does **not** detect cars or pets. Fast Objects adds selected vehicles, cats and dogs, but neither mode covers walls, potholes or general obstacles. The UI makes that limit explicit. Test on a real iPhone before relying on any behavior; NoBonk is never a safety device.
 
 ## Performance strategy
 
 One serial camera queue runs one reused Apple Vision request, with late capture frames discarded instead of queued. Native bi-planar YUV buffers are preferred over converting every frame to BGRA. Camera preview and analysis are separate: analysis targets up to 12 frames/s when measured work is short, backs off as inference takes longer, and respects heat and Low Power Mode. The first Vision initialization sample does not throttle subsequent fast frames. This is pacing logic, not a claim that a particular iPhone reaches 12 frames/s.
 
-Vision selects its computing hardware automatically; no CPU-only flag or forced GPU assignment is used. The interface reports measured analysis duration and a target cadence, not an unverified processor label. Real iPhones still need profiling for startup, accuracy, battery use and sustained heat. There is no model download or explicit warmup benchmark before the first camera frame.
+Vision selects its computing hardware automatically; no CPU-only flag or forced GPU assignment is used. The interface reports measured analysis duration and a target cadence, not an unverified processor label. Real iPhones still need profiling for startup, accuracy, battery use and sustained heat. There is no model download. Optional Fast Objects verifies and warms its graph before starting capture; see [Fast Objects](FAST-OBJECTS.md) for Core ML configuration, CPU fallback and phase timings.
 
 - [Apple: selecting camera pixel formats](https://developer.apple.com/documentation/technotes/tn3121-selecting-a-pixel-format-for-an-avcapturevideodataoutput)
 - [Apple: Vision compute-device configuration](https://developer.apple.com/documentation/vision/vnrequest)
@@ -40,7 +40,7 @@ Installing on an actual iPhone requires the owner's signing team and Developer M
 
 ## Validation on September 7, 2026
 
-- Fifteen Swift package tests pass: safety gates, reopen behavior, persistent-person cues and cooldown, invalid/peripheral boxes, sensitivity, concurrent generation invalidation, retry, PCM cue payload, preview geometry, adaptive pacing, heat/Low Power Mode, and cold initialization.
+- Twenty-five Swift package tests pass (including ten Fast decoder/preprocessing/metadata tests): safety gates, reopen behavior, persistent-person cues and cooldown, invalid/peripheral boxes, sensitivity, concurrent generation invalidation, retry, PCM cue payload, preview geometry, adaptive pacing, heat/Low Power Mode, and cold initialization.
 - Three hosted quick-access tests pass: opening preserves acknowledgment state and the reminder, and requires foreground presentation plus device authentication.
 - Full Xcode simulator build succeeds with Xcode 26.6 and the installed iOS 26.5 runtime. The earlier SDK/runtime registration blocker is resolved.
 - iPhone 17 Pro (iOS 26.5) and iPhone SE (iOS 17.0) simulators launch successfully. Visual checks cover the safety acknowledgment, compact/expanded layouts, permission denial with a Settings action, and larger text on the smaller screen. No live detection is simulated or claimed from these screenshots.

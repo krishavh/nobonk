@@ -23,7 +23,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>NoBonk uses the rear camera to detect people on this iPhone. Frames are processed locally and are never saved or uploaded.</string>
+	<string>NoBonk uses the rear camera to detect people and selected objects on this iPhone. Camera frames are processed locally and are never saved or uploaded.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

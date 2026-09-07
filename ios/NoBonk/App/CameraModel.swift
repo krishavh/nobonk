@@ -5,10 +5,13 @@ import OSLog
 
 
 // Capture and Vision work stay on one serial queue; UI never receives image data.
-final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+final class CameraEngine: NSObject {
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "ai.genwhy.nobonk.camera", qos: .userInitiated)
     private var configured = false
+    private var videoOutput: AVCaptureVideoDataOutput?
+    private var frameReceiver: CameraFrameReceiver?
+    private var fastDetector: FastObjectDetector?
     private var cadence = AnalysisCadence()
     private let humanRequest: VNDetectHumanRectanglesRequest = {
         let request = VNDetectHumanRectanglesRequest()
@@ -18,29 +21,34 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         return request
     }()
     let generation = CaptureGeneration()
-    private var activeToken: UInt64 = 0
     private var imageOrientation: CGImagePropertyOrientation = .up
     private var firstResultPending = false
     private var startedAt = 0.0
     private let diagnostics = Logger(subsystem: "ai.genwhy.nobonk", category: "CameraAccess")
     var onBoxes: ((UInt64, [PersonBox], Double, Double, Double) -> Void)?
     var onState: ((UInt64, Bool, String) -> Void)?
-    func start(token: UInt64) {
+    var onTiming: ((UInt64, DetectorTiming) -> Void)?
+    func start(token: UInt64, mode: DetectorMode) {
         queue.async { [self] in
             guard generation.accepts(token) else { return }
-            activeToken = token
             startedAt = ProcessInfo.processInfo.systemUptime
             firstResultPending = true
             do {
                 if !configured { try configure() }
+                if mode == .fastObjects, fastDetector == nil { fastDetector = try FastObjectDetector() }
+                guard generation.accepts(token) else { return }
+                try configureFormat(mode)
+                let receiver = CameraFrameReceiver(owner: self, token: token, mode: mode, orientation: imageOrientation)
+                frameReceiver = receiver
+                videoOutput?.setSampleBufferDelegate(receiver, queue: queue)
                 #if DEBUG
                 diagnostics.notice("Camera capability: multitasking supported=\(self.session.isMultitaskingCameraAccessSupported), enabled=\(self.session.isMultitaskingCameraAccessEnabled)")
                 #endif
                 guard generation.accepts(token) else { return }
                 session.startRunning()
                 guard generation.accepts(token) else { session.stopRunning(); return }
-                onState?(token, session.isRunning, session.isRunning ? "Scanning for people" : "Camera unavailable — tap Start to retry")
-            } catch { onState?(token, false, "Camera unavailable. Check camera access in Settings, then tap Start to retry.") }
+                onState?(token, session.isRunning, session.isRunning ? "Scanning · \(mode.rawValue)" : "Camera unavailable — tap Start to retry")
+            } catch { onState?(token, false, (error as? FastDetectorError)?.localizedDescription ?? "Camera unavailable. Check access or choose People, then tap Start.") }
         }
     }
     func stop() {
@@ -50,6 +58,8 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         #endif
         queue.async { [self] in
             if session.isRunning { session.stopRunning() }
+            videoOutput?.setSampleBufferDelegate(nil, queue: nil)
+            frameReceiver = nil
             cadence.reset()
         }
     }
@@ -63,27 +73,28 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         session.addInput(input)
         let output = AVCaptureVideoDataOutput()
         output.alwaysDiscardsLateVideoFrames = true
-        // Prefer the camera's native YUV format over converting every frame to BGRA.
-        let formats = output.availableVideoPixelFormatTypes
-        let format = formats.contains(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
-            ? kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-            : (formats.contains(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
-                ? kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange : kCVPixelFormatType_32BGRA)
-        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: format]
         guard session.canAddOutput(output) else {
             session.removeInput(input)
             throw CameraError.unavailable
         }
         session.addOutput(output)
-        output.setSampleBufferDelegate(self, queue: queue)
+        videoOutput = output
         if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
             connection.videoRotationAngle = 90
             imageOrientation = .up
         } else { imageOrientation = .right } // unrotated rear-camera buffer → portrait Vision coordinates
         configured = true
     }
-    func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer, from connection: AVCaptureConnection) {
-        let token = activeToken
+    private func configureFormat(_ mode: DetectorMode) throws {
+        guard let output = videoOutput else { throw CameraError.unavailable }
+        let formats = output.availableVideoPixelFormatTypes
+        let format: OSType = mode == .fastObjects ? kCVPixelFormatType_32BGRA :
+            (formats.contains(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange) ? kCVPixelFormatType_420YpCbCr8BiPlanarFullRange :
+             (formats.contains(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) ? kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange : kCVPixelFormatType_32BGRA))
+        guard formats.contains(format) else { throw FastDetectorError.pixels }
+        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: format]
+    }
+    fileprivate func process(_ sample: CMSampleBuffer, token: UInt64, mode: DetectorMode, orientation: CGImagePropertyOrientation) {
         guard generation.accepts(token), session.isRunning else { return }
         let now = ProcessInfo.processInfo.systemUptime
         let pressure: AnalysisCadence.Pressure
@@ -99,7 +110,16 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
               let buffer = CMSampleBufferGetImageBuffer(sample) else { return }
         do {
             let boxes: [PersonBox] = try autoreleasepool {
-                try VNImageRequestHandler(cvPixelBuffer: buffer, orientation: imageOrientation).perform([humanRequest])
+                if mode == .fastObjects {
+                    guard let fastDetector else { throw FastDetectorError.missingAsset }
+                    let (detections, timing) = try fastDetector.detect(buffer, rotation: orientation == .up ? .upright : .clockwise90)
+                    if generation.accepts(token) { onTiming?(token, timing) }
+                    return detections.map { item in
+                        PersonBox(id: item.anchor, x: item.rect.x, y: item.rect.y, width: item.rect.width,
+                                  height: item.rect.height, confidence: Double(item.confidence), classID: item.classID, detectorMode: .fastObjects)
+                    }.filter(\.usable)
+                }
+                try VNImageRequestHandler(cvPixelBuffer: buffer, orientation: orientation).perform([humanRequest])
                 return (humanRequest.results ?? []).enumerated().map { index, item in
                     let r = item.boundingBox
                     return PersonBox(id: index, x: r.minX, y: 1-r.maxY, width: r.width, height: r.height, confidence: Double(item.confidence))
@@ -107,7 +127,7 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             }
             cadence.complete(duration: ProcessInfo.processInfo.systemUptime - now)
             let width = Double(CVPixelBufferGetWidth(buffer)), height = Double(CVPixelBufferGetHeight(buffer))
-            let aspect = imageOrientation == .up ? width / height : height / width
+            let aspect = orientation == .up ? width / height : height / width
             if generation.accepts(token) {
                 #if DEBUG
                 if firstResultPending {
@@ -124,6 +144,19 @@ final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     private enum CameraError: Error { case unavailable }
 }
 
+/// AVCapture callbacks retain their originating scan's immutable token and mode.
+/// A queued frame from before Stop cannot be relabeled as a new scan after restart.
+private final class CameraFrameReceiver: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    weak var owner: CameraEngine?
+    let token: UInt64, mode: DetectorMode, orientation: CGImagePropertyOrientation
+    init(owner: CameraEngine, token: UInt64, mode: DetectorMode, orientation: CGImagePropertyOrientation) {
+        self.owner = owner; self.token = token; self.mode = mode; self.orientation = orientation
+    }
+    func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer, from connection: AVCaptureConnection) {
+        owner?.process(sample, token: token, mode: mode, orientation: orientation)
+    }
+}
+
 @MainActor
 final class CameraModel: ObservableObject {
     let engine = CameraEngine()
@@ -132,6 +165,11 @@ final class CameraModel: ObservableObject {
     @Published var running = false
     @Published var starting = false
     @Published var denied = false
+    @Published var detectorMode: DetectorMode = .visionPeople {
+        didSet { if oldValue != detectorMode { stop(message: "Mode changed — tap Start"); detectorTiming = nil } }
+    }
+    @Published var detectorTiming: DetectorTiming?
+    var fastModelAvailable: Bool { FastObjectDetector.assetURL != nil }
     @Published var sound = true { didSet { if !sound { audio?.stop() } } }
     @Published var haptics = true
     @Published var sensitivity: AlertSensitivity = .balanced { didSet { policy.reset() } }
@@ -139,6 +177,7 @@ final class CameraModel: ObservableObject {
     @Published var analysisMilliseconds = 0
     @Published var analysisRate = 0
     @Published var alertUntil = Date.distantPast
+    @Published var alertText = "Person ahead — look up"
     private var wanted = false
     private var audio: AVAudioPlayer?
     private var policy = DetectionPolicy()
@@ -151,11 +190,19 @@ final class CameraModel: ObservableObject {
                 self.previewAspect = aspect
                 self.analysisMilliseconds = Int((duration * 1000).rounded())
                 self.analysisRate = Int((1 / interval).rounded())
-                if self.policy.evaluate(boxes, time: ProcessInfo.processInfo.systemUptime, sensitivity: self.sensitivity) == .personAhead {
+                let cue = self.policy.evaluate(boxes, time: ProcessInfo.processInfo.systemUptime, sensitivity: self.sensitivity)
+                if cue != .none {
+                    self.alertText = cue == .personAhead ? "Person ahead — look up" : "Object in view — look up"
                     self.alertUntil = Date().addingTimeInterval(2)
                     if self.haptics { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
                     if self.sound { self.playCue() }
                 }
+            }
+        }
+        engine.onTiming = { [weak self] token, timing in
+            Task { @MainActor in
+                guard let self, self.engine.generation.accepts(token), self.wanted else { return }
+                self.detectorTiming = timing
             }
         }
         engine.onState = { [weak self] token, running, status in
@@ -187,7 +234,9 @@ final class CameraModel: ObservableObject {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             guard UIApplication.shared.applicationState == .active else { return }
-            wanted = true; starting = true; status = "Starting camera…"; policy.reset(); engine.start(token: engine.generation.begin())
+            wanted = true; starting = true
+            status = detectorMode == .fastObjects ? "Preparing Fast Objects on this phone…" : "Starting camera…"
+            policy.reset(); engine.start(token: engine.generation.begin(), mode: detectorMode)
         case .notDetermined:
             status = "Camera permission needed"
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in

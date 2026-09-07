@@ -8,8 +8,13 @@ struct PersonBox: Equatable, Sendable, Identifiable {
     let width: Double
     let height: Double
     let confidence: Double
+    var classID: Int = 0
+    var detectorMode: DetectorMode = .visionPeople
+    var label: String { FastModelContract.names[classID] ?? "object" }
     var usable: Bool {
-        [x,y,width,height,confidence].allSatisfy(\.isFinite) && x >= 0 && y >= 0 && width > 0 && height > 0 && x + width <= 1.001 && y + height <= 1.001 && confidence >= 0.5
+        [x,y,width,height,confidence].allSatisfy(\.isFinite) && x >= 0 && y >= 0 && width > 0 && height > 0 && x + width <= 1.001 && y + height <= 1.001 && confidence <= 1 &&
+        confidence >= (detectorMode == .visionPeople ? 0.5 : Double(FastModelContract.confidence)) &&
+        (detectorMode == .visionPeople ? classID == 0 : FastModelContract.names[classID] != nil)
     }
 }
 
@@ -21,19 +26,23 @@ enum AlertSensitivity: String, CaseIterable, Sendable {
 }
 
 struct DetectionPolicy {
-    enum Cue: Equatable { case none, personAhead }
+    enum Cue: Equatable { case none, personAhead, objectAhead }
     private var lastAlert = -Double.infinity
     private var consecutiveFrames = 0
+    private var candidateClass: Int?
     // Apparent image size only. This prototype does NOT claim calibrated metres or depth.
     mutating func evaluate(_ boxes: [PersonBox], time: Double, sensitivity: AlertSensitivity = .balanced) -> Cue {
         guard time.isFinite else { return .none }
-        let candidate = boxes.contains { b in
+        let candidate = boxes.first { b in
             b.usable && b.height >= sensitivity.minimumHeight && b.x < 0.65 && b.x + b.width > 0.35
         }
-        consecutiveFrames = candidate ? consecutiveFrames + 1 : 0
+        if let candidate {
+            consecutiveFrames = candidateClass == candidate.classID ? consecutiveFrames + 1 : 1
+            candidateClass = candidate.classID
+        } else { consecutiveFrames = 0; candidateClass = nil }
         guard consecutiveFrames >= 3, time - lastAlert >= 3 else { return .none }
         lastAlert = time
-        return .personAhead
+        return candidate?.classID == 0 ? .personAhead : .objectAhead
     }
     mutating func reset() { self = Self() }
 }
@@ -84,7 +93,7 @@ enum AlertTone {
 
 /// Matches AVCaptureVideoPreviewLayer.resizeAspect without stretching detections
 /// across letterboxing when the user switches between compact and expanded view.
-struct PreviewRect: Equatable {
+struct PreviewRect: Equatable, Sendable {
     let x: Double, y: Double, width: Double, height: Double
     static let zero = PreviewRect(x: 0, y: 0, width: 0, height: 0)
     var minX: Double { x }
