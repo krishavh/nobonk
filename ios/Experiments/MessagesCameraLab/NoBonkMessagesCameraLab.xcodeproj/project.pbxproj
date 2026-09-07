@@ -1,0 +1,476 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0D695F23F1B2197D77D62D26 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2ADA65B49CCACE0AD0A145E /* Assets.xcassets */; };
+		409F36CC2B1B32CE1476ED09 /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 77279753BD86EFD27822BB2C /* MainInterface.storyboard */; };
+		452E293EFD0CDC62C7ADCBF3 /* MessageCameraCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BF52FC0CD61367BDD2E1E4E /* MessageCameraCapture.swift */; };
+		5555A19733C54E5F58A2E2D5 /* MessageCameraBoundary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4843FEA95385E7EC13E705F9 /* MessageCameraBoundary.swift */; };
+		7F76087311053CF99E3DE169 /* MessagesViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E0FC3595E212AA6BBAAE04 /* MessagesViewController.swift */; };
+		81D7AD95E31246FE223547EB /* MessagesCameraLabApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00FAE436778BA13C76711 /* MessagesCameraLabApp.swift */; };
+		B43564ACE6B1B0C213586BFE /* MessageCameraJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0587EF02F300EAAAE53BCD6 /* MessageCameraJournal.swift */; };
+		B8B092EC396B1C8B7388792B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2ADA65B49CCACE0AD0A145E /* Assets.xcassets */; };
+		F207322DC1A099274D67C08A /* MessageCameraVisibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FD83D4D926F496B63C57207 /* MessageCameraVisibility.swift */; };
+		FADC75524A34264544A156AC /* MessagesCameraExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6960E00ADDAB88AF194E5C63 /* MessagesCameraExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		25D734D88F301DD7215EB529 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A58F12A891A99659763E0AD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3E7FD10D5FA9E6528E0DF082;
+			remoteInfo = MessagesCameraExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A836363A5FFF1EB0647E5015 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				FADC75524A34264544A156AC /* MessagesCameraExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		00E0FC3595E212AA6BBAAE04 /* MessagesViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesViewController.swift; sourceTree = "<group>"; };
+		25D7327684F50EF20285FEC8 /* NoBonkMessagesCameraLab.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NoBonkMessagesCameraLab.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		43439E0D1BE6A7C6C110C5E5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4843FEA95385E7EC13E705F9 /* MessageCameraBoundary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCameraBoundary.swift; sourceTree = "<group>"; };
+		6960E00ADDAB88AF194E5C63 /* MessagesCameraExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MessagesCameraExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		77279753BD86EFD27822BB2C /* MainInterface.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = MainInterface.storyboard; sourceTree = "<group>"; };
+		7BF52FC0CD61367BDD2E1E4E /* MessageCameraCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCameraCapture.swift; sourceTree = "<group>"; };
+		9FD83D4D926F496B63C57207 /* MessageCameraVisibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCameraVisibility.swift; sourceTree = "<group>"; };
+		A0D00FAE436778BA13C76711 /* MessagesCameraLabApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesCameraLabApp.swift; sourceTree = "<group>"; };
+		B2ADA65B49CCACE0AD0A145E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C24A85E4DC8E48A78D6F0D62 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E0587EF02F300EAAAE53BCD6 /* MessageCameraJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCameraJournal.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0E631078ABF208C290028BEB /* Host */ = {
+			isa = PBXGroup;
+			children = (
+				43439E0D1BE6A7C6C110C5E5 /* Info.plist */,
+				A0D00FAE436778BA13C76711 /* MessagesCameraLabApp.swift */,
+			);
+			path = Host;
+			sourceTree = "<group>";
+		};
+		16400D2267C69CB68D28F751 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				4843FEA95385E7EC13E705F9 /* MessageCameraBoundary.swift */,
+				E0587EF02F300EAAAE53BCD6 /* MessageCameraJournal.swift */,
+				9FD83D4D926F496B63C57207 /* MessageCameraVisibility.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		347FD86BDBBE9565320444E5 /* Extension */ = {
+			isa = PBXGroup;
+			children = (
+				C24A85E4DC8E48A78D6F0D62 /* Info.plist */,
+				77279753BD86EFD27822BB2C /* MainInterface.storyboard */,
+				7BF52FC0CD61367BDD2E1E4E /* MessageCameraCapture.swift */,
+				00E0FC3595E212AA6BBAAE04 /* MessagesViewController.swift */,
+			);
+			path = Extension;
+			sourceTree = "<group>";
+		};
+		9205C42D58ACA837150D65D2 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B2ADA65B49CCACE0AD0A145E /* Assets.xcassets */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		B65B3F851036296E47A693B6 = {
+			isa = PBXGroup;
+			children = (
+				16400D2267C69CB68D28F751 /* Core */,
+				347FD86BDBBE9565320444E5 /* Extension */,
+				0E631078ABF208C290028BEB /* Host */,
+				9205C42D58ACA837150D65D2 /* Shared */,
+				C35478EF4CF2C9C1B01CFE73 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C35478EF4CF2C9C1B01CFE73 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6960E00ADDAB88AF194E5C63 /* MessagesCameraExtension.appex */,
+				25D7327684F50EF20285FEC8 /* NoBonkMessagesCameraLab.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3E7FD10D5FA9E6528E0DF082 /* MessagesCameraExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A51E0A69D0816AA7B5E13637 /* Build configuration list for PBXNativeTarget "MessagesCameraExtension" */;
+			buildPhases = (
+				F01C984DDDEFFFB706B196B7 /* Sources */,
+				DD17D81D920E545084A00D88 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MessagesCameraExtension;
+			packageProductDependencies = (
+			);
+			productName = MessagesCameraExtension;
+			productReference = 6960E00ADDAB88AF194E5C63 /* MessagesCameraExtension.appex */;
+			productType = "com.apple.product-type.app-extension.messages";
+		};
+		7F53BC2D6CD98A5AA1547019 /* NoBonkMessagesCameraLab */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4946C0175B5DA2A2A550ADA7 /* Build configuration list for PBXNativeTarget "NoBonkMessagesCameraLab" */;
+			buildPhases = (
+				59F02E9C5F6E97E73A6CD7CD /* Sources */,
+				B112DA3C4EC5A9ED557ACE7A /* Resources */,
+				A836363A5FFF1EB0647E5015 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F1F0366725B5A439EBCDC546 /* PBXTargetDependency */,
+			);
+			name = NoBonkMessagesCameraLab;
+			packageProductDependencies = (
+			);
+			productName = NoBonkMessagesCameraLab;
+			productReference = 25D7327684F50EF20285FEC8 /* NoBonkMessagesCameraLab.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1A58F12A891A99659763E0AD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					3E7FD10D5FA9E6528E0DF082 = {
+						ProvisioningStyle = Automatic;
+					};
+					7F53BC2D6CD98A5AA1547019 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = A2AAC493FCC21C51FDAA311E /* Build configuration list for PBXProject "NoBonkMessagesCameraLab" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B65B3F851036296E47A693B6;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3E7FD10D5FA9E6528E0DF082 /* MessagesCameraExtension */,
+				7F53BC2D6CD98A5AA1547019 /* NoBonkMessagesCameraLab */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B112DA3C4EC5A9ED557ACE7A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D695F23F1B2197D77D62D26 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD17D81D920E545084A00D88 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B8B092EC396B1C8B7388792B /* Assets.xcassets in Resources */,
+				409F36CC2B1B32CE1476ED09 /* MainInterface.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		59F02E9C5F6E97E73A6CD7CD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				81D7AD95E31246FE223547EB /* MessagesCameraLabApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F01C984DDDEFFFB706B196B7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5555A19733C54E5F58A2E2D5 /* MessageCameraBoundary.swift in Sources */,
+				452E293EFD0CDC62C7ADCBF3 /* MessageCameraCapture.swift in Sources */,
+				B43564ACE6B1B0C213586BFE /* MessageCameraJournal.swift in Sources */,
+				F207322DC1A099274D67C08A /* MessageCameraVisibility.swift in Sources */,
+				7F76087311053CF99E3DE169 /* MessagesViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F1F0366725B5A439EBCDC546 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3E7FD10D5FA9E6528E0DF082 /* MessagesCameraExtension */;
+			targetProxy = 25D734D88F301DD7215EB529 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5BCB638878A4F2F3672DE27A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Host/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.genwhy.nobonk.messageslab;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7835C358A820283E66C07A67 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				INFOPLIST_FILE = Extension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.genwhy.nobonk.messageslab.extension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1D912963E886FA178772351 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Host/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.genwhy.nobonk.messageslab;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		BC465C98415038EC00C56AC4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		D53C2E69BF80300A15BC2711 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F059C0032D257A4EEAB1156F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				INFOPLIST_FILE = Extension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.genwhy.nobonk.messageslab.extension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4946C0175B5DA2A2A550ADA7 /* Build configuration list for PBXNativeTarget "NoBonkMessagesCameraLab" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5BCB638878A4F2F3672DE27A /* Debug */,
+				A1D912963E886FA178772351 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A2AAC493FCC21C51FDAA311E /* Build configuration list for PBXProject "NoBonkMessagesCameraLab" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D53C2E69BF80300A15BC2711 /* Debug */,
+				BC465C98415038EC00C56AC4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A51E0A69D0816AA7B5E13637 /* Build configuration list for PBXNativeTarget "MessagesCameraExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7835C358A820283E66C07A67 /* Debug */,
+				F059C0032D257A4EEAB1156F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1A58F12A891A99659763E0AD /* Project object */;
+}
