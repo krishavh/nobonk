@@ -138,4 +138,5 @@ object SessionState {
     /** Set by the service when the user pressed Stop (app or notification); consumed by MainActivity so
      *  returning to NoBonk does not silently resume scanning. */
     @Volatile var backgroundStoppedByUser: Boolean = false
+    @Volatile var backgroundFailure: String? = null
 }

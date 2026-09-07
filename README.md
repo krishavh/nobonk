@@ -96,15 +96,13 @@ The detector weights are **not** committed (large binaries; Ultralytics distribu
 
 | Asset | Mode in app | Size | Notes |
 |---|---|---|---|
-| `yolo26n_416.onnx` | **Fast** | ~9 MB | nano; best battery, everyday default on mid-range phones |
-| `yolo26s_416.onnx` | **Sharp** (default) | ~36 MB | small; sharper on far/small objects |
+| `yolo26n_416.onnx` | **Fast** (default for new installs) | ~9 MB | nano; best battery, everyday default on mid-range phones |
+| `yolo26s_416.onnx` | **Sharp** | ~36 MB | small; sharper on far/small objects |
 
 Reproduce them with the pinned recipe (ultralytics 8.4.142 torch 2.14.0+cpu):
 
 ```bash
-pip install ultralytics onnx onnxslim onnxruntime
-yolo export model=yolo26n.pt format=onnx imgsz=416 opset=17 simplify=True && mv yolo26n.onnx app/src/main/assets/yolo26n_416.onnx
-yolo export model=yolo26s.pt format=onnx imgsz=416 opset=17 simplify=True && mv yolo26s.onnx app/src/main/assets/yolo26s_416.onnx
+python3 scripts/install_verified_models.py
 ```
 
 The exported graph outputs `[1, 84, 3549]` (cx, cy, w, h + 80 class scores per candidate); `ml/Nms.kt` keeps the eight classes NoBonk cares about and suppresses duplicates. Provenance, the AGPL §13 obligations, and why YOLO26 over the alternatives we evaluated (RF-DETR, D-FINE, YOLOX) are in [`docs/MODEL.md`](docs/MODEL.md) and [`docs/MODEL_CHOICE.md`](docs/MODEL_CHOICE.md).

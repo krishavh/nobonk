@@ -1,6 +1,6 @@
 # NoBonk — Privacy Policy
 
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-07
 **App:** NoBonk (`ai.genwhy.nobonk`)
 **Developer:** Published by a parent/guardian on behalf of Krishav (student author).
 **Contact:** support@genwhy.ai (Haarith, parent and account holder), or an issue at github.com/krishavh/nobonk.
@@ -9,11 +9,10 @@
 > **Plain-language summary:** NoBonk runs entirely on your phone. It uses the
 > back camera to watch the path ahead and warn you before you walk into
 > something. **No photos or video are ever recorded, saved, or sent anywhere.**
-> The app has no internet permission and works in airplane mode. The only thing
-> it can store is a private, on-device history of alert events, and — *only if
+> The app has no internet permission and works in airplane mode. It stores settings, a safety acknowledgment and a private, on-device history of alert events, and — *only if
 > you turn it on* — an approximate (coarse) location tag for those events so a
 > map of your close-call spots can be shown. You can delete that history at any
-> time, and nothing ever leaves your device.
+> time. Camera frames and history are not uploaded by NoBonk.
 
 ---
 
@@ -26,10 +25,7 @@ parent/guardian, who is the data controller for the purposes of this policy.
 
 ## 2. What NoBonk does
 
-NoBonk uses your phone's back camera and an on-device AI vision model to detect
-people, obstacles, walls, and ground hazards in real time, and alerts you with
-vibration and on-screen warnings so a glance at your phone doesn't end in a
-collision. Alerts are vibration, an on-screen warning, a short alert sound, and — only if you switch it on — a spoken phrase such as "Person on your left. Look up." All processing happens **on the device**.
+NoBonk uses your phone's back camera and an on-device AI vision model to estimate the presence of people and selected objects, with additional image heuristics for possible obstacles. It can miss hazards or produce false alerts; it is not a safety device or a replacement for looking up. Alerts are vibration, an on-screen warning, a short alert sound, and — only if you switch it on — a spoken phrase such as "Person on your left. Look up." All processing happens **on the device**.
 
 ## 3. Camera data — never recorded
 
@@ -41,13 +37,10 @@ collision. Alerts are vibration, an on-screen warning, a short alert sound, and 
 
 ## 4. Data the app can store on your device
 
-The **only** data NoBonk persists is a local **detection-event history** (used
-to show your session stats and a hotspot map). It is stored in the app's private
-storage (`detection_events.json`) and is **never uploaded**. Each event may
-contain:
+NoBonk persists local settings, the accepted safety-notice version, update-prompt preferences, a measured execution-provider choice, and **foreground detection-event history**. Background scanning currently does not add history events. History is encrypted in private storage (`detection_events.enc`); a temporary encrypted file may be used during compaction. NoBonk does not upload these records. Each event may contain:
 
 - a timestamp,
-- the alert level and detected hazard type (e.g. "person", "wall"),
+- the alert level and detected object type (e.g. "person", "dog"),
 - an approximate distance estimate, and
 - **optionally**, a **coarse** location (see §5).
 
@@ -71,9 +64,9 @@ can be erased at any time (see §7).
 
 - **No internet.** The app declares **no `INTERNET` permission** and makes no
   network connections. It cannot send your data anywhere even if it wanted to.
-- **No accounts, no sign-in, no advertising, no analytics, no third-party SDKs,
-  no trackers.** The only libraries are open-source on-device components (ONNX
-  Runtime, CameraX, Jetpack Compose).
+- **No accounts, no sign-in, no advertising, no analytics or tracking SDKs.**
+  Libraries include ONNX Runtime, CameraX, Jetpack Compose, AndroidX Security
+  and Google Play In-App Updates.
 - **No microphone.** NoBonk never requests audio recording.
 - **Motion sensors** (accelerometer/gravity) are read in memory to tell whether the
   phone is pointed forward and whether you are walking; readings are never stored.
@@ -81,14 +74,14 @@ can be erased at any time (see §7).
   Look up.") to your phone's own text-to-speech engine, which is separate software
   covered by its maker's policy. The phrase contains no personal data, and NoBonk
   itself still has no network access. Voice alerts are off by default.
-- **App updates via Google Play.** NoBonk can ask the Google Play Store whether a newer version exists (an in-app update suggestion you can decline or snooze). That check is performed by the Play Store, which processes your device details and installed version under Google's own policy; NoBonk sends it nothing of its own. Camera frames, alerts, settings and history are never part of it. Builds not installed from Google Play simply see no update suggestion.
+- **App updates via Google Play.** NoBonk can ask the Google Play Store whether a newer version exists (an in-app update suggestion you can decline or snooze). That check is performed by the Play Store, which processes your device details and installed version under Google's own policy; NoBonk requests update availability for its app. Camera frames, alerts, settings and history are never part of it. Builds not installed from Google Play simply see no update suggestion.
 - **No data selling or sharing.** Because nothing leaves the device, there is
   nothing to sell or share.
 
 ## 7. Your controls
 
 - **Delete your history:** use the in-app "Clear history" control to erase all
-  stored events (and any stored coarse locations) immediately.
+  stored events (and any stored coarse locations) once deletion succeeds; the app reports a deletion failure.
 - **Revoke permissions:** you can revoke Camera or Location permission at any
   time in Android Settings. Uninstalling the app removes all its on-device data.
 

@@ -100,7 +100,6 @@ class DetectionEngine(private val appContext: Context) {
     }
 
     private var objectDetector: ObjectDetector? = null
-    val isHardwareAccelerated: Boolean get() = objectDetector?.isHardwareAccelerated ?: false
     /** The verified active execution provider ("NNAPI" | "XNNPACK" | "CPU"). */
     val executionProvider: String get() = objectDetector?.activeExecutionProvider ?: "CPU"
     val inputSize: Int get() = objectDetector?.inputSize ?: 416
@@ -135,8 +134,9 @@ class DetectionEngine(private val appContext: Context) {
 
     /** (Re)load the model. Safe to call off the main thread. */
     fun loadModel(modelName: String, inputPx: Int, skipNms: Boolean) {
+        val replacement = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
         objectDetector?.close()
-        objectDetector = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
+        objectDetector = replacement
     }
 
     /** Normalized focal length in use by the distance estimator (see [CameraIntrinsics]). */
@@ -167,8 +167,7 @@ class DetectionEngine(private val appContext: Context) {
     fun warmUp() {
         val d = objectDetector ?: return
         val dummy = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888)
-        repeat(2) { d.detect(dummy) }
-        dummy.recycle()
+        try { d.detect(dummy) } finally { dummy.recycle() }
     }
 
     /**
@@ -282,7 +281,8 @@ class DetectionEngine(private val appContext: Context) {
         val detector = objectDetector
         val work = try {
             val raw = proxyToRawBitmap(imageProxy)
-            toUprightWork(raw, imageProxy.imageInfo.rotationDegrees, imageProxy.cropRect)
+            try { toUprightWork(raw, imageProxy.imageInfo.rotationDegrees, imageProxy.cropRect) }
+            finally { if (raw !== rawBitmap) raw.recycle() }
         } finally {
             imageProxy.close()
         }
@@ -429,7 +429,7 @@ class DetectionEngine(private val appContext: Context) {
             }
             "⚠️ LOOK UP!  $label${if (closing) " (closing)" else ""}"
         }
-        wall   -> "🧱 WALL AHEAD — LOOK UP NOW"
+        wall   -> "🧱 POSSIBLE OBSTACLE — LOOK UP"
         ground -> "⚠️ WATCH YOUR STEP!"
         lowLight -> "🔅 LOW LIGHT — reduced reliability"
         else   -> null

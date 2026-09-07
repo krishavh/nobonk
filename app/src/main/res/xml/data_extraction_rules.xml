@@ -3,14 +3,18 @@
   Data-transfer rules for API 31+ (referenced via
   android:dataExtractionRules). Covers both cloud backup and device-to-device
   transfer. The app sets android:allowBackup="false", so cloud backup is off
-  regardless; these exclusions ensure the detection history (which may contain
+  regardless; explicitly wired exclusions ensure the detection history (which may contain
   optional coarse-location data) is never copied off the device by either path.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude domain="file" path="detection_events.json" />
+        <exclude domain="file" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="file" path="detection_events.json" />
+        <exclude domain="file" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="database" path="." />
     </device-transfer>
 </data-extraction-rules>

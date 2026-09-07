@@ -43,13 +43,6 @@ class ObjectDetector(
     var activeExecutionProvider: String = "CPU"
         private set
 
-    /**
-     * True ONLY when inference is verified to run on a hardware accelerator (NNAPI).
-     * XNNPACK is a CPU provider, so it does NOT count as hardware acceleration — this
-     * keeps the UI "NPU" chip honest (fixes the false-NPU concern in T-PERF-INFER).
-     */
-    val isHardwareAccelerated: Boolean get() = activeExecutionProvider == "NNAPI"
-
     private val confidenceThreshold = 0.40f
     private val iouThreshold = 0.45f
 
@@ -64,8 +57,6 @@ class ObjectDetector(
 
     companion object {
         private const val TAG = "ObjectDetector"
-        /** Timed inferences per execution provider at load (after one warm-up). */
-        private const val BENCH_RUNS = 3
 
         /** COCO class ids we actually map to a display name — scanning only these
          *  (instead of all 80) shortens the per-box post-processing loop ~10× (PERF-P04). */
@@ -88,64 +79,51 @@ class ObjectDetector(
     init {
         val modelBytes = context.assets.open(modelName).use { it.readBytes() }
 
-        // Try execution providers in order of preference. Each candidate is not just
-        // *configured* but actually *verified* with a warm-up inference before we claim
-        // it — so the reported EP (and the "NPU" chip) reflects reality, never intent.
-        //   1. NNAPI    — device accelerator (NPU/GPU/DSP), best-effort.
-        //   2. XNNPACK  — optimized CPU kernels (reliable everywhere on ARM).
-        //   3. CPU      — plain reference kernels (always works).
-        // Build every provider that can run the graph, time each one for a few
-        // inferences, and keep the fastest (XNNPACK unless an accelerator clearly wins —
-        // see EpChooser). Losers are closed immediately.
-        data class Candidate(val session: OrtSession, val dim: Int, val medianMs: Double)
-        val candidates = LinkedHashMap<String, Candidate>()
-        val eps = if (android.os.Build.VERSION.SDK_INT >= 35) listOf("XNNPACK", "NNAPI", "CPU") else listOf("NNAPI", "XNNPACK", "CPU")
-        for (ep in eps) {
-            try {
-                val opts = OrtSession.SessionOptions().apply {
-                    setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        // Cache a verified measured choice, not a hardware assumption. Invalidate after
+        // model/app/runtime/OS changes; a failed cached warm-up triggers benchmarking.
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val modelHash = digest.digest(modelBytes).joinToString("") { "%02x".format(it) }
+        val identity = "$modelHash|${android.os.Build.FINGERPRINT}|${ortEnvironment.version}|${ai.genwhy.nobonk.BuildConfig.VERSION_CODE}|ep-v2"
+        val key = digest.digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
+        val prefs = context.getSharedPreferences("nobonk_execution", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val cached = if (ProviderSelection.validCache(prefs.getLong("$key.time", 0), now)) prefs.getString(key, null) else null
+        val choice = ProviderSelection.select(
+            providers = listOf("XNNPACK", "NNAPI", "CPU"), cached = cached,
+            create = { ep ->
+                OrtSession.SessionOptions().use { options ->
+                    options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                     when (ep) {
-                        "NNAPI"   -> { setIntraOpNumThreads(4); addNnapi() }
-                        // XNNPACK manages its own threadpool — force a single ORT
-                        // intra-op thread and hand the worker count to the provider.
-                        "XNNPACK" -> { setIntraOpNumThreads(1); addXnnpack(mapOf("intra_op_num_threads" to "4")) }
-                        else      -> { setIntraOpNumThreads(4) }
+                        "NNAPI" -> {
+                            options.setIntraOpNumThreads(4)
+                            // Avoid NNAPI's slow CPU reference implementation. ORT can
+                            // still execute unsupported graph nodes on CPU; NNAPI != NPU.
+                            options.addNnapi(java.util.EnumSet.of(ai.onnxruntime.providers.NNAPIFlags.CPU_DISABLED))
+                        }
+                        "XNNPACK" -> { options.setIntraOpNumThreads(1); options.addXnnpack(mapOf("intra_op_num_threads" to "4")) }
+                        else -> options.setIntraOpNumThreads(4)
                     }
+                    ortEnvironment.createSession(modelBytes, options)
                 }
-                val candidate = ortEnvironment.createSession(modelBytes, opts)
-                val dim = readInputSize(candidate, modelName, requestedInputSize)
-                warmUp(candidate, dim)   // throws if this EP can't actually run the graph
-                val samples = ArrayList<Double>(BENCH_RUNS)
-                repeat(BENCH_RUNS) {
-                    val t0 = System.nanoTime(); warmUp(candidate, dim); samples += (System.nanoTime() - t0) / 1e6
-                }
-                val med = EpChooser.median(samples)
-                Dbg.i(TAG, "EP '$ep' runs $modelName @ ${dim}px: median ${"%.1f".format(med)} ms")
-                candidates[ep] = Candidate(candidate, dim, med)
-            } catch (e: Exception) {
-                Dbg.w(TAG, "EP '$ep' unavailable — skipping. Reason: ${e.message}")
+            },
+            verify = { warmUp(it, readInputSize(it, modelName, requestedInputSize)) },
+            measure = {
+                val t0 = System.nanoTime()
+                warmUp(it, readInputSize(it, modelName, requestedInputSize))
+                (System.nanoTime() - t0) / 1e6
             }
-        }
-        val winner = EpChooser.pick(candidates.mapValues { it.value.medianMs })
-        var built: OrtSession? = null
-        var builtEp = "CPU"
-        var resolvedInput = requestedInputSize
-        for ((ep, c) in candidates) {
-            if (ep == winner) { built = c.session; builtEp = ep; resolvedInput = c.dim } else c.session.close()
-        }
-        if (winner != null) Dbg.i(TAG, "Execution provider chosen by measurement: $winner for $modelName")
-        ortSession = built ?: ortEnvironment.createSession(
-            modelBytes,
-            OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }
         )
-        activeExecutionProvider = if (built != null) builtEp else "CPU"
-        inputSize = resolvedInput
+        ortSession = choice.resource
+        activeExecutionProvider = choice.name
+        inputSize = readInputSize(ortSession, modelName, requestedInputSize)
+        if (!choice.cached) prefs.edit().putString(key, choice.name).putLong("$key.time", now).apply()
+        Dbg.i(TAG, "Execution provider: ${choice.name} (${if (choice.cached) "cached + verified" else "measured"}) for $modelName")
 
         pixels = IntArray(inputSize * inputSize)
-        floatBuffer = FloatBuffer.allocate(3 * inputSize * inputSize)
+        floatBuffer = java.nio.ByteBuffer.allocateDirect(4 * 3 * inputSize * inputSize).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
 
         val family = if (skipNms) "YOLO26 end-to-end (NMS-free)" else "YOLO26 raw head + in-app NMS"
-        Dbg.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider | HW accel: $isHardwareAccelerated")
+        Dbg.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider")
     }
 
     private fun readInputSize(session: OrtSession, modelName: String, requested: Int): Int = try {
@@ -204,7 +182,7 @@ class ObjectDetector(
             }
         } catch (e: Exception) {
             Dbg.e(TAG, "Detection error: ${e.message}", e)
-            emptyList()
+            throw e // an inference failure is not an empty, successfully scanned scene
         }
     }
 

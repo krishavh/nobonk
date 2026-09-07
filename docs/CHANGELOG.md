@@ -1,3 +1,17 @@
+# Review release — 1.0.11 (versionCode 12), September 7, 2026
+
+- Faster repeat startup: cache the measured execution-provider choice per model/device/runtime/app version, verify it before reuse, rebenchmark on failure or expiry. Fast is the initial model for new installations; saved preferences are preserved.
+- Correct provider labels: NNAPI is not advertised as proof of NPU execution. Direct input buffers reduce avoidable tensor copies.
+- Serialize foreground model replacement, inference and cleanup; invalidate stale model jobs; keep Stop effective during startup. Show permission and camera recovery screens instead of a blank or misleadingly active view.
+- Keep warning overlays translucent and clear of the Open NoBonk control; reflow on rotation. Report inference failures instead of treating them as empty scenes.
+- Wire backup exclusions for private files/preferences/databases. Fix legacy encryption initialization, queued history writes after Clear, bounded history compaction and truncated append-log recovery.
+- Reuse the corrected Blender brand icon inside the app. Clarify approximate alert sensitivity and possible-obstacle wording.
+- Install checksum-verified model assets before CI builds. Correct model and privacy documentation.
+
+Physical-device camera timing, accuracy, thermal behavior and Google Play installation/update checks remain required. This source entry does not mean the release has passed Play review.
+
+---
+
 # Changelog
 
 ## 1.0.10 (versionCode 11) — 2026-09-07 reliable Stop · edge indicator · Play update suggestion

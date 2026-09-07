@@ -87,14 +87,14 @@ fun DetectionScreen(
     val phoneAngleHint = viewModel.phoneAngleHint
     val phoneAngleQuality = viewModel.phoneAngleQuality
     val isLowLight = viewModel.isLowLight
-    val isHardwareAccelerated = viewModel.isHardwareAccelerated
+    val executionProvider = viewModel.executionProvider
     val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize().background(NB.Night)) {
         // The camera is bound only while scanning; Stop releases it (CameraPreview unbinds on dispose).
         if (viewModel.scanningEnabled) {
             key(cameraRebindKey) {
-                CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) }, onCameraBound = { viewModel.onCameraBound(it) })
+                CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) }, onCameraBound = { viewModel.onCameraBound(it) }, onError = { viewModel.reportCameraError(it) })
             }
         }
 
@@ -104,9 +104,9 @@ fun DetectionScreen(
             TopStatusBar(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
                 batteryLevel = batteryLevel,
-                isHardwareAccelerated = isHardwareAccelerated,
+                executionProvider = executionProvider,
                 mode = accuracyMode,
-                live = !isCameraBlocked,
+                live = viewModel.scanningEnabled && !isCameraBlocked && viewModel.cameraError == null,
                 stats = if (viewModel.fps > 0f) String.format(Locale.US, "%.0f fps · %d ms", viewModel.fps, viewModel.inferMs) else null
             )
         }
@@ -116,6 +116,7 @@ fun DetectionScreen(
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 58.dp, start = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            viewModel.cameraError?.let { NoticeBanner("!", "Scanning unavailable", it, color = NB.Watch) }
             when {
                 isCameraBlocked -> Unit
                 phoneAngleQuality != SensorMonitor.AngleQuality.OK && phoneAngleHint.isNotEmpty() ->
@@ -174,7 +175,10 @@ fun DetectionScreen(
         } else if (viewModel.frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
             LookUpOverlay(className = viewModel.lookUpLabel ?: "person", bearingPan = viewModel.bearingPan)
         }
-        if (isInitializing) InitializingOverlay(initializationStatus)
+        if (isInitializing) {
+            InitializingOverlay(initializationStatus)
+            TextButton(onClick = { onStopBackground(); viewModel.stopScanning() }, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)) { Text("Stop", color = NB.Ink) }
+        }
     }
 }
 
@@ -244,7 +248,7 @@ private fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel
 /* ───────────────────────── top status ───────────────────────── */
 
 @Composable
-private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, isHardwareAccelerated: Boolean, mode: AccuracyMode, live: Boolean, stats: String? = null) {
+private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, executionProvider: String, mode: AccuracyMode, live: Boolean, stats: String? = null) {
   Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
     Row(
         modifier = Modifier
@@ -252,13 +256,13 @@ private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, isHardwareAccele
             .background(NB.Glass)
             .border(1.dp, NB.GlassLine, NB.PillShape)
             .padding(horizontal = 14.dp, vertical = 8.dp)
-            .semantics { contentDescription = "NoBonk ${if (live) "active" else "paused"}. ${if (isHardwareAccelerated) "Hardware accelerated" else "CPU"}. Battery $batteryLevel percent." },
+            .semantics { contentDescription = "NoBonk ${if (live) "active" else "paused"}. ${if (executionProvider == "NNAPI") "NNAPI, device-selected processing" else "CPU"}. Battery $batteryLevel percent." },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         PulseDot(if (live) NB.Safe else NB.Watch)
         Text("NOBONK", color = NB.Ink, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-        Pill(if (isHardwareAccelerated) "NPU" else "CPU", color = if (isHardwareAccelerated) NB.Accent else NB.Sub)
+        Pill(if (executionProvider == "NNAPI") "NNAPI" else "CPU", color = if (executionProvider == "NNAPI") NB.Accent else NB.Sub)
         Pill(mode.label.uppercase(), color = NB.Accent2)
         Text("$batteryLevel%", color = if (batteryLevel < 20) NB.Watch else NB.Sub, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
@@ -321,7 +325,7 @@ private fun ControlDock(
         }
         Spacer(Modifier.height(12.dp))
         // Row 2 — alert distance
-        SectionLabel("Alert at")
+        SectionLabel("Alert sensitivity · approximate metres")
         Spacer(Modifier.height(6.dp))
         val presets = listOf(0.5f to "0.5 m", 1.0f to "1 m", 2.0f to "2 m", 3.5f to "3.5 m")
         Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -527,12 +531,11 @@ fun CameraBlockedOverlay() {
 @Composable
 fun Wordmark(size: Int = 64) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Canvas(Modifier.size(size.dp)) {
-            val r = this.size.minDimension / 2f
-            drawCircle(Brush.linearGradient(listOf(NB.Accent, NB.Accent2)), radius = r, style = Stroke(width = r * 0.22f))
-            drawCircle(NB.Ink, radius = r * 0.34f)
-            drawCircle(NB.Night, radius = r * 0.16f, center = center + Offset(r * 0.1f, -r * 0.08f))
-        }
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(ai.genwhy.nobonk.R.drawable.nobonk_brand),
+            contentDescription = null,
+            modifier = Modifier.size(size.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape((size * 0.22f).dp))
+        )
         Column {
             Text("NoBonk", color = NB.Ink, fontSize = (size * 0.5f).sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp)
             Text("look up, not down", color = NB.Sub, fontSize = (size * 0.19f).sp, letterSpacing = 1.sp)
@@ -546,7 +549,8 @@ fun Wordmark(size: Int = 64) {
 fun CameraPreview(
     modifier: Modifier = Modifier,
     onFrameAnalyzed: (androidx.camera.core.ImageProxy) -> Unit,
-    onCameraBound: (androidx.camera.core.CameraInfo) -> Unit = {}
+    onCameraBound: (androidx.camera.core.CameraInfo) -> Unit = {},
+    onError: (String) -> Unit = {}
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -591,8 +595,24 @@ fun CameraPreview(
                 ownedUseCases.set(listOf(preview, imageAnalysis))
                 if (disposed.get()) { cameraProvider.unbind(preview, imageAnalysis); return@post }   // disposed during bind
                 onCameraBound(cam.cameraInfo)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { ai.genwhy.nobonk.util.Dbg.e("CameraPreview", "Camera bind failed", e); onError("Camera unavailable. Check camera access, then tap Start scanning.") }
         } }, ContextCompat.getMainExecutor(ctx))
         previewView
     })
+}
+
+
+@Composable
+fun CameraPermissionScreen(onRetry: () -> Unit, onSettings: () -> Unit, onExit: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(NB.Night).safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Wordmark(48)
+        Spacer(Modifier.height(24.dp))
+        Text("Camera access is off", color = NB.Ink, style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(12.dp))
+        Text("NoBonk needs the rear camera to scan. Frames stay on your phone. You can allow access now, or open Settings if Android no longer shows the permission prompt.", color = NB.Sub, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onRetry) { Text("Allow camera") }
+        TextButton(onClick = onSettings) { Text("Open app settings") }
+        TextButton(onClick = onExit) { Text("Not now") }
+    }
 }

@@ -13,8 +13,12 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install verified detection models
+        run: python scripts/install_verified_models.py
       - name: Unit tests + debug build
-        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
       - name: Release AAB (unsigned) + 16 KB alignment check
         run: |
           ./gradlew --no-daemon bundleRelease -Pbundle

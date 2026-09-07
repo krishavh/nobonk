@@ -159,6 +159,11 @@ class MainActivity : ComponentActivity() {
                 ) {
                     canDrawOverlays = Settings.canDrawOverlays(this)
 
+                    viewModel.historyError?.let { message ->
+                        androidx.compose.material3.AlertDialog(onDismissRequest = { viewModel.dismissHistoryError() },
+                            title = { androidx.compose.material3.Text("History") }, text = { androidx.compose.material3.Text(message) },
+                            confirmButton = { androidx.compose.material3.TextButton(onClick = { viewModel.dismissHistoryError() }) { androidx.compose.material3.Text("OK") } })
+                    }
                     // System Back on About/History pops that screen (on Android 12+ it would otherwise
                     // background the root task) — so Back from the full notice returns to the reminder.
                     androidx.activity.compose.BackHandler(enabled = showLicenses || showHistory) {
@@ -192,6 +197,15 @@ class MainActivity : ComponentActivity() {
                             },
                             // Reading never acknowledges: About opens over the pending reminder and Back returns to it.
                             onReadFull = { gate.onReadFull(); showLicenses = true }
+                        )
+                    } else if (!hasPermission) {
+                        ai.genwhy.nobonk.ui.CameraPermissionScreen(
+                            onRetry = { requestCorePermissions() },
+                            onSettings = {
+                                expectingReturn = true
+                                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                            },
+                            onExit = { finish() }
                         )
                     } else if (hasPermission) {
                         when {
@@ -285,6 +299,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         ai.genwhy.nobonk.safety.SessionState.gate.activityResumed = true
+        hasPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (!hasPermission) viewModel.stopScanning()
         // Take the camera back from the background service (hand-off, not a user Stop). Only when a
         // service is actually active — never create a service just to stop it.
         if (ai.genwhy.nobonk.safety.SessionState.gate.serviceActive) stopDetectionService(DetectionService.STOP_REASON_HANDOFF)
@@ -292,6 +308,10 @@ class MainActivity : ComponentActivity() {
         if (ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser) {
             ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = false
             viewModel.stopScanning()
+        }
+        ai.genwhy.nobonk.safety.SessionState.backgroundFailure?.let {
+            ai.genwhy.nobonk.safety.SessionState.backgroundFailure = null
+            viewModel.reportCameraError(it)
         }
         canDrawOverlays = Settings.canDrawOverlays(this)
         // Quiet Play update check once the gate is cleared (prompting is separately policy-gated).
@@ -326,14 +346,13 @@ class MainActivity : ComponentActivity() {
             putExtra(DetectionService.EXTRA_HAPTICS, viewModel.hapticsEnabled)
             putExtra(DetectionService.EXTRA_VOICE, viewModel.voiceEnabled)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+            moveTaskToBack(true)
+        } catch (e: Exception) {
+            expectingReturn = false
+            viewModel.reportCameraError("Background scanning could not start. Check camera access and try again.")
         }
-        
-        // Minimize the app to make "start background" obvious
-        moveTaskToBack(true)
     }
 
     private fun stopDetectionService(reason: String = DetectionService.STOP_REASON_USER) {
