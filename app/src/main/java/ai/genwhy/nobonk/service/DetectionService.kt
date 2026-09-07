@@ -420,6 +420,11 @@ class DetectionService : LifecycleService() {
         if (!gate.get()) pendingRelease.getAndSet(null)?.let { runCatching { it.close() } }
     }
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (!life.isStopped) edge?.relayout()   // another app rotated the display during the session
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         shutdown(life.stopReason ?: ServiceLifecycle.StopReason.HANDOFF)

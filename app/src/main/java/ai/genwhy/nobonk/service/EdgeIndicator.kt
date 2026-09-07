@@ -15,15 +15,19 @@ import ai.genwhy.nobonk.util.Dbg
  * cutout and gesture-bar insets). Each strip is its own tiny window, so no touch can ever
  * pass through an app-owned overlay, and nothing of the underlying app is covered beyond
  * a 3 dp border. Colour follows [EdgeIndicatorPolicy]; there is no animation. Window alpha stays
- * under Android's maximum obscuring opacity so touches are never blocked. The app is portrait-locked
- * and the strips live only for a background session, so no rotation re-layout is needed.
+ * under Android's maximum obscuring opacity so touches are never blocked. Another app in front may
+ * rotate the display during a background session, so the service calls [relayout] on configuration
+ * changes; the current level/blocked state is preserved across the re-layout.
  */
 class EdgeIndicator(private val context: Context, private val wm: WindowManager) {
     private val strips = ArrayList<View>(4)
     private var color = 0
+    private var level = AlertLevel.NONE
+    private var blocked = false
 
     fun show(level: AlertLevel = AlertLevel.NONE, cameraBlocked: Boolean = false) {
         if (strips.isNotEmpty()) { setLevel(level, cameraBlocked); return }
+        this.level = level; this.blocked = cameraBlocked
         val d = context.resources.displayMetrics.density
         val t = (EdgeIndicatorPolicy.THICKNESS_DP * d).toInt().coerceAtLeast(2)
         val (top, bottom) = insets()
@@ -54,7 +58,11 @@ class EdgeIndicator(private val context: Context, private val wm: WindowManager)
         }
     }
 
+    /** Display rotated / insets changed while another app is in front: rebuild geometry, keep state. */
+    fun relayout() { if (strips.isEmpty()) return; hide(); show(level, blocked) }
+
     fun setLevel(level: AlertLevel, cameraBlocked: Boolean) {
+        this.level = level; this.blocked = cameraBlocked
         val c = EdgeIndicatorPolicy.colorFor(level, cameraBlocked)
         if (!EdgeIndicatorPolicy.shouldRedraw(color, c)) return
         color = c
