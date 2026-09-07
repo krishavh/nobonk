@@ -23,6 +23,7 @@ struct NoBonkView: View {
     @State private var showFull = false
     @State private var expandedCamera = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var body: some View {
         ZStack {
             night.ignoresSafeArea()
@@ -115,27 +116,85 @@ struct NoBonkView: View {
     }
     private var browseLayout: some View {
         GeometryReader { screen in
-            VStack(spacing: 10) {
-                HStack(spacing: 8) {
-                    Image("BrandIcon").resizable().frame(width: 28, height: 28).clipShape(RoundedRectangle(cornerRadius: 8))
-                    Text("Keep looking up. No alert does not mean a clear path.").font(.caption).foregroundStyle(.yellow)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                cameraCard.frame(height: max(150, min(screen.size.height * 0.28, 210))).layoutPriority(1)
-                if camera.audioUnavailable { Text("Sound unavailable · visual and enabled haptic cues remain on").font(.caption2).foregroundStyle(.orange) }
-                HStack(spacing: 8) {
-                    Text("WEB & MESSAGES").font(.system(size: 9, weight: .bold)).tracking(1).foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        guard MFMessageComposeViewController.canSendText() else { canCompose = false; return }
-                        camera.stop(message: "Paused for Messages — tap Start after composing")
-                        browser.pause(); showComposer = true
-                    } label: { Label("Write a message", systemImage: "square.and.pencil").font(.caption.bold()).frame(minHeight: 44) }
-                        .disabled(!canCompose)
+            let constrained = dynamicTypeSize.isAccessibilitySize || screen.size.height < 430
+            let previewHeight = constrained
+                ? max(64, min(screen.size.height * 0.22, 140))
+                : max(150, min(screen.size.height * 0.28, 210))
+            // Keep one hierarchy as the keyboard changes available height. In
+            // particular, rebuilding BrowserPane here would discard field focus.
+            VStack(spacing: constrained ? 6 : 10) {
+                if !constrained { browseReminder }
+                cameraCardContent(showOverlayText: !constrained)
+                    .frame(height: previewHeight)
+                    .accessibilityIdentifier("browse.pinnedPreview")
+                if constrained {
+                    // Keep an urgent visual cue pinned even while the full,
+                    // scalable explanation has scrolled with website content.
+                    TimelineView(.periodic(from: .now, by: 0.5)) { tick in
+                        if tick.date < camera.alertUntil {
+                            Label("Look up", systemImage: "exclamationmark.triangle.fill")
+                                .font(.headline.bold()).foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityLabel(camera.alertText)
+                        }
+                    }
                 }
-                BrowserPane(model: browser).frame(maxWidth: .infinity, maxHeight: .infinity)
+                GeometryReader { content in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if constrained {
+                                browseReminder
+                                Text(camera.status).font(.caption.weight(.medium))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                TimelineView(.periodic(from: .now, by: 0.5)) { tick in
+                                    if tick.date < camera.alertUntil {
+                                        Label(camera.alertText, systemImage: "exclamationmark.triangle.fill")
+                                            .font(.subheadline.bold()).foregroundStyle(.orange)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                            }
+                            if camera.audioUnavailable {
+                                Text("Sound unavailable · visual and enabled haptic cues remain on")
+                                    .font(.caption2).foregroundStyle(.orange)
+                            }
+                            HStack(spacing: 8) {
+                                if !constrained {
+                                    Text("WEB & MESSAGES").font(.system(size: 9, weight: .bold)).tracking(1).foregroundStyle(.secondary)
+                                    Spacer()
+                                }
+                                composeButton
+                            }
+                            BrowserPane(model: browser)
+                                .frame(minHeight: constrained ? max(280, content.size.height) : max(80, content.size.height - 54 - (camera.audioUnavailable ? 30 : 0)),
+                                       maxHeight: constrained ? nil : max(80, content.size.height - 54 - (camera.audioUnavailable ? 30 : 0)))
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollDismissesKeyboard(.interactively)
+                }
             }.padding(.horizontal, 12).padding(.top, 4)
-            .safeAreaInset(edge: .bottom, spacing: 0) { scanButton }
+                .safeAreaInset(edge: .bottom, spacing: 0) { scanControl(compact: constrained) }
         }
+    }
+    private var browseReminder: some View {
+        HStack(spacing: 8) {
+            Image("BrandIcon").resizable().frame(width: 28, height: 28).clipShape(RoundedRectangle(cornerRadius: 8))
+            Text("Keep looking up. No alert does not mean a clear path.")
+                .font(.caption).foregroundStyle(.yellow)
+                .fixedSize(horizontal: false, vertical: true)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private var composeButton: some View {
+        Button {
+            guard MFMessageComposeViewController.canSendText() else { canCompose = false; return }
+            camera.stop(message: "Paused for Messages — tap Start after composing")
+            browser.pause(); showComposer = true
+        } label: {
+            Label("Write a message", systemImage: "square.and.pencil")
+                .font(.caption.bold()).frame(minHeight: 44)
+                .fixedSize(horizontal: false, vertical: true)
+        }.disabled(!canCompose)
     }
     private var setup: some View {
         GeometryReader { screen in
@@ -212,7 +271,8 @@ struct NoBonkView: View {
             }
         }
     }
-    private var scanButton: some View {
+    private var scanButton: some View { scanControl(compact: dynamicTypeSize.isAccessibilitySize) }
+    private func scanControl(compact: Bool) -> some View {
                 Button {
                     if camera.running || camera.starting { camera.stop() }
                     else if camera.denied, let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -220,13 +280,19 @@ struct NoBonkView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: camera.running || camera.starting ? "stop.fill" : "play.fill")
-                        Text(camera.running || camera.starting ? "Stop scanning" : (camera.denied ? "Open camera settings" : "Start scanning"))
-                        Spacer()
-                        Text(camera.running ? "LIVE" : (camera.starting ? "STARTING" : (camera.denied ? "ACCESS OFF" : "READY")))
-                            .font(.caption2.bold()).tracking(1.5)
+                        Text(compact
+                             ? (camera.running || camera.starting ? "Stop" : (camera.denied ? "Settings" : "Start"))
+                             : (camera.running || camera.starting ? "Stop scanning" : (camera.denied ? "Open camera settings" : "Start scanning")))
+                        if !compact {
+                            Spacer()
+                            Text(camera.running ? "LIVE" : (camera.starting ? "STARTING" : (camera.denied ? "ACCESS OFF" : "READY")))
+                                .font(.caption2.bold()).tracking(1.5)
+                        }
                     }
                 }
-                .buttonStyle(PrimaryButton(isStop: camera.running || camera.starting))
+                .buttonStyle(PrimaryButton(isStop: camera.running || camera.starting, compact: compact))
+                .accessibilityLabel(camera.running || camera.starting ? "Stop scanning" : (camera.denied ? "Open camera settings" : "Start scanning"))
+                .accessibilityIdentifier("scan.control")
                 .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 8)
                 .background(night.opacity(0.98))
     }
@@ -255,7 +321,8 @@ struct NoBonkView: View {
         }.padding(16).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
     }
 
-    private var cameraCard: some View {
+    private var cameraCard: some View { cameraCardContent(showOverlayText: true) }
+    private func cameraCardContent(showOverlayText: Bool) -> some View {
         ZStack {
             Color.black
             CameraPreview(session: camera.engine.session)
@@ -300,12 +367,14 @@ struct NoBonkView: View {
                     }.accessibilityLabel(expandedCamera ? "Compact camera" : "Expand camera") }
                 }.padding(.leading, 16).padding(.trailing, 6).padding(.top, 4)
                 Spacer()
-                Text(camera.status).font(.caption.weight(.medium)).multilineTextAlignment(.center)
-                    .padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(.black.opacity(0.72), in: Capsule()).padding(12)
+                if showOverlayText {
+                    Text(camera.status).font(.caption.weight(.medium)).multilineTextAlignment(.center)
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(.black.opacity(0.72), in: Capsule()).padding(12)
+                }
             }
             TimelineView(.periodic(from: .now, by: 0.5)) { tick in
-                if tick.date < camera.alertUntil {
+                if showOverlayText && tick.date < camera.alertUntil {
                     VStack {
                         Label(camera.alertText, systemImage: "exclamationmark.triangle.fill")
                             .font(.subheadline.bold()).foregroundStyle(.black).padding(12)
@@ -323,10 +392,12 @@ struct NoBonkView: View {
 
 private struct PrimaryButton: ButtonStyle {
     var isStop = false
+    var compact = false
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.headline).frame(maxWidth: .infinity).padding(.vertical, 18)
+        configuration.label.font(.headline).frame(maxWidth: .infinity).padding(.vertical, compact ? 10 : 18)
             .padding(.horizontal, 20)
+            .frame(minHeight: 44)
             .background((isStop ? Color(red: 1, green: 0.38, blue: 0.46) : mint).opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.25), in: RoundedRectangle(cornerRadius: 16))
             .foregroundStyle(enabled ? Color.black : .gray)
     }

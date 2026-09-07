@@ -139,7 +139,8 @@ struct BrowserPane: View {
                     .accessibilityLabel("Open website")
             }.padding(.leading, 12).background(.white.opacity(0.07))
             if let message = model.message {
-                Text(message).font(.caption).foregroundStyle(.orange).padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                Text(message).font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true).padding(10).frame(maxWidth: .infinity, alignment: .leading)
             }
             if model.hasPage, let webView = model.webView {
                 EmbeddedBrowser(webView: webView)
