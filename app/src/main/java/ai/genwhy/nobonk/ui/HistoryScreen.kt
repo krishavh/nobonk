@@ -79,9 +79,12 @@ fun HistoryScreen(
             .fillMaxSize()
             .background(BgDark)
     ) {
+        // Edge-to-edge: the header paints under the status bar but its content starts below
+        // it, and the list ends above the gesture/navigation bar.
+        val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 32.dp)
+            contentPadding = PaddingValues(bottom = 32.dp + navBottom)
         ) {
             // ── Header ─────────────────────────────────────────
             item {
@@ -182,7 +185,8 @@ private fun Header(onBack: () -> Unit) {
             .background(
                 Brush.verticalGradient(listOf(Color.Black, BgDark))
             )
-            .padding(top = 44.dp, start = 8.dp, end = 16.dp, bottom = 16.dp),
+            .statusBarsPadding()
+            .padding(top = 12.dp, start = 8.dp, end = 16.dp, bottom = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack) {

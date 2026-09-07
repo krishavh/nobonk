@@ -40,7 +40,7 @@ private const val PRIVACY_URL = "krishavh.github.io/privacy/nobonk.html"
 /** About, credits and open-source licenses. Reached from History → "About". */
 @Composable
 fun LicensesScreen(onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(NB.Night).statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
+    Column(Modifier.fillMaxSize().background(NB.Night).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = NB.Accent) }
             Text("About NoBonk", color = NB.Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -54,11 +54,11 @@ fun LicensesScreen(onBack: () -> Unit) {
         SectionLabel("Made by")
         Spacer(Modifier.height(8.dp))
         Card {
-            Text("Krishav Haarith", color = NB.Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("Krishav", color = NB.Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text("Student · Dublin, California. The problem, the design, the false-alert tuning and every sidewalk test.", color = NB.Sub, fontSize = 14.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(10.dp))
-            Text("Haarith Devarajan", color = NB.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text("Parent, guardian and Play account holder.", color = NB.Sub, fontSize = 14.sp)
+            Text("Haarith", color = NB.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text("Parent and Play account holder.", color = NB.Sub, fontSize = 14.sp)
         }
 
         Spacer(Modifier.height(18.dp))

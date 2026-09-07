@@ -118,7 +118,7 @@ fun DetectionScreen(
                 isLowLight -> NoticeBanner("🔅", if (viewModel.isNightBoost) "Low light · night boost on" else "Low light", "Detection is less reliable in the dark", color = NB.Watch)
             }
             if (isWallDetected && !isCameraBlocked)
-                NoticeBanner("🧱", "Obstacle ahead", "Watch your path", color = NB.Watch, description = "Obstacle ahead. Watch your path.")
+                NoticeBanner("🧱", "Possible obstacle", "Wall-like surface ahead · camera heuristic, not a recognised object", color = NB.Watch, description = "Possible obstacle. Wall-like surface ahead, from the camera heuristic, not a recognised object.")
         }
 
         if (isGroundHazard && !isCameraBlocked) {
@@ -147,6 +147,7 @@ fun DetectionScreen(
             onAccuracyChange = { viewModel.setAccuracyMode(it, context) },
             onShowHistory = onShowHistory,
             onShowAbout = onShowAbout,
+            heuristicObstacle = isWallDetected || isGroundHazard,
             pausedReason = when {
                 isInitializing -> "Starting…"
                 isCameraBlocked -> "Camera blocked"
@@ -282,7 +283,9 @@ private fun ControlDock(
     onShowHistory: () -> Unit,
     onShowAbout: () -> Unit = {},
     /** When non-null the pipeline is not watching (blocked / starting / off-angle); shown instead of a detection summary. */
-    pausedReason: String? = null
+    pausedReason: String? = null,
+    /** Camera heuristics (wall / ground) flag something even though the model recognised no object. */
+    heuristicObstacle: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
     val nearest = detections.filter { it.hasDistanceEstimate }.minByOrNull { it.distance }
@@ -295,11 +298,12 @@ private fun ControlDock(
             Column(Modifier.weight(1f)) {
                 SectionLabel(if (pausedReason != null) "Status" else if (nearest == null) "Watching" else "Nearest")
                 Text(
-                    if (pausedReason != null) pausedReason else if (nearest == null) "No objects detected" else "${nearest.className.replaceFirstChar { it.uppercase() }} · ${String.format(Locale.US, "%.1f", nearest.distance)} m",
-                    color = if (pausedReason != null) NB.Watch else if (nearest == null) NB.Ink else nearestColor, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                    if (pausedReason != null) pausedReason else if (nearest == null) (if (heuristicObstacle) "Possible obstacle ahead" else "No objects detected") else "${nearest.className.replaceFirstChar { it.uppercase() }} · ${String.format(Locale.US, "%.1f", nearest.distance)} m",
+                    color = if (pausedReason != null || (nearest == null && heuristicObstacle)) NB.Watch else if (nearest == null) NB.Ink else nearestColor, fontSize = 20.sp, fontWeight = FontWeight.Bold
                 )
             }
-            ProximityMeter(distance = nearest?.distance, threshold = distanceThreshold, color = nearestColor)
+            ProximityMeter(distance = nearest?.distance, threshold = distanceThreshold, color = nearestColor,
+                emptyLabel = if (heuristicObstacle) "camera heuristic · no object recognised" else "nothing recognised")
         }
         Spacer(Modifier.height(12.dp))
         // Row 2 — alert distance
@@ -386,7 +390,7 @@ private fun ControlDock(
 
 /** Horizontal meter: how close the nearest object is relative to the alert distance. */
 @Composable
-private fun ProximityMeter(distance: Float?, threshold: Float, color: Color) {
+private fun ProximityMeter(distance: Float?, threshold: Float, color: Color, emptyLabel: String = "nothing recognised") {
     val frac = if (distance == null) 0f else (1f - (distance / (threshold * 2f))).coerceIn(0.04f, 1f)
     val anim by animateFloatAsState(frac, animationSpec = tween(220), label = "prox")
     Column(horizontalAlignment = Alignment.End) {
@@ -398,7 +402,7 @@ private fun ProximityMeter(distance: Float?, threshold: Float, color: Color) {
             drawLine(Color.White.copy(alpha = 0.6f), Offset(size.width * 0.5f, 0f), Offset(size.width * 0.5f, size.height), 2f)
         }
         Spacer(Modifier.height(4.dp))
-        Text(if (distance == null) "nothing recognised" else "alert at ${String.format(Locale.US, "%.1f", threshold)} m", color = NB.Dim, fontSize = 10.sp)
+        Text(if (distance == null) emptyLabel else "alert at ${String.format(Locale.US, "%.1f", threshold)} m", color = NB.Dim, fontSize = 10.sp)
     }
 }
 

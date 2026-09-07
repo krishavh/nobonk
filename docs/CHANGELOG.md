@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 (versionCode 2) — 2026-09-06 closed-test fixes from Pixel 9a footage
+- **History screen respects system bars.** The header row (Tap location / Clear history) sat under the status-bar clock and icons on edge-to-edge Android 15; it now uses status-bar insets, and the list ends above the gesture bar. About screen gets the same bottom clearance.
+- **Heuristic vs recognised object, worded truthfully.** When the wall/ground heuristic fires with no recognised object, the dock says *Possible obstacle ahead · camera heuristic · no object recognised* and the banner says *Possible obstacle — wall-like surface ahead · camera heuristic, not a recognised object*, so the two panels no longer contradict each other.
+- **First names only** in the in-app About screen (Krishav; Haarith, parent and Play account holder).
+- No detection, alert or privacy behaviour changes. Backup-exclusion filename update still queued (out of scope for this build).
+
 ## Next maintenance build (queued, not in 1.0 vc1 @ 2a4092b)
 - **Backup-exclusion rules name the old file.** `res/xml/backup_rules.xml` and `res/xml/data_extraction_rules.xml` exclude `detection_events.json`; the history file has been `detection_events.enc` since encryption-at-rest landed. No exposure today (`allowBackup="false"` disables backup/transfer outright, and the file is AES-256-GCM encrypted with a non-exportable Keystore key), but update both rules to `detection_events.enc` (keep the `.json` line for legacy installs) in the next build. History stays.
 - **First names only in the in-app About screen.** `ui/LicensesScreen.kt` still shows full names for the author and account holder; change to "Krishav" / "Haarith (parent and account holder)" to match the README and privacy policy. Public contact: support@genwhy.ai.
