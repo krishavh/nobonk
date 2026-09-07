@@ -17,6 +17,10 @@ targets:
     sources:
       - path: NoBonk
         excludes: [Info.plist]
+      - path: QuickAccess
+    dependencies:
+      - target: NoBonkControls
+        embed: true
     info:
       path: NoBonk/Info.plist
       properties:
@@ -35,8 +39,45 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
+  NoBonkControls:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: NoBonkControls
+        excludes: [Info.plist]
+      - path: QuickAccess
+    info:
+      path: NoBonkControls/Info.plist
+      properties:
+        CFBundleDisplayName: NoBonk
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.genwhy.nobonk.controls
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: NO
+  NoBonkQuickAccessTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: QuickAccessTests
+    dependencies:
+      - target: NoBonk
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: ai.genwhy.nobonk.quick-access-tests
+
 schemes:
   NoBonk:
     build:
       targets:
         NoBonk: all
+    test:
+      targets:
+        - NoBonkQuickAccessTests

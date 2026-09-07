@@ -9,19 +9,62 @@
 /* Begin PBXBuildFile section */
 		13C14A174188F3DD57510FDF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAF85E5999C760C8D1DE3C4 /* Assets.xcassets */; };
 		2060A8BABC06ECB74AEEB474 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 024DF87B092ABCED9BF89F3F /* PrivacyInfo.xcprivacy */; };
+		38A3891BBF8DC2CAEA444516 /* NoBonkControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 090732684C4CD256EBE82B61 /* NoBonkControls.swift */; };
+		57715A849545E3180293B5CB /* OpenNoBonkIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662E23CD886FC9C4858EC556 /* OpenNoBonkIntent.swift */; };
 		6D514DAC2772D6829E9CCBA2 /* SafetyGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD02B9EEC141C9974293F6D /* SafetyGate.swift */; };
 		770772B4BACD835EAA2CDCF5 /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E993C3B18ACF78EDC9B9D9BB /* CameraModel.swift */; };
 		9CE73B563A5327B406F59C13 /* NoBonkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3362E46BF6668DDB66321B /* NoBonkApp.swift */; };
 		A7231E6292B6AEC689694024 /* DetectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8482C5F050091DBED235E512 /* DetectionPolicy.swift */; };
+		BA9567C22CCF95B0387CA63E /* OpenNoBonkIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662E23CD886FC9C4858EC556 /* OpenNoBonkIntent.swift */; };
+		C98B1986F0FC752015E64115 /* NoBonkControls.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E5EA845808027A67BE524E37 /* NoBonkControls.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D1A126B003376428862DCF36 /* NoBonkShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BCB86245317D9626E6EF09 /* NoBonkShortcuts.swift */; };
+		DFF0740B13AE2CD09C0C5CC3 /* QuickAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9440888C99F481DC979FDF23 /* QuickAccessTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AF8F50E49F1245F07A537870 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E6107FB31F2761081659E550 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8194D093A568E5D2EFA618C7;
+			remoteInfo = NoBonk;
+		};
+		F60B3E0F60C260CBE6ADD338 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E6107FB31F2761081659E550 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AB03D4B15C40F6E30CECFFD8;
+			remoteInfo = NoBonkControls;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2CA71DE592B73C1FD6E64EB4 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C98B1986F0FC752015E64115 /* NoBonkControls.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		024DF87B092ABCED9BF89F3F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		090732684C4CD256EBE82B61 /* NoBonkControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoBonkControls.swift; sourceTree = "<group>"; };
+		50BCB86245317D9626E6EF09 /* NoBonkShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoBonkShortcuts.swift; sourceTree = "<group>"; };
+		662E23CD886FC9C4858EC556 /* OpenNoBonkIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenNoBonkIntent.swift; sourceTree = "<group>"; };
+		6D77197F6C3EAB2CAF9CCAB3 /* NoBonkQuickAccessTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = NoBonkQuickAccessTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		80DBC17AEB03D0A24F116F87 /* NoBonk.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NoBonk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8482C5F050091DBED235E512 /* DetectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionPolicy.swift; sourceTree = "<group>"; };
+		9440888C99F481DC979FDF23 /* QuickAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAccessTests.swift; sourceTree = "<group>"; };
 		BAD02B9EEC141C9974293F6D /* SafetyGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyGate.swift; sourceTree = "<group>"; };
 		CC3362E46BF6668DDB66321B /* NoBonkApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoBonkApp.swift; sourceTree = "<group>"; };
 		DBAF85E5999C760C8D1DE3C4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E5EA845808027A67BE524E37 /* NoBonkControls.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = NoBonkControls.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E993C3B18ACF78EDC9B9D9BB /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -41,6 +84,9 @@
 			isa = PBXGroup;
 			children = (
 				0D991441796F164CA48AB8CB /* NoBonk */,
+				ED1DB0A63D9EA102E4905097 /* NoBonkControls */,
+				AD613D09953915605693947D /* QuickAccess */,
+				569E2506714DAA1B04425779 /* QuickAccessTests */,
 				8B70E8B000408CBA555940D1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -50,16 +96,35 @@
 			children = (
 				E993C3B18ACF78EDC9B9D9BB /* CameraModel.swift */,
 				CC3362E46BF6668DDB66321B /* NoBonkApp.swift */,
+				50BCB86245317D9626E6EF09 /* NoBonkShortcuts.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		569E2506714DAA1B04425779 /* QuickAccessTests */ = {
+			isa = PBXGroup;
+			children = (
+				9440888C99F481DC979FDF23 /* QuickAccessTests.swift */,
+			);
+			path = QuickAccessTests;
 			sourceTree = "<group>";
 		};
 		8B70E8B000408CBA555940D1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				80DBC17AEB03D0A24F116F87 /* NoBonk.app */,
+				E5EA845808027A67BE524E37 /* NoBonkControls.appex */,
+				6D77197F6C3EAB2CAF9CCAB3 /* NoBonkQuickAccessTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		AD613D09953915605693947D /* QuickAccess */ = {
+			isa = PBXGroup;
+			children = (
+				662E23CD886FC9C4858EC556 /* OpenNoBonkIntent.swift */,
+			);
+			path = QuickAccess;
 			sourceTree = "<group>";
 		};
 		C927B4908130E239109C8D5E /* Core */ = {
@@ -71,19 +136,47 @@
 			path = Core;
 			sourceTree = "<group>";
 		};
+		ED1DB0A63D9EA102E4905097 /* NoBonkControls */ = {
+			isa = PBXGroup;
+			children = (
+				090732684C4CD256EBE82B61 /* NoBonkControls.swift */,
+			);
+			path = NoBonkControls;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		051ACE5BB6A53DB8E804AF1B /* NoBonkQuickAccessTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C512B38259293F3C9E508C6F /* Build configuration list for PBXNativeTarget "NoBonkQuickAccessTests" */;
+			buildPhases = (
+				DD82A0523A040F7CFBED13F8 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5A8F9B2F1042A9E586F187F8 /* PBXTargetDependency */,
+			);
+			name = NoBonkQuickAccessTests;
+			packageProductDependencies = (
+			);
+			productName = NoBonkQuickAccessTests;
+			productReference = 6D77197F6C3EAB2CAF9CCAB3 /* NoBonkQuickAccessTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		8194D093A568E5D2EFA618C7 /* NoBonk */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FDFA76AAC41CD728D4863119 /* Build configuration list for PBXNativeTarget "NoBonk" */;
 			buildPhases = (
 				3E1524D288D49C36C7C8AFCC /* Sources */,
 				718DE1C3C1767F7FD61698F8 /* Resources */,
+				2CA71DE592B73C1FD6E64EB4 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C9B8DDDD54394664E2180E4C /* PBXTargetDependency */,
 			);
 			name = NoBonk;
 			packageProductDependencies = (
@@ -91,6 +184,23 @@
 			productName = NoBonk;
 			productReference = 80DBC17AEB03D0A24F116F87 /* NoBonk.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AB03D4B15C40F6E30CECFFD8 /* NoBonkControls */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0E3AA9546A0B08328248A3CB /* Build configuration list for PBXNativeTarget "NoBonkControls" */;
+			buildPhases = (
+				3128DDC761B21D476E3E0AF2 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NoBonkControls;
+			packageProductDependencies = (
+			);
+			productName = NoBonkControls;
+			productReference = E5EA845808027A67BE524E37 /* NoBonkControls.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -101,7 +211,13 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					051ACE5BB6A53DB8E804AF1B = {
+						ProvisioningStyle = Automatic;
+					};
 					8194D093A568E5D2EFA618C7 = {
+						ProvisioningStyle = Automatic;
+					};
+					AB03D4B15C40F6E30CECFFD8 = {
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -121,6 +237,8 @@
 			projectRoot = "";
 			targets = (
 				8194D093A568E5D2EFA618C7 /* NoBonk */,
+				AB03D4B15C40F6E30CECFFD8 /* NoBonkControls */,
+				051ACE5BB6A53DB8E804AF1B /* NoBonkQuickAccessTests */,
 			);
 		};
 /* End PBXProject section */
@@ -138,6 +256,15 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		3128DDC761B21D476E3E0AF2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				38A3891BBF8DC2CAEA444516 /* NoBonkControls.swift in Sources */,
+				BA9567C22CCF95B0387CA63E /* OpenNoBonkIntent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		3E1524D288D49C36C7C8AFCC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -145,11 +272,34 @@
 				770772B4BACD835EAA2CDCF5 /* CameraModel.swift in Sources */,
 				A7231E6292B6AEC689694024 /* DetectionPolicy.swift in Sources */,
 				9CE73B563A5327B406F59C13 /* NoBonkApp.swift in Sources */,
+				D1A126B003376428862DCF36 /* NoBonkShortcuts.swift in Sources */,
+				57715A849545E3180293B5CB /* OpenNoBonkIntent.swift in Sources */,
 				6D514DAC2772D6829E9CCBA2 /* SafetyGate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DD82A0523A040F7CFBED13F8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DFF0740B13AE2CD09C0C5CC3 /* QuickAccessTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5A8F9B2F1042A9E586F187F8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8194D093A568E5D2EFA618C7 /* NoBonk */;
+			targetProxy = AF8F50E49F1245F07A537870 /* PBXContainerItemProxy */;
+		};
+		C9B8DDDD54394664E2180E4C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AB03D4B15C40F6E30CECFFD8 /* NoBonkControls */;
+			targetProxy = F60B3E0F60C260CBE6ADD338 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		0004532AA91AADD772787937 /* Debug */ = {
@@ -236,6 +386,78 @@
 			};
 			name = Release;
 		};
+		37D52B2A33A827B3148EBF9A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NoBonkControls/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.genwhy.nobonk.controls;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		627E1172AE4AD3D5E5BB9A31 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NoBonkControls/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.genwhy.nobonk.controls;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		73ACB9A4673441EC5A2655D3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.genwhy.nobonk.quick-access-tests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/NoBonk.app/NoBonk";
+			};
+			name = Release;
+		};
+		9F52CB1C5FB627F65795FE13 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "ai.genwhy.nobonk.quick-access-tests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/NoBonk.app/NoBonk";
+			};
+			name = Debug;
+		};
 		A267A1FE738EE39BCA33F976 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -316,11 +538,29 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0E3AA9546A0B08328248A3CB /* Build configuration list for PBXNativeTarget "NoBonkControls" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				627E1172AE4AD3D5E5BB9A31 /* Debug */,
+				37D52B2A33A827B3148EBF9A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		8FE3EB26CEE328CCC04072D5 /* Build configuration list for PBXProject "NoBonk" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0004532AA91AADD772787937 /* Debug */,
 				DE6E2EABD7EBD18F237C8970 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C512B38259293F3C9E508C6F /* Build configuration list for PBXNativeTarget "NoBonkQuickAccessTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9F52CB1C5FB627F65795FE13 /* Debug */,
+				73ACB9A4673441EC5A2655D3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -1,7 +1,9 @@
 import SwiftUI
+import AppIntents
 
 @main
 struct NoBonkApp: App {
+    init() { NoBonkShortcuts.updateAppShortcutParameters() }
     var body: some Scene { WindowGroup { NoBonkView().preferredColorScheme(.dark) } }
 }
 
@@ -70,6 +72,7 @@ struct NoBonkView: View {
                 Text("This early iPhone build detects people only. It does not yet detect cars, pets, walls or ground hazards. Camera frames are processed on-device, never saved or uploaded.").foregroundStyle(.secondary)
                 Label("Keep NoBonk open to scan", systemImage: "iphone").font(.headline)
                 Text("Scanning stops when you leave the app or the camera is interrupted. No background camera scanning is included.").foregroundStyle(.secondary)
+                quickAccessGuide
                 Text("BY KRISHAV").font(.caption.bold()).tracking(3).foregroundStyle(mint).padding(.top)
             }.padding(22)
         }
@@ -125,12 +128,13 @@ struct NoBonkView: View {
                                 Text("Recent analysis: \(camera.analysisMilliseconds) ms · target up to \(camera.analysisRate) frames/s")
                                     .monospacedDigit().foregroundStyle(mint)
                             }
-                            Text("The compact camera leaves room for NoBonk’s controls. iPhone does not let this app scan behind other apps. Switching apps stops the camera.")
+                            Text("The compact camera leaves room for NoBonk’s controls. This version pauses scanning when you switch apps. Reopen NoBonk and tap Start when you are ready.")
                         }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
                     } label: {
                         Label("On this iPhone", systemImage: "iphone.gen3.radiowaves.left.and.right")
                             .font(.subheadline)
                     }.padding(.horizontal, 4)
+                    quickAccessGuide
                     HStack {
                         Button("Safety & privacy") { camera.stop(); showFull = true }
                         Spacer()
@@ -158,6 +162,31 @@ struct NoBonkView: View {
             }
         }
     }
+    private var quickAccessGuide: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("A quick way back. You still unlock, read the reminder, and tap Start. NoBonk stops scanning when another app takes over.")
+                    .foregroundStyle(.secondary)
+                Label("Siri & Shortcuts", systemImage: "square.stack.3d.up")
+                    .font(.subheadline.bold())
+                Text("In Shortcuts, find NoBonk → Open NoBonk. You can add that shortcut to your Home Screen. Or ask Siri to open NoBonk.")
+                Label("Action button · supported iPhones", systemImage: "button.programmable")
+                    .font(.subheadline.bold())
+                Text("In Settings → Action Button, choose Shortcut, then Open NoBonk. The button opens setup; it does not start scanning.")
+                if #available(iOS 18.0, *) {
+                    Label("Control Center & Lock Screen", systemImage: "switch.2")
+                        .font(.subheadline.bold())
+                    Text("In Control Center, touch and hold, choose Add a Control, then search NoBonk. For the Lock Screen, touch and hold it, choose Customize → Lock Screen, and replace a bottom control with Open NoBonk.")
+                }
+                Text("Availability and menu wording vary by iPhone and iOS version. These are shortcuts into the app, not background camera controls.")
+                    .foregroundStyle(.secondary)
+            }.font(.caption).fixedSize(horizontal: false, vertical: true).padding(.top, 10)
+        } label: {
+            Label("Keep NoBonk within reach", systemImage: "hand.tap")
+                .font(.subheadline)
+        }.padding(16).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
+    }
+
     private var cameraCard: some View {
         ZStack {
             Color.black
