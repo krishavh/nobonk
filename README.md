@@ -148,7 +148,9 @@ Issues and pull requests welcome! Some good areas to dig into: better low-light 
 
 ## Acknowledgments
 
-Created by **Krishav**. **Haarith** supplied parental support, handled publishing, and paid the AI bills—mostly while watching Krishav put the tools to work. 🙂
+Created by **Krishav**.
+
+**Haarith (Dad)** — Thank you for believing in this idea and sitting with me through the frustrating parts, especially when nothing seemed to work. Having you there made it easier to keep going. And thank you for faithfully paying the increasingly ridiculous AI bills without asking too many questions :)
 
 Krishav leads the project: identifying the problem, choosing the app's approach, shaping its privacy and alert behavior, and testing it on real phones.
 
