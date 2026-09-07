@@ -3,7 +3,7 @@
 **Last updated:** 2026-09-06
 **App:** NoBonk (`ai.genwhy.nobonk`)
 **Developer:** Published by a parent/guardian on behalf of Krishav (student author).
-**Contact:** the Play Console listing's developer email (account holder: Haarith Devarajan, parent), or an issue at github.com/krishavh/nobonk.
+**Contact:** support@genwhy.ai (Haarith, parent and account holder), or an issue at github.com/krishavh/nobonk.
 **Public URL of this policy:** https://krishavh.github.io/privacy/nobonk.html (short-form page; this file is the long-form text).
 
 > **Plain-language summary:** NoBonk runs entirely on your phone. It uses the
@@ -110,7 +110,7 @@ If this policy changes, the updated version will be posted at the same public UR
 
 ## 11. Contact
 
-Questions or requests: `<GUARDIAN_CONTACT_EMAIL>`.
+Questions or requests: support@genwhy.ai (Haarith, parent and account holder).
 
 ---
 

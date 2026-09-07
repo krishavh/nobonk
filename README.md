@@ -122,19 +122,19 @@ Issues and pull requests welcome! Some good areas to dig into: better low-light 
 
 ## Acknowledgments
 
-**Author:** Krishav Haarith (student). **Guardian / account holder:** Haarith Devarajan.
+Created by **Krishav**, with parental support and publishing/account management from **Haarith**.
 
-This project leaned heavily on AI coding tools, and they deserve real credit for the amount of code they helped produce:
+Krishav leads the project: identifying the problem, choosing the app's approach, shaping its privacy and alert behavior, and testing it on real phones.
 
-- **Claude** (Anthropic; Claude Code, incl. the Fable 5.1 and Opus models) — most of the Kotlin, the release engineering (16 KB alignment, signing, CI), the zero-allocation frame path, and the model export/benchmark work.
-- **OpenAI Codex** and **ChatGPT Astra** — refactoring, Play Console / registration workflow, and website.
-- **Kaaval** (the family's local Hermes agent on a DGX Spark, running Qwen3.8-Flash-Next) — hundreds of autonomous build-and-test iterations on the hardening backlog.
-- **Google Gemini** — debugging help, security/privacy review, and the alert-system diagram.
-- **Warp AI** — terminal workflow and build scripting.
+**AI-assisted development.** NoBonk was built with substantial help from AI coding tools, directed and reviewed by Krishav. Much of the code was produced by these tools rather than typed by hand, and we credit them plainly:
 
-The problem itself, the iOS-to-Android decision, the distance-estimation and wall-detection approaches, the privacy-first design, the false-alert tuning, and all of the testing on real sidewalks are Krishav's.
+- **Claude** (Anthropic) — substantial Kotlin implementation, performance work, model export, and release engineering.
+- **OpenAI Codex** and **ChatGPT Astra** — code review and refactoring, the website, and Google Play setup.
+- **Kaaval** (the family's local coding agent) — automated build-and-test iterations.
+- **Google Gemini** — debugging, privacy/security review, and diagrams.
+- **Warp** — terminal workflow and build scripting.
 
-Built with Android Studio, Jetpack Compose, CameraX, and ONNX Runtime. YOLO model weights from the official [Ultralytics](https://github.com/ultralytics/ultralytics) YOLO26 release (AGPL-3.0). Thanks to the Ultralytics, ONNX Runtime, and AndroidX teams.
+**Open-source technology.** Built with Android Studio, Jetpack Compose, CameraX, and ONNX Runtime. YOLO model weights from the official [Ultralytics](https://github.com/ultralytics/ultralytics) YOLO26 release (AGPL-3.0). Thanks to the Ultralytics, ONNX Runtime, and AndroidX teams.
 
 ## License
 
