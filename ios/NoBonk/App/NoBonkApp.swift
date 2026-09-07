@@ -13,6 +13,8 @@ private let mint = Color(red: 0.2, green: 0.85, blue: 0.65)
 struct NoBonkView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var camera = CameraModel()
+    @StateObject private var browser = BrowserModel()
+    @State private var browsing = false
     @State private var gate = SafetyGate(acknowledgedVersion: UserDefaults.standard.integer(forKey: "safetyNoticeVersion"))
     @State private var checked = false
     @State private var showFull = false
@@ -25,9 +27,16 @@ struct NoBonkView: View {
         }
         .tint(mint)
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { camera.stop() }
+            if phase != .active { camera.stop(); browser.pause() }
             if phase == .background { gate.leaveForeground(); showFull = false; checked = false }
+            syncBrowserVisibility()
         }
+        .onAppear {
+            browser.onCameraCovered = { camera.stop(message: "Camera covered — tap Start when the view is visible") }
+            syncBrowserVisibility()
+        }
+        .onChange(of: browsing) { _, _ in syncBrowserVisibility() }
+        .onChange(of: gate.screen) { _, _ in syncBrowserVisibility() }
         .sheet(isPresented: $showFull) {
             NavigationStack {
                 ScrollView { Text(SafetyCopy.full).font(.body).padding(24) }
@@ -35,6 +44,10 @@ struct NoBonkView: View {
                     .toolbar { Button("Done") { showFull = false } }
             }
         }
+    }
+    private func syncBrowserVisibility() {
+        if browsing && gate.screen == .scanning && scenePhase == .active { browser.resume() }
+        else { browser.pause() }
     }
     private var brand: some View {
         HStack(spacing: 12) {
@@ -78,12 +91,35 @@ struct NoBonkView: View {
         }
     }
     private var scanning: some View {
+        VStack(spacing: 0) {
+            Picker("NoBonk mode", selection: $browsing) {
+                Text("Set up").tag(false)
+                Text("Browse & scan").tag(true)
+            }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)
+            if browsing { browseLayout } else { setup }
+        }
+    }
+    private var browseLayout: some View {
+        GeometryReader { screen in
+            VStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    Image("BrandIcon").resizable().frame(width: 28, height: 28).clipShape(RoundedRectangle(cornerRadius: 8))
+                    Text("Keep looking up. No alert does not mean a clear path.").font(.caption).foregroundStyle(.yellow)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                cameraCard.frame(height: max(150, min(screen.size.height * 0.28, 210))).layoutPriority(1)
+                if camera.audioUnavailable { Text("Sound unavailable · visual and enabled haptic cues remain on").font(.caption2).foregroundStyle(.orange) }
+                BrowserPane(model: browser).frame(maxWidth: .infinity, maxHeight: .infinity)
+            }.padding(.horizontal, 12).padding(.top, 4)
+            .safeAreaInset(edge: .bottom, spacing: 0) { scanButton }
+        }
+    }
+    private var setup: some View {
         GeometryReader { screen in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     brand
                     HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: "eye.fill").foregroundStyle(.yellow)
+                        Image("BrandIcon").resizable().frame(width: 22, height: 22).clipShape(RoundedRectangle(cornerRadius: 6))
                         Text("Keep looking up. No alert does not mean a clear path.")
                             .font(.subheadline).foregroundStyle(.white.opacity(0.8))
                     }.padding(14).background(.yellow.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
@@ -117,6 +153,10 @@ struct NoBonkView: View {
                             Toggle(isOn: $camera.haptics) { Label("Haptics", systemImage: "waveform") }
                         }.font(.caption.bold())
                     }.padding(16).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 22))
+                    if camera.audioUnavailable {
+                        Text("Sound is unavailable right now. Visual and enabled haptic cues still work.")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                     if camera.denied {
                         Button("Open camera settings") {
                             if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -129,7 +169,7 @@ struct NoBonkView: View {
                                 Text("Recent analysis: \(camera.analysisMilliseconds) ms · target up to \(camera.analysisRate) frames/s")
                                     .monospacedDigit().foregroundStyle(mint)
                             }
-                            Text("The compact camera leaves room for NoBonk’s controls. This version pauses scanning when you switch apps. Reopen NoBonk and tap Start when you are ready.")
+                            Text("Browse & scan keeps a website below the visible camera. Camera frames stay local; websites connect to the internet. Scanning pauses when you switch apps or a video covers the camera. Reopen NoBonk and tap Start when you are ready.")
                         }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
                     } label: {
                         Label("On this iPhone", systemImage: "iphone.gen3.radiowaves.left.and.right")
@@ -144,6 +184,11 @@ struct NoBonkView: View {
                 }.padding(20)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
+                scanButton
+            }
+        }
+    }
+    private var scanButton: some View {
                 Button {
                     if camera.running || camera.starting { camera.stop() }
                     else if camera.denied, let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -160,8 +205,6 @@ struct NoBonkView: View {
                 .buttonStyle(PrimaryButton(isStop: camera.running || camera.starting))
                 .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 8)
                 .background(night.opacity(0.98))
-            }
-        }
     }
     private var quickAccessGuide: some View {
         DisclosureGroup {
@@ -201,12 +244,12 @@ struct NoBonkView: View {
                         .position(x: rect.midX, y: rect.midY)
                 }
             }.allowsHitTesting(false).accessibilityHidden(true)
-            if !camera.running {
+            if !camera.running && !browsing {
                 VStack(spacing: 12) {
                     ZStack {
                         Circle().fill(mint.opacity(0.09)).frame(width: 66, height: 66)
                         if camera.starting { ProgressView().tint(mint) }
-                        else { Image(systemName: "viewfinder").font(.system(size: 30, weight: .light)).foregroundStyle(mint) }
+                        else { Image("BrandIcon").resizable().frame(width: 54, height: 54).clipShape(RoundedRectangle(cornerRadius: 14)) }
                     }
                     Text(camera.starting ? "Opening your camera" : "A little more awareness.").font(.headline)
                     Text(camera.starting ? "You can stop at any time." : "Stand still. Set up. Look up.")
@@ -219,13 +262,13 @@ struct NoBonkView: View {
                     Circle().fill(camera.running ? mint : .gray).frame(width: 6, height: 6)
                     Text(camera.running ? "LIVE VIEW" : "CAMERA PAUSED").font(.system(size: 10, weight: .bold)).tracking(1.5)
                     Spacer()
-                    Button {
+                    if !browsing { Button {
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { expandedCamera.toggle() }
                     } label: {
                         Image(systemName: expandedCamera ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                             .font(.system(size: 13, weight: .semibold)).frame(width: 44, height: 44)
                             .background(.black.opacity(0.55), in: Circle())
-                    }.accessibilityLabel(expandedCamera ? "Compact camera" : "Expand camera")
+                    }.accessibilityLabel(expandedCamera ? "Compact camera" : "Expand camera") }
                 }.padding(.leading, 16).padding(.trailing, 6).padding(.top, 4)
                 Spacer()
                 Text(camera.status).font(.caption.weight(.medium)).multilineTextAlignment(.center)

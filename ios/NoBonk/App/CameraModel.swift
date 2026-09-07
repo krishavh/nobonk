@@ -66,6 +66,7 @@ final class CameraEngine: NSObject {
     private func configure() throws {
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { throw CameraError.unavailable }
         let input = try AVCaptureDeviceInput(device: camera)
+        session.automaticallyConfiguresApplicationAudioSession = false
         session.beginConfiguration()
         defer { session.commitConfiguration() }
         session.sessionPreset = session.canSetSessionPreset(.hd1280x720) ? .hd1280x720 : .high
@@ -170,7 +171,7 @@ final class CameraModel: ObservableObject {
     }
     @Published var detectorTiming: DetectorTiming?
     var fastModelAvailable: Bool { FastObjectDetector.assetURL != nil }
-    @Published var sound = true { didSet { if !sound { audio?.stop() } } }
+    @Published var sound = true { didSet { if !sound { audio.stop() } } }
     @Published var haptics = true
     @Published var sensitivity: AlertSensitivity = .balanced { didSet { policy.reset() } }
     @Published var previewAspect = 9.0 / 16
@@ -179,7 +180,9 @@ final class CameraModel: ObservableObject {
     @Published var alertUntil = Date.distantPast
     @Published var alertText = "Person ahead — look up"
     private var wanted = false
-    private var audio: AVAudioPlayer?
+    private var cueRun = UUID()
+    private let audio = CuePlaybackController { ForegroundCueOutput() }
+    @Published var audioUnavailable = false
     private var policy = DetectionPolicy()
     private var observers: [NSObjectProtocol] = []
     init() {
@@ -218,6 +221,11 @@ final class CameraModel: ObservableObject {
                 else { self.stop(message: status) } // failed start must release the retry latch
             }
         }
+        observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance(), queue: .main) { [weak self] notification in
+            guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+            Task { @MainActor in self?.stop(message: "Audio interrupted — tap Start when you’re ready") }
+        })
         for name in [AVCaptureSession.wasInterruptedNotification, AVCaptureSession.runtimeErrorNotification] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: engine.session, queue: .main) { [weak self] _ in
                 Task { @MainActor in
@@ -227,13 +235,14 @@ final class CameraModel: ObservableObject {
             })
         }
     }
-    deinit { engine.stop(); audio?.stop(); for observer in observers { NotificationCenter.default.removeObserver(observer) } }
+    deinit { engine.stop(); audio.stop(); for observer in observers { NotificationCenter.default.removeObserver(observer) } }
     func start() {
         guard !wanted else { return }
         denied = false
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             guard UIApplication.shared.applicationState == .active else { return }
+            audioUnavailable = false
             wanted = true; starting = true
             status = detectorMode == .fastObjects ? "Preparing Fast Objects on this phone…" : "Starting camera…"
             policy.reset(); engine.start(token: engine.generation.begin(), mode: detectorMode)
@@ -252,16 +261,20 @@ final class CameraModel: ObservableObject {
     }
     /// A short local tone owned by this session, so Stop and Sound-off can cancel it.
     private func playCue() {
-        do {
-            if audio == nil { audio = try AVAudioPlayer(data: AlertTone.wav()) }
-            audio?.currentTime = 0
-            audio?.play()
-        } catch { /* Visual and haptic cues remain available if audio cannot start. */ }
+        let run = cueRun
+        audio.play { [weak self] played in
+            Task { @MainActor in
+                guard let self, self.cueRun == run, self.wanted, self.sound else { return }
+                self.audioUnavailable = !played
+            }
+        }
     }
     func stop(message: String = "Paused — not scanning") {
         UIApplication.shared.isIdleTimerDisabled = false
+        cueRun = UUID()
         wanted = false; starting = false; running = false; boxes = []; policy.reset(); alertUntil = .distantPast
-        audio?.stop()
+        audio.stop()
+        audioUnavailable = false
         analysisMilliseconds = 0; analysisRate = 0
         status = message; engine.stop()
     }

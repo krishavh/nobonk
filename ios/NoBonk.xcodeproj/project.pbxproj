@@ -12,26 +12,32 @@
 		13C14A174188F3DD57510FDF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAF85E5999C760C8D1DE3C4 /* Assets.xcassets */; };
 		201D82DDC55CF7E65AC62911 /* DetectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8482C5F050091DBED235E512 /* DetectionPolicy.swift */; };
 		2060A8BABC06ECB74AEEB474 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 024DF87B092ABCED9BF89F3F /* PrivacyInfo.xcprivacy */; };
+		36944F9049F1D10F88BAD7E7 /* BrowserDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26EE62D73A5376D4FE695B81 /* BrowserDestination.swift */; };
 		38A3891BBF8DC2CAEA444516 /* NoBonkControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 090732684C4CD256EBE82B61 /* NoBonkControls.swift */; };
 		42279A6CB434B81D603FD1DC /* FastModelContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43392EB14E71827B90A965F9 /* FastModelContract.swift */; };
 		55A49D77C5B7990CD977B52D /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = 4E625A590850A2C1F4160976 /* onnxruntime */; };
 		57715A849545E3180293B5CB /* OpenNoBonkIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662E23CD886FC9C4858EC556 /* OpenNoBonkIntent.swift */; };
 		699BB4DE68303ACD6BECDFD3 /* FastObjectDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A5E0D57B25AE8551C3A913 /* FastObjectDetector.swift */; };
 		6D514DAC2772D6829E9CCBA2 /* SafetyGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD02B9EEC141C9974293F6D /* SafetyGate.swift */; };
+		6D5800AE5A15340C8C868E3C /* BrowserDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26EE62D73A5376D4FE695B81 /* BrowserDestination.swift */; };
 		6F97D567F1A46B1BEB1365D7 /* FastObjectDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A5E0D57B25AE8551C3A913 /* FastObjectDetector.swift */; };
 		770772B4BACD835EAA2CDCF5 /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E993C3B18ACF78EDC9B9D9BB /* CameraModel.swift */; };
 		7814C421F09DE3D3A57C3A95 /* FastPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95706265DA659DD3D69229CD /* FastPreprocessor.swift */; };
 		7B9F47C7848AF2E28136F903 /* Models in Resources */ = {isa = PBXBuildFile; fileRef = 5EFF9EAC910BCE97D93F4F04 /* Models */; };
+		7B9F5049E8A6CAB9BB51AA35 /* CuePlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA69C0659000DDE4AFB63D86 /* CuePlayback.swift */; };
 		7FBB3617FEEF66EC72BF8EEA /* FastPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95706265DA659DD3D69229CD /* FastPreprocessor.swift */; };
 		9CE73B563A5327B406F59C13 /* NoBonkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3362E46BF6668DDB66321B /* NoBonkApp.swift */; };
 		A7231E6292B6AEC689694024 /* DetectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8482C5F050091DBED235E512 /* DetectionPolicy.swift */; };
+		AA14AEEEF4043C859B244A30 /* CuePlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA69C0659000DDE4AFB63D86 /* CuePlayback.swift */; };
 		BA9567C22CCF95B0387CA63E /* OpenNoBonkIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662E23CD886FC9C4858EC556 /* OpenNoBonkIntent.swift */; };
 		C39DB3C4F312EEC7CC1C2D96 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 582D9E4271DDA6F53D1F54F7 /* main.swift */; };
 		C98B1986F0FC752015E64115 /* NoBonkControls.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E5EA845808027A67BE524E37 /* NoBonkControls.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D1A126B003376428862DCF36 /* NoBonkShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BCB86245317D9626E6EF09 /* NoBonkShortcuts.swift */; };
+		D3F7C487D148B9D94621C931 /* BrowserPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C49B0A8FE108E53B19A8472 /* BrowserPane.swift */; };
 		D8C7B3043D937B3A42606D20 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = 1AD5B25A891931C6EB868FE7 /* onnxruntime */; };
 		DC58C24B4B509A209D79F0BC /* SafetyGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD02B9EEC141C9974293F6D /* SafetyGate.swift */; };
 		DFF0740B13AE2CD09C0C5CC3 /* QuickAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9440888C99F481DC979FDF23 /* QuickAccessTests.swift */; };
+		EDA95E5E7F28511206790D2E /* AudioCueController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE04D4519870FF4E91600091 /* AudioCueController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,6 +74,8 @@
 /* Begin PBXFileReference section */
 		024DF87B092ABCED9BF89F3F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		090732684C4CD256EBE82B61 /* NoBonkControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoBonkControls.swift; sourceTree = "<group>"; };
+		1C49B0A8FE108E53B19A8472 /* BrowserPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserPane.swift; sourceTree = "<group>"; };
+		26EE62D73A5376D4FE695B81 /* BrowserDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserDestination.swift; sourceTree = "<group>"; };
 		43392EB14E71827B90A965F9 /* FastModelContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FastModelContract.swift; sourceTree = "<group>"; };
 		48D9BC716AC820629BEE5519 /* NoBonkFastProbe */ = {isa = PBXFileReference; includeInIndex = 0; path = NoBonkFastProbe; sourceTree = BUILT_PRODUCTS_DIR; };
 		50BCB86245317D9626E6EF09 /* NoBonkShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoBonkShortcuts.swift; sourceTree = "<group>"; };
@@ -80,7 +88,9 @@
 		8482C5F050091DBED235E512 /* DetectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionPolicy.swift; sourceTree = "<group>"; };
 		9440888C99F481DC979FDF23 /* QuickAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAccessTests.swift; sourceTree = "<group>"; };
 		95706265DA659DD3D69229CD /* FastPreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FastPreprocessor.swift; sourceTree = "<group>"; };
+		BA69C0659000DDE4AFB63D86 /* CuePlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CuePlayback.swift; sourceTree = "<group>"; };
 		BAD02B9EEC141C9974293F6D /* SafetyGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyGate.swift; sourceTree = "<group>"; };
+		BE04D4519870FF4E91600091 /* AudioCueController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCueController.swift; sourceTree = "<group>"; };
 		CC3362E46BF6668DDB66321B /* NoBonkApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoBonkApp.swift; sourceTree = "<group>"; };
 		DA165399BA849D6DFC2C18B0 /* DetectorModePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectorModePicker.swift; sourceTree = "<group>"; };
 		DBAF85E5999C760C8D1DE3C4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -135,6 +145,8 @@
 		29455365E0C69E61778B301E /* App */ = {
 			isa = PBXGroup;
 			children = (
+				BE04D4519870FF4E91600091 /* AudioCueController.swift */,
+				1C49B0A8FE108E53B19A8472 /* BrowserPane.swift */,
 				E993C3B18ACF78EDC9B9D9BB /* CameraModel.swift */,
 				DA165399BA849D6DFC2C18B0 /* DetectorModePicker.swift */,
 				81A5E0D57B25AE8551C3A913 /* FastObjectDetector.swift */,
@@ -174,6 +186,8 @@
 		C927B4908130E239109C8D5E /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				26EE62D73A5376D4FE695B81 /* BrowserDestination.swift */,
+				BA69C0659000DDE4AFB63D86 /* CuePlayback.swift */,
 				8482C5F050091DBED235E512 /* DetectionPolicy.swift */,
 				43392EB14E71827B90A965F9 /* FastModelContract.swift */,
 				95706265DA659DD3D69229CD /* FastPreprocessor.swift */,
@@ -352,7 +366,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EDA95E5E7F28511206790D2E /* AudioCueController.swift in Sources */,
+				36944F9049F1D10F88BAD7E7 /* BrowserDestination.swift in Sources */,
+				D3F7C487D148B9D94621C931 /* BrowserPane.swift in Sources */,
 				770772B4BACD835EAA2CDCF5 /* CameraModel.swift in Sources */,
+				AA14AEEEF4043C859B244A30 /* CuePlayback.swift in Sources */,
 				A7231E6292B6AEC689694024 /* DetectionPolicy.swift in Sources */,
 				030A421ACFD1B71C7B4C8F3A /* DetectorModePicker.swift in Sources */,
 				0A50881991FB0656F859F31F /* FastModelContract.swift in Sources */,
@@ -377,6 +395,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6D5800AE5A15340C8C868E3C /* BrowserDestination.swift in Sources */,
+				7B9F5049E8A6CAB9BB51AA35 /* CuePlayback.swift in Sources */,
 				201D82DDC55CF7E65AC62911 /* DetectionPolicy.swift in Sources */,
 				42279A6CB434B81D603FD1DC /* FastModelContract.swift in Sources */,
 				699BB4DE68303ACD6BECDFD3 /* FastObjectDetector.swift in Sources */,
