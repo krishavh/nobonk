@@ -100,7 +100,7 @@ fun DetectionScreen(
 
         DetectionOverlay(detections = detections, frameAlert = viewModel.frameAlert)
 
-        if (!isInitializing) {
+        if (!isInitializing || !viewModel.scanningEnabled) {
             TopStatusBar(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
                 batteryLevel = batteryLevel,
@@ -175,7 +175,9 @@ fun DetectionScreen(
         } else if (viewModel.frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
             LookUpOverlay(className = viewModel.lookUpLabel ?: "person", bearingPan = viewModel.bearingPan)
         }
-        if (isInitializing) {
+        // Warming overlay only while a scan session actually wants the model: after a foreground Stop
+        // the stopped dock must be visible immediately while the cancelled load unwinds.
+        if (isInitializing && viewModel.scanningEnabled) {
             InitializingOverlay(initializationStatus)
             TextButton(onClick = { onStopBackground(); viewModel.stopScanning() }, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)) { Text("Stop", color = NB.Ink) }
         }
@@ -506,7 +508,7 @@ fun InitializingOverlay(status: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
             Wordmark()
             Spacer(Modifier.height(28.dp))
-            Text(if (critical) "SOMETHING WENT WRONG" else "WARMING UP THE EYES", color = if (critical) NB.Danger else NB.Sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.4.sp)
+            Text(if (critical) "SOMETHING WENT WRONG" else "GETTING READY", color = if (critical) NB.Danger else NB.Sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.4.sp)
             Spacer(Modifier.height(10.dp))
             Text(status, color = if (critical) NB.Danger else NB.Ink, fontSize = 14.sp, textAlign = TextAlign.Center)
             if (!critical) { Spacer(Modifier.height(18.dp)); LinearProgressIndicator(modifier = Modifier.width(180.dp).clip(NB.PillShape), color = NB.Accent, trackColor = NB.Line) }
