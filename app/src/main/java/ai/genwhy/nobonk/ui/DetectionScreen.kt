@@ -118,7 +118,7 @@ fun DetectionScreen(
                 isLowLight -> NoticeBanner("🔅", if (viewModel.isNightBoost) "Low light · night boost on" else "Low light", "Detection is less reliable in the dark", color = NB.Watch)
             }
             if (isWallDetected && !isCameraBlocked)
-                NoticeBanner("🧱", "Possible obstacle", "Wall-like surface ahead · camera heuristic, not a recognised object", color = NB.Watch, description = "Possible obstacle. Wall-like surface ahead, from the camera heuristic, not a recognised object.")
+                NoticeBanner("🧱", "Possible obstacle", "Surface warning · wall-like surface ahead, object not identified", color = NB.Watch, description = "Possible obstacle. Surface warning: wall-like surface ahead, object not identified.")
         }
 
         if (isGroundHazard && !isCameraBlocked) {
@@ -303,7 +303,7 @@ private fun ControlDock(
                 )
             }
             ProximityMeter(distance = nearest?.distance, threshold = distanceThreshold, color = nearestColor,
-                emptyLabel = if (heuristicObstacle) "camera heuristic · no object recognised" else "nothing recognised")
+                emptyLabel = if (heuristicObstacle) "surface warning · object not identified" else "no object identified")
         }
         Spacer(Modifier.height(12.dp))
         // Row 2 — alert distance
@@ -390,7 +390,7 @@ private fun ControlDock(
 
 /** Horizontal meter: how close the nearest object is relative to the alert distance. */
 @Composable
-private fun ProximityMeter(distance: Float?, threshold: Float, color: Color, emptyLabel: String = "nothing recognised") {
+private fun ProximityMeter(distance: Float?, threshold: Float, color: Color, emptyLabel: String = "no object identified") {
     val frac = if (distance == null) 0f else (1f - (distance / (threshold * 2f))).coerceIn(0.04f, 1f)
     val anim by animateFloatAsState(frac, animationSpec = tween(220), label = "prox")
     Column(horizontalAlignment = Alignment.End) {

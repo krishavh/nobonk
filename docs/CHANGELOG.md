@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 (versionCode 3) — 2026-09-06 review follow-up
+- **History rows can no longer scroll under the system bars.** vc2 put the status-bar padding inside the scrolling header, so once the header scrolled away the Tap location / Clear history row sat under the clock again. The inset now lives on the LazyColumn viewport (`windowInsetsPadding(systemBars)`), with the header's duplicate padding removed.
+- **Plain wording.** "camera heuristic" replaced with *surface warning* and "no object recognised" with *object not identified* in the dock and banner.
+
 ## 1.0.1 (versionCode 2) — 2026-09-06 closed-test fixes from Pixel 9a footage
 - **History screen respects system bars.** The header row (Tap location / Clear history) sat under the status-bar clock and icons on edge-to-edge Android 15; it now uses status-bar insets, and the list ends above the gesture bar. About screen gets the same bottom clearance.
 - **Heuristic vs recognised object, worded truthfully.** When the wall/ground heuristic fires with no recognised object, the dock says *Possible obstacle ahead · camera heuristic · no object recognised* and the banner says *Possible obstacle — wall-like surface ahead · camera heuristic, not a recognised object*, so the two panels no longer contradict each other.
