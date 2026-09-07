@@ -13,7 +13,7 @@ package ai.genwhy.nobonk.service
  */
 class ServiceLifecycle {
     enum class Phase { IDLE, LOADING_MODEL, BINDING_CAMERA, RUNNING, STOPPED }
-    enum class StopReason { USER, HANDOFF }
+    enum class StopReason { USER, HANDOFF, FAILURE }
 
     var phase: Phase = Phase.IDLE
         private set

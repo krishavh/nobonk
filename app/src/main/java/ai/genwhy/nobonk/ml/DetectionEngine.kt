@@ -77,7 +77,9 @@ class DetectionEngine(private val appContext: Context) {
         /** Detector wall time for this frame in ms (letterbox + inference + NMS). */
         val inferMs: Long = 0L,
         /** How long the phone has been held still (0 = moving/unknown); cadence input. */
-        val stationaryMs: Long = 0L
+        val stationaryMs: Long = 0L,
+        /** The detector threw on this frame: an empty list here is NOT "path clear". */
+        val inferenceFailed: Boolean = false
     )
 
     private val approachTracker = ApproachTracker()
@@ -135,8 +137,12 @@ class DetectionEngine(private val appContext: Context) {
 
     /** (Re)load the model. Safe to call off the main thread. */
     fun loadModel(modelName: String, inputPx: Int, skipNms: Boolean) {
-        objectDetector?.close()
-        objectDetector = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
+        // Build first, swap second, close the old one last — callers guarantee no frame is inside
+        // the old detector when they call this (single-flight gate drained, frames paused).
+        val fresh = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
+        val old = objectDetector
+        objectDetector = fresh
+        old?.close()
     }
 
     /** Normalized focal length in use by the distance estimator (see [CameraIntrinsics]). */
@@ -401,7 +407,8 @@ class DetectionEngine(private val appContext: Context) {
             lowLight = lowLight, angleQuality = angleQuality, angleHint = angleHint,
             bearingPan = if (displayAlert != AlertLevel.NONE) pan else null,
             nightBoost = nightBoost, inferMs = lastInferMs,
-            stationaryMs = sensorMonitor?.stationaryMs(now) ?: 0L
+            stationaryMs = sensorMonitor?.stationaryMs(now) ?: 0L,
+            inferenceFailed = detector.lastError != null
         )
     }
 

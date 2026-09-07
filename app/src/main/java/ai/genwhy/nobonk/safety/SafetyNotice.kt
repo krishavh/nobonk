@@ -138,4 +138,8 @@ object SessionState {
     /** Set by the service when the user pressed Stop (app or notification); consumed by MainActivity so
      *  returning to NoBonk does not silently resume scanning. */
     @Volatile var backgroundStoppedByUser: Boolean = false
+    /** Background session state for the activity: IDLE, STARTING, RUNNING, FAILED (with message). */
+    enum class BgState { IDLE, STARTING, RUNNING, FAILED }
+    val backgroundState = kotlinx.coroutines.flow.MutableStateFlow(BgState.IDLE)
+    @Volatile var backgroundError: String? = null
 }

@@ -127,6 +127,8 @@ class DetectionService : LifecycleService() {
                 val ack = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
                 val explicit = intent != null   // null = sticky restart after a process kill
                 if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack, explicitStart = explicit)) { Dbg.w(TAG, "start refused: safety gate not cleared (explicit=$explicit)"); stopSelf(); return START_NOT_STICKY }
+                ai.genwhy.nobonk.safety.SessionState.backgroundError = null
+                ai.genwhy.nobonk.safety.SessionState.backgroundState.value = ai.genwhy.nobonk.safety.SessionState.BgState.STARTING
                 startForegroundService()   // ACTION_START or null (restarted)
                 ai.genwhy.nobonk.safety.SessionState.gate.onServiceStarted()
             }
@@ -149,7 +151,8 @@ class DetectionService : LifecycleService() {
                 DetectionEngine(this@DetectionService).also { it.loadModel(modelFile, inputPx, skipNms) }
             } catch (e: Exception) {
                 Dbg.e(TAG, "Model load failed: ${e.message}", e)
-                withContext(Dispatchers.Main + NonCancellable) { shutdown(ServiceLifecycle.StopReason.HANDOFF) }
+                ai.genwhy.nobonk.safety.SessionState.backgroundError = "Background detection could not load the model: ${e.message ?: e.javaClass.simpleName}"
+                withContext(Dispatchers.Main + NonCancellable) { shutdown(ServiceLifecycle.StopReason.FAILURE) }
                 return@launch
             }
             // Engine ownership is confined to the main thread. Adoption is NonCancellable so a Stop
@@ -254,9 +257,11 @@ class DetectionService : LifecycleService() {
                 val cam = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis)
                 engine?.attachCamera(cam.cameraInfo)
                 life.onCameraBound()
+                ai.genwhy.nobonk.safety.SessionState.backgroundState.value = ai.genwhy.nobonk.safety.SessionState.BgState.RUNNING
             } catch (e: Exception) {
                 Dbg.e(TAG, "Camera binding failed", e)
-                shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                ai.genwhy.nobonk.safety.SessionState.backgroundError = "Background camera could not start: ${e.message ?: e.javaClass.simpleName}"
+                shutdown(ServiceLifecycle.StopReason.FAILURE)
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -289,6 +294,7 @@ class DetectionService : LifecycleService() {
                 mainHandler.post {
                     if (!life.mayPostAlerts()) return@post
                     updateHud(result.hudMessage); edge?.setLevel(result.highestAlert, result.cameraBlocked)
+                    if (result.inferenceFailed) updateNotification("Detection error — camera is on but the model failed")
                     if (result.highestAlert != AlertLevel.NONE) {
                         val n = result.detections.size
                         updateNotification("${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · $n object${if (n == 1) "" else "s"} in view")
@@ -315,15 +321,7 @@ class DetectionService : LifecycleService() {
         if (message != null && !life.mayPostAlerts()) return
         if (message != null) {
             if (hudView == null) {
-                val params = WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                    PixelFormat.TRANSLUCENT
-                ).apply { gravity = Gravity.TOP; y = topInsetPx() + (8 * resources.displayMetrics.density).toInt() }
+                val params = hudParams()
                 try {
                     hudView = LayoutInflater.from(this).inflate(R.layout.layout_collision_warning, null)
                     windowManager.addView(hudView, params)
@@ -346,6 +344,20 @@ class DetectionService : LifecycleService() {
             try { windowManager.removeView(hudView) } catch (_: Exception) {}
             hudView = null
         }
+    }
+
+    /** HUD window: left-aligned, leaves the Open NoBonk pill's column free, alpha under the obscuring-touch limit. */
+    private fun hudParams(): WindowManager.LayoutParams {
+        val d = resources.displayMetrics.density
+        val screenW = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) windowManager.currentWindowMetrics.bounds.width() else resources.displayMetrics.widthPixels
+        val pillReserve = (176 * d).toInt()   // pill width + margins
+        return WindowManager.LayoutParams(
+            (screenW - pillReserve).coerceAtLeast((200 * d).toInt()), WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.TOP or Gravity.START; x = (8 * d).toInt(); y = topInsetPx() + (8 * d).toInt() + (EdgeIndicatorPolicy.THICKNESS_DP * d).toInt(); alpha = 0.78f }
     }
 
     private fun createNotification(content: String): Notification {
@@ -403,6 +415,8 @@ class DetectionService : LifecycleService() {
         try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_: Exception) {}
         if (life.stoppedByUser) ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = true
+        ai.genwhy.nobonk.safety.SessionState.backgroundState.value = if (reason == ServiceLifecycle.StopReason.FAILURE) ai.genwhy.nobonk.safety.SessionState.BgState.FAILED else ai.genwhy.nobonk.safety.SessionState.BgState.IDLE
+        if (reason == ServiceLifecycle.StopReason.FAILURE) mainHandler.post { runCatching { android.widget.Toast.makeText(this, ai.genwhy.nobonk.safety.SessionState.backgroundError ?: "NoBonk background detection stopped", android.widget.Toast.LENGTH_LONG).show() } }
         ai.genwhy.nobonk.safety.SessionState.gate.onServiceStopped()
         stopSelf()
     }
@@ -422,7 +436,10 @@ class DetectionService : LifecycleService() {
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (!life.isStopped) edge?.relayout()   // another app rotated the display during the session
+        if (life.isStopped) return
+        edge?.relayout()   // another app rotated the display during the session
+        hudView?.let { v -> try { windowManager.updateViewLayout(v, hudParams()) } catch (_: Exception) {} }
+        returnView?.let { v -> try { val p = v.layoutParams as? WindowManager.LayoutParams; if (p != null) { p.y = topInsetPx() + (8 * resources.displayMetrics.density).toInt(); windowManager.updateViewLayout(v, p) } } catch (_: Exception) {} }
     }
 
     override fun onDestroy() {

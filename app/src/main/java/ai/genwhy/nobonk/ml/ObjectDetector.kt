@@ -49,6 +49,9 @@ class ObjectDetector(
      * keeps the UI "NPU" chip honest (fixes the false-NPU concern in T-PERF-INFER).
      */
     val isHardwareAccelerated: Boolean get() = activeExecutionProvider == "NNAPI"
+    /** Last inference error, if the most recent detect() failed (null when the last run succeeded). */
+    @Volatile var lastError: String? = null
+        private set
 
     private val confidenceThreshold = 0.40f
     private val iouThreshold = 0.45f
@@ -101,8 +104,10 @@ class ObjectDetector(
         val candidates = LinkedHashMap<String, Candidate>()
         val eps = if (android.os.Build.VERSION.SDK_INT >= 35) listOf("XNNPACK", "NNAPI", "CPU") else listOf("NNAPI", "XNNPACK", "CPU")
         for (ep in eps) {
+            var opts: OrtSession.SessionOptions? = null
+            var candidate: OrtSession? = null
             try {
-                val opts = OrtSession.SessionOptions().apply {
+                opts = OrtSession.SessionOptions().apply {
                     setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                     when (ep) {
                         "NNAPI"   -> { setIntraOpNumThreads(4); addNnapi() }
@@ -112,7 +117,7 @@ class ObjectDetector(
                         else      -> { setIntraOpNumThreads(4) }
                     }
                 }
-                val candidate = ortEnvironment.createSession(modelBytes, opts)
+                candidate = ortEnvironment.createSession(modelBytes, opts)
                 val dim = readInputSize(candidate, modelName, requestedInputSize)
                 warmUp(candidate, dim)   // throws if this EP can't actually run the graph
                 val samples = ArrayList<Double>(BENCH_RUNS)
@@ -122,8 +127,12 @@ class ObjectDetector(
                 val med = EpChooser.median(samples)
                 Dbg.i(TAG, "EP '$ep' runs $modelName @ ${dim}px: median ${"%.1f".format(med)} ms")
                 candidates[ep] = Candidate(candidate, dim, med)
+                candidate = null   // owned by candidates now
             } catch (e: Exception) {
                 Dbg.w(TAG, "EP '$ep' unavailable — skipping. Reason: ${e.message}")
+                candidate?.let { runCatching { it.close() } }   // failed warm-up: release the session
+            } finally {
+                opts?.let { runCatching { it.close() } }         // options are not needed after session creation
             }
         }
         val winner = EpChooser.pick(candidates.mapValues { it.value.medianMs })
@@ -134,10 +143,7 @@ class ObjectDetector(
             if (ep == winner) { built = c.session; builtEp = ep; resolvedInput = c.dim } else c.session.close()
         }
         if (winner != null) Dbg.i(TAG, "Execution provider chosen by measurement: $winner for $modelName")
-        ortSession = built ?: ortEnvironment.createSession(
-            modelBytes,
-            OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }
-        )
+        ortSession = built ?: OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }.use { fallback -> ortEnvironment.createSession(modelBytes, fallback) }
         activeExecutionProvider = if (built != null) builtEp else "CPU"
         inputSize = resolvedInput
 
@@ -199,11 +205,12 @@ class ObjectDetector(
                         parseAllObjects(rawOutput, isStandard, numClasses, t)
                     }
 
-                    if (skipNms || isYolo26Format) detections else Nms.apply(detections, iouThreshold)
+                    (if (skipNms || isYolo26Format) detections else Nms.apply(detections, iouThreshold)).also { lastError = null }
                 }
             }
         } catch (e: Exception) {
             Dbg.e(TAG, "Detection error: ${e.message}", e)
+            lastError = e.message ?: e.javaClass.simpleName   // callers must NOT present this as "nothing detected"
             emptyList()
         }
     }

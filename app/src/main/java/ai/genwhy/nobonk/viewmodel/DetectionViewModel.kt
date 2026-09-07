@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -100,6 +101,9 @@ class DetectionViewModel : ViewModel() {
         engine?.silence()   // cancel a chirp / speech / vibration already playing
         engine?.stopSensors()   // no accelerometer/gravity sampling while stopped
         scanningEnabled = false
+        // Clear stale reliability notices so the stopped state is unambiguous and controls stay visible.
+        isCameraBlocked = false; isLowLight = false; isNightBoost = false; phoneAngleQuality = SensorMonitor.AngleQuality.OK; phoneAngleHint = ""
+        fps = 0f; inferMs = 0; fpsEma = 0f; lastResultAt = 0L; inferenceFailing = false; inferenceFailStreak = 0; cameraError = null
         detections = emptyList(); frameAlert = AlertLevel.NONE; lookUpLabel = null; bearingPan = null
         isWallDetected = false; isGroundHazardDetected = false
     }
@@ -156,6 +160,20 @@ class DetectionViewModel : ViewModel() {
         private set
 
     private var engine: DetectionEngine? = null
+    private var initialized = false
+    private val loadTicket = LoadTicket()
+    private val loadMutex = kotlinx.coroutines.sync.Mutex()
+    /** Last model load failed; the same model may be retried. */
+    var loadFailed by mutableStateOf(false)
+        private set
+    /** Detector threw on recent frames: camera runs but detection is not trustworthy. */
+    var inferenceFailing by mutableStateOf(false)
+        private set
+    private var inferenceFailStreak = 0
+    /** Foreground camera bind/start error reported by the preview (null = fine). */
+    var cameraError by mutableStateOf<String?>(null)
+        private set
+    fun reportCameraError(msg: String?) { cameraError = msg }
     private var appContext: Context? = null
 
     private val sessionId = UUID.randomUUID().toString()
@@ -216,6 +234,8 @@ class DetectionViewModel : ViewModel() {
     fun toggleHaptics(on: Boolean) { hapticsEnabled = on; prefs()?.edit()?.putBoolean(P_HAPTICS, on)?.apply() }
 
     fun initialize(context: Context) {
+        if (initialized) return   // Activity recreation keeps this ViewModel: never reload/re-init
+        initialized = true
         appContext = context.applicationContext
         restoreSettings()
         // Phone-angle monitoring now lives in the shared DetectionEngine (so the
@@ -237,7 +257,7 @@ class DetectionViewModel : ViewModel() {
                     isInitializing = false
                     return@launch
                 }
-                loadModel(context)
+                loadModelSerialized(context, loadTicket.begin())
                 initializationStatus = "System ready."
                 delay(600)
                 isInitializing = false
@@ -256,28 +276,42 @@ class DetectionViewModel : ViewModel() {
     }
     private var cameraInfo: androidx.camera.core.CameraInfo? = null
 
-    private fun loadModel(context: Context) {
+    /**
+     * One model load at a time (mutex), never while a frame is inside the detector (frames are
+     * paused by isInitializing and the single-flight gate is drained first), and the result is
+     * adopted only if this load's ticket is still current (no newer switch, no Stop/clear).
+     */
+    private suspend fun loadModelSerialized(context: Context, ticket: Int) = loadMutex.withLock {
+        if (!loadTicket.isCurrent(ticket)) return@withLock   // superseded before it began
         val mode = accuracyMode
         initializationStatus = "Loading ${mode.modelFile} @ ${mode.inputPx}px..."
+        // Drain any in-flight inference before swapping the detector (bounded wait, off Main).
+        var waited = 0
+        while (_processingGate.get() && waited < 3000) { delay(20); waited += 20 }
         val eng = engine ?: DetectionEngine(context.applicationContext).also { engine = it }
-        eng.loadModel(mode.modelFile, mode.inputPx, mode.skipNms)
+        try {
+            eng.loadModel(mode.modelFile, mode.inputPx, mode.skipNms)
+            loadFailed = false
+        } catch (e: Exception) { loadFailed = true; throw e }
+        if (!loadTicket.isCurrent(ticket)) return@withLock   // Stop/clear or a newer switch won: leave it, do not start sensors
         cameraInfo?.let { eng.attachCamera(it) }
         if (voiceEnabled) eng.prepareVoice()
-        eng.startSensors()   // angle monitoring for the foreground pipeline
+        if (scanningEnabled) eng.startSensors()   // never after a Stop
         isHardwareAccelerated = eng.isHardwareAccelerated
         initializationStatus = "Running AI pre-flight..."
         eng.warmUp()
     }
 
     fun setAccuracyMode(mode: AccuracyMode, context: Context) {
-        if (mode == accuracyMode && engine != null) return
+        if (mode == accuracyMode && engine != null && !loadFailed) return   // retry allowed after a failure
         accuracyMode = mode
         prefs()?.edit()?.putString(P_MODE, mode.name)?.apply()
+        val ticket = loadTicket.begin()   // supersedes any load still running
         viewModelScope.launch(Dispatchers.Main) {
             isInitializing = true
             initializationStatus = "Switching to ${mode.family} ${mode.label}…"
             try {
-                withContext(Dispatchers.IO) { loadModel(context) }
+                withContext(Dispatchers.IO) { loadModelSerialized(context, ticket) }
                 initializationStatus = "Ready — ${mode.family} ${mode.label}"
                 delay(600)
             } catch (e: Exception) {
@@ -381,7 +415,7 @@ class DetectionViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             repo.addEvent(event)
             val updated = historyEvents + event
-            withContext(Dispatchers.Main) { historyEvents = updated }
+            withContext(Dispatchers.Main) { historyEvents = if (updated.size > 5_000) updated.takeLast(5_000) else updated }
         }
     }
 
@@ -423,6 +457,8 @@ class DetectionViewModel : ViewModel() {
                     isLowLight = result.lowLight
                     bearingPan = result.bearingPan
                     isNightBoost = result.nightBoost
+                    inferenceFailStreak = if (result.inferenceFailed) inferenceFailStreak + 1 else 0
+                    inferenceFailing = inferenceFailStreak >= 3
                     inferMs = result.inferMs.toInt()
                     val t = System.currentTimeMillis()
                     if (lastResultAt != 0L) {
@@ -450,7 +486,11 @@ class DetectionViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        engine?.close()   // also stops the engine's sensor monitor
+        loadTicket.closeAll()   // an in-flight load must not adopt into a cleared ViewModel
+        val eng = engine; engine = null
+        eng?.halt()
+        // Defer the ONNX/bitmap release until any in-flight inference has left the single-flight gate.
+        if (eng != null) Thread({ var w = 0; while (_processingGate.get() && w < 5000) { Thread.sleep(20); w += 20 }; runCatching { eng.close() } }, "nobonk-vm-release").apply { isDaemon = true }.start()
         try { locationListener?.let { locationManager?.removeUpdates(it) } } catch (_: Exception) {}
     }
 }

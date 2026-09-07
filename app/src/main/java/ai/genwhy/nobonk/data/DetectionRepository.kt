@@ -57,14 +57,13 @@ class DetectionRepository(context: Context) {
     // Authoritative in-memory copy (decrypted once, lazily). addEvent appends in O(1).
     private var cache: MutableList<DetectionEvent>? = null
 
-    init {
-        migrateLegacyPlaintext()
-    }
 
     companion object {
         private const val TAG = "DetectionRepository"
         // Keep at most this many events to prevent unbounded growth (~30 days of use).
         private const val MAX_EVENTS = 5_000
+        /** When the log exceeds MAX_EVENTS, trim down to this so the full rewrite happens once per ~500 events, not on every add. */
+        private const val TRIM_TO = 4_500
         private const val GCM_TAG_BITS = 128
         private const val GCM_IV_BYTES = 12
     }
@@ -80,6 +79,11 @@ class DetectionRepository(context: Context) {
             .build()
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         ks.getKey(MasterKey.DEFAULT_MASTER_KEY_ALIAS, null) as SecretKey
+    }
+
+    // Declared AFTER secretKey so the migration can encrypt (property initializers run in order).
+    init {
+        migrateLegacyPlaintext()
     }
 
     private fun encryptRecord(plain: ByteArray): ByteArray {
@@ -115,7 +119,7 @@ class DetectionRepository(context: Context) {
                 // Trimming is the only full rewrite, and it happens at most once per
                 // MAX_EVENTS additions — amortised O(1).
                 if (list.size > MAX_EVENTS) {
-                    val trimmed = ArrayList(list.subList(list.size - MAX_EVENTS, list.size))
+                    val trimmed = ArrayList(list.subList(list.size - TRIM_TO, list.size))
                     cache = trimmed
                     rewriteAllLocked(trimmed)
                 }
@@ -153,8 +157,9 @@ class DetectionRepository(context: Context) {
     // ── Read ─────────────────────────────────────────────────────────────────
 
     /** Returns ALL stored events in chronological order (oldest first). */
-    fun getAllEvents(): List<DetectionEvent> = lock.read {
-        ArrayList(loadCacheLocked())
+    fun getAllEvents(): List<DetectionEvent> {
+        lock.read { cache?.let { return ArrayList(it) } }        // fast path: no mutation under the read lock
+        return lock.write { ArrayList(loadCacheLocked()) }         // first load populates the cache exclusively
     }
 
     /**
