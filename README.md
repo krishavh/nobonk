@@ -6,7 +6,7 @@
 
 **A little more awareness for the path ahead.**
 
-NoBonk is an Android app that taps you on the shoulder before you walk into someone. It uses an on-device AI vision model to spot approaching people, walls, and ground hazards through your phone's back camera — and warns you with vibration and on-screen alerts — all while you're still staring at your screen.
+NoBonk is Krishav’s Android project for an extra nudge to look up. It uses the rear camera and on-device AI to detect nearby people and obstacles, with vibration, sound and on-screen alerts. **Background use is the main Android experience:** start detection in NoBonk, then switch to the home screen or another app. NoBonk can miss or misidentify hazards and does not replace watching your surroundings.
 
 [![Android CI](https://github.com/krishavh/nobonk/actions/workflows/android.yml/badge.svg)](https://github.com/krishavh/nobonk/actions/workflows/android.yml)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
@@ -16,7 +16,7 @@ NoBonk is an Android app that taps you on the shoulder before you walk into some
 
 Built by **Krishav**, now a 9th grader, who started NoBonk as an 8th grader for the 2026 Alameda County Science & Engineering Fair (Project MS-SOFT-241) and is continuing it for the 2026 Congressional App Challenge.
 
-> **Don't be a smombie.** NoBonk's on-device AI keeps an eye on the path ahead so a glance at your phone doesn't end in a collision.
+> **Stay aware.** No alert does not mean the path is clear. Keep looking where you’re going.
 
 ## Awards
 
@@ -26,11 +26,33 @@ Built by **Krishav**, now a 9th grader, who started NoBonk as an 8th grader for 
 
 ## The problem
 
-People walk while looking at their phones and run into each other, walls, and curbs. Unlike distracted *driving*, you can't realistically pass a law against walking with a phone. So instead of fighting the phone, NoBonk makes the phone itself watch the path ahead.
+Krishav saw students at school bump into each other—or into walls—while looking at their phones. He wanted to explore whether the phone could give people a useful heads-up without requiring them to keep a dedicated camera app on screen. That observation shaped NoBonk’s focus on Android background detection.
+
+## Set up in the foreground. Use it in the background.
+
+1. **Open NoBonk to set up and test.** Acknowledge the safety reminder, allow the camera, check what your phone detects, and adjust sensitivity and sound, vibration or voice cues in a safe space.
+2. **Choose Run in background on Android.** Allow the requested notification and overlay permissions, then switch apps. Keep the rear camera uncovered and pointed toward the scene.
+3. **Receive alerts above other apps.** Use **Open NoBonk** to return to the settings. The app and notification include Stop controls; reliable shutdown is an active testing priority.
+
+The foreground view is the Android setup and testing space; background operation is its primary intended use. The separate **iPhone prototype is foreground-only, detects people only, and is not yet available to download**. Android’s background camera behavior is not promised for iOS.
+
+## Real Android screenshots
+
+Unretouched frames from a developer-supplied phone recording—not mockups.
+
+| Foreground: test and adjust settings | Background: alert over the home screen |
+|---|---|
+| <img src="docs/images/nobonk-android-setup.png" width="280" alt="NoBonk camera view with sensitivity controls and Run in background button"> | <img src="docs/images/nobonk-android-background.png" width="280" alt="NoBonk PERSON AHEAD alert and Open NoBonk control over the Android home screen"> |
+
+These show the interface in one test, not verified detection accuracy. [Watch the real walkthrough](https://nobonk.genwhy.ai/#background).
+
+## Join the Android closed test
+
+Use the same Google account to [join the tester group](https://groups.google.com/g/nobonk-android-testers), then [opt into the Google Play test and install](https://play.google.com/apps/testing/ai.genwhy.nobonk). Stay opted in for at least 14 consecutive days, try the app regularly, and send feedback to support@genwhy.ai. [Full testing instructions](https://nobonk.genwhy.ai/#testing-guide).
 
 ## How it works
 
-1. **Camera** — the back camera captures frames in real time (up to ~10 fps, backing off to ~3 fps when the path has been clear for a while to save battery). When you're looking at your screen, the back camera naturally faces forward.
+1. **Camera** — the back camera captures frames in real time (up to ~10 fps, backing off to ~3 fps when the path has been clear for a while to save battery). Useful detections depend on holding the phone so the rear camera can see the scene; camera angle and lighting matter.
 2. **On-device AI** — a YOLO26 model (nano or small; via ONNX Runtime with NNAPI/XNNPACK acceleration) detects people, animals, and obstacles in each frame. No internet needed.
 3. **Distance estimation** — a pinhole-camera model converts bounding-box size to approximate distance; a box growing frame-over-frame means something is approaching.
 4. **Approach tracking** — IoU tracking plus time-to-collision physics (`ApproachTracker.kt`) flags anything closing distance fast enough to hit you within ~2 seconds.
@@ -134,7 +156,7 @@ Krishav leads the project: identifying the problem, choosing the app's approach,
 
 - **Claude** (Anthropic) — substantial Kotlin implementation, performance work, model export, and release engineering.
 - **OpenAI Codex** and **ChatGPT Astra** — code review and refactoring, the website, and Google Play setup.
-- **Kaaval** (the family's local coding agent) — automated build-and-test iterations.
+- **Kaaval** — the family’s local AI coding setup, running across multiple **NVIDIA DGX Spark** systems. Over the months of development, it used a mix of **Qwen, DeepSeek and GLM 5.x** models to help with coding and build-and-test iterations. This is development infrastructure; the Android app does not send camera frames to Kaaval.
 - **Google Gemini** — debugging, privacy/security review, and diagrams.
 - **Warp** — terminal workflow and build scripting.
 
