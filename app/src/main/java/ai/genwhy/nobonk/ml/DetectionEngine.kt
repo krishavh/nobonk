@@ -135,12 +135,13 @@ class DetectionEngine(private val appContext: Context) {
     private var analysisPixels: IntArray = IntArray(0)
 
     /** (Re)load the model. Safe to call off the main thread. */
-    fun loadModel(modelName: String, inputPx: Int, skipNms: Boolean) {
+    fun loadModel(modelName: String, inputPx: Int, skipNms: Boolean, checkActive: () -> Unit = {}) {
+        checkActive()
         // Caller has drained inference under its owner lock. Release the old graph
         // before opening candidates so model switching does not double native memory.
         objectDetector?.close()
         objectDetector = null
-        objectDetector = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
+        objectDetector = ObjectDetector(appContext, modelName, inputPx, skipNms, checkActive).also { it.focalNorm = focalNorm }
     }
 
     /** Normalized focal length in use by the distance estimator (see [CameraIntrinsics]). */
@@ -168,10 +169,11 @@ class DetectionEngine(private val appContext: Context) {
         }
     }
 
-    fun warmUp() {
+    fun warmUp(checkActive: () -> Unit = {}) {
+        checkActive()
         val d = objectDetector ?: return
         val dummy = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888)
-        try { d.detect(dummy) } finally { dummy.recycle() }
+        try { d.detect(dummy); checkActive() } finally { dummy.recycle() }
     }
 
     /**

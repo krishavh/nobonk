@@ -25,6 +25,8 @@ import ai.genwhy.nobonk.model.AlertLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
@@ -160,9 +162,20 @@ class DetectionService : LifecycleService() {
         showReturnControl()
 
         startupJob = lifecycleScope.launch(Dispatchers.Default) {
+            var pendingEngine: DetectionEngine? = null
             val eng = try {
-                DetectionEngine(this@DetectionService).also { it.loadModel(modelFile, inputPx, skipNms) }
+                DetectionEngine(this@DetectionService).also { candidate ->
+                    pendingEngine = candidate
+                    candidate.loadModel(modelFile, inputPx, skipNms) {
+                        coroutineContext.ensureActive()
+                        if (life.isStopped) throw CancellationException("Background startup stopped")
+                    }
+                }
             } catch (e: Exception) {
+                // The local engine has not been adopted and has no sensors/camera yet.
+                // Native calls finish before cancellation checks release their sessions.
+                pendingEngine?.let { runCatching { it.close() } }
+                if (e is CancellationException) throw e
                 Dbg.e(TAG, "Model load failed: ${e.message}", e)
                 withContext(Dispatchers.Main + NonCancellable) {
                     if (!life.isStopped) {
