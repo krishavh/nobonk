@@ -51,18 +51,21 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         // Only camera (+ notifications) are requested up front. Location is opt-in.
         hasPermission = permissions[Manifest.permission.CAMERA] == true
+        expectingReturn = false   // hand-off complete (dialogs often pause/resume without onStop)
     }
 
     // In-context COARSE-location opt-in, triggered from the history screen.
     private val requestLocationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
+        expectingReturn = false
         if (granted) viewModel.enableLocationTagging(applicationContext)
     }
 
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
+        expectingReturn = false
         canDrawOverlays = Settings.canDrawOverlays(this)
     }
 
@@ -102,6 +105,11 @@ class MainActivity : ComponentActivity() {
                 ) {
                     canDrawOverlays = Settings.canDrawOverlays(this)
 
+                    // System Back on About/History pops that screen (on Android 12+ it would otherwise
+                    // background the root task) — so Back from the full notice returns to the reminder.
+                    androidx.activity.compose.BackHandler(enabled = showLicenses || showHistory) {
+                        if (showLicenses) showLicenses = false else { viewModel.refreshHistory(); showHistory = false }
+                    }
                     if (showLicenses && noticeScreen != ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE) {
                         // Full text requested from the reminder — read-only, gate still pending.
                         LicensesScreen(onBack = { showLicenses = false })
