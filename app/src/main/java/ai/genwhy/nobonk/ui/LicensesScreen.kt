@@ -51,6 +51,14 @@ fun LicensesScreen(onBack: () -> Unit) {
         Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · offline · no accounts · no ads", color = NB.Sub, fontSize = 13.sp)
 
         Spacer(Modifier.height(24.dp))
+        SectionLabel("Safety notice")
+        Spacer(Modifier.height(8.dp))
+        Card {
+            Text("⚠️  NOT A SAFETY DEVICE", color = NB.Watch, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp)
+            Spacer(Modifier.height(8.dp))
+            Text(ai.genwhy.nobonk.safety.SafetyNotice.MAIN_TEXT, color = NB.Ink, fontSize = 15.sp, lineHeight = 23.sp)
+        }
+        Spacer(Modifier.height(22.dp))
         SectionLabel("Made by")
         Spacer(Modifier.height(8.dp))
         Card {

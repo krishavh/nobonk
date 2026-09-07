@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.5 (versionCode 6) — 2026-09-06 startup safety notice with explicit acknowledgment
+- **Full safety notice before anything else.** New wording (experimental student-built tool; can miss or misidentify hazards; no alert does not mean the path is clear; never rely on it for roads, driving, cycling or dangerous areas; not a certified safety device). An initially **unchecked** checkbox ("I understand that NoBonk may fail to warn me…") enables *I understand — continue*; *Not now* exits. Camera permission, camera start and background detection are all gated on this acknowledgment (`safety/SafetyNotice.kt`).
+- **Versioned local acknowledgment** (`safety_ack_version` in app-private prefs, no upload/analytics): fresh installs and upgrades from earlier builds that only stored `first_run_done` see the notice once; a future wording change bumps the version and re-asks.
+- **Mandatory reminder on every launch.** After acknowledgment, every genuine cold app launch shows a concise *Stay aware* card that blocks until **OK — continue** is pressed (never auto-dismissed), with a link to the full notice. It is not shown again within the same process (rotation, History/About), nor when returning to a live background session via the Open NoBonk pill or the notification.
+- Full notice is always readable under About → Safety notice. Onboarding intro reworded modestly (no "before you bump into someone").
+- Tests: SafetyNoticeTest (fresh install, migration, unchecked/decline, version bump, cold launch, rotation/return, background return, gating, no-guarantee wording).
+
 ## 1.0.4 (versionCode 5) — 2026-09-06 final closed-test candidate
 - **Launcher icon replaced again** with the approved crisp matte Blender artwork (angular path arrow, obstacle cube, bracket corners) on a #101B1E background; vc4's rounded-tube icon was rejected and that release is marked do-not-upload.
 

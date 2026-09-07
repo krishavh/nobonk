@@ -84,12 +84,15 @@ class DetectionService : LifecycleService() {
         const val EXTRA_SOUND = "extra_sound"
         const val EXTRA_HAPTICS = "extra_haptics"
         const val EXTRA_VOICE = "extra_voice"
+        /** True while the background session is alive in this process (used to skip the launch reminder). */
+        @Volatile var isRunning: Boolean = false
     }
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
+        isRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -354,6 +357,7 @@ class DetectionService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         knightRiderAnimator?.cancel()
         updateHud(null)
         removeReturnControl()

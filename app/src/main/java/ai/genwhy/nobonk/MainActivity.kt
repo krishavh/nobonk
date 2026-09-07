@@ -20,7 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import ai.genwhy.nobonk.service.DetectionService
 import ai.genwhy.nobonk.ui.DetectionScreen
-import ai.genwhy.nobonk.ui.FirstRunScreen
+import ai.genwhy.nobonk.ui.SafetyNoticeScreen
+import ai.genwhy.nobonk.ui.StayAwareReminder
 import ai.genwhy.nobonk.ui.HistoryScreen
 import ai.genwhy.nobonk.ui.LicensesScreen
 import ai.genwhy.nobonk.ui.theme.PersonDetectionTheme
@@ -32,8 +33,9 @@ class MainActivity : ComponentActivity() {
     private var canDrawOverlays by mutableStateOf(false)
     private var showHistory by mutableStateOf(false)
     private var showLicenses by mutableStateOf(false)
-    // First-run rationale + safety-disclaimer gate (shown before any permission request).
-    private var showFirstRun by mutableStateOf(false)
+    // Safety-notice gate: persisted acknowledged version + which screen to show now.
+    private var ackVersion by mutableIntStateOf(0)
+    private var noticeScreen by mutableStateOf(ai.genwhy.nobonk.safety.SafetyNotice.Screen.FULL_NOTICE)
     // Incremented on every onResume so CameraPreview knows to rebind.
     // Wrapping CameraPreview in key(cameraRebindKey) forces Compose to fully
     // recreate the AndroidView — re-running the factory lambda which re-calls
@@ -64,8 +66,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val prefs = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE)
-        // Show the rationale + safety disclaimer once, before any permission is requested.
-        showFirstRun = !prefs.getBoolean(PREF_FIRST_RUN_DONE, false)
+        // Safety notice: the current version must be acknowledged before any camera request
+        // or camera start (fresh installs and upgrades from first_run_done-only builds alike).
+        ackVersion = prefs.getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
+        // Returning to a live background session (Open NoBonk pill / notification) must not
+        // interrupt it with a reminder — the session itself proves acknowledgment this process.
+        if (ai.genwhy.nobonk.service.DetectionService.isRunning) ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess = true
+        noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.screenFor(ackVersion, ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess, ai.genwhy.nobonk.service.DetectionService.isRunning)
         // A returning user may already have granted camera — reflect that so we don't
         // pointlessly re-prompt or get stuck on a blank screen.
         hasPermission = ContextCompat.checkSelfPermission(
@@ -78,7 +85,7 @@ class MainActivity : ComponentActivity() {
 
         // Only request permissions immediately for returning users; first-run users are
         // prompted after they read the rationale and tap "continue".
-        if (!showFirstRun && !hasPermission) requestCorePermissions()
+        if (ai.genwhy.nobonk.safety.SafetyNotice.cameraAllowed(ackVersion) && !hasPermission) requestCorePermissions()
         viewModel.initialize(applicationContext)
 
         setContent {
@@ -89,13 +96,28 @@ class MainActivity : ComponentActivity() {
                 ) {
                     canDrawOverlays = Settings.canDrawOverlays(this)
 
-                    if (showFirstRun) {
-                        // ── First-run rationale + safety disclaimer ────
-                        FirstRunScreen(onContinue = {
-                            prefs.edit().putBoolean(PREF_FIRST_RUN_DONE, true).apply()
-                            showFirstRun = false
-                            if (!hasPermission) requestCorePermissions()
-                        })
+                    if (noticeScreen == ai.genwhy.nobonk.safety.SafetyNotice.Screen.FULL_NOTICE) {
+                        // ── Full safety notice + explicit acknowledgment (gates the camera) ──
+                        SafetyNoticeScreen(
+                            onAccept = {
+                                val v = ai.genwhy.nobonk.safety.SafetyNotice.acknowledgedVersion()
+                                prefs.edit().putInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, v).putBoolean(PREF_FIRST_RUN_DONE, true).apply()
+                                ackVersion = v
+                                ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess = true
+                                noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE
+                                if (!hasPermission) requestCorePermissions()
+                            },
+                            onNotNow = { finish() }
+                        )
+                    } else if (noticeScreen == ai.genwhy.nobonk.safety.SafetyNotice.Screen.REMINDER) {
+                        // ── Concise stay-aware reminder on a genuine cold launch ──
+                        StayAwareReminder(
+                            onContinue = {
+                                ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess = true
+                                noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE
+                            },
+                            onReadFull = { ai.genwhy.nobonk.safety.SessionState.acknowledgedThisProcess = true; noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE; showLicenses = true }
+                        )
                     } else if (hasPermission) {
                         when {
                             showLicenses -> {

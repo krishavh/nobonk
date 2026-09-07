@@ -348,7 +348,7 @@ private fun ControlDock(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "About NoBonk · privacy · licenses",
+                "About NoBonk · safety notice · privacy · licenses",
                 color = NB.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable { onShowAbout() }.padding(vertical = 4.dp)
             )
