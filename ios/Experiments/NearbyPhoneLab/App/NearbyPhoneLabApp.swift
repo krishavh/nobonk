@@ -17,6 +17,7 @@ struct NearbyPhoneLabApp: App {
 private struct NearbyLabView: View {
     @ObservedObject var model: NearbyLabModel
     @State private var pendingInvite: MCPeerID?
+    @State private var trialKind: NearbyTrialJournal.Kind = .appSwitch
     private let lime = Color(red: 0.77, green: 0.95, blue: 0.42)
     private let muted = Color(red: 0.62, green: 0.73, blue: 0.71)
 
@@ -31,13 +32,14 @@ private struct NearbyLabView: View {
                 }
                 Text("A little room\nbetween us.")
                     .font(.system(size: 43, weight: .semibold, design: .rounded)).tracking(-1.5)
-                Text("An experiment in measuring the distance between two paired iPhones, even while another app is open.")
+                Text("An experiment asking whether two paired iPhones can keep measuring their distance while another app is open.")
                     .font(.body).foregroundStyle(muted)
                 Label("Research only. This measures one consenting phone. It cannot detect walls, unknown people or hazards.", systemImage: "info.circle")
                     .font(.subheadline).padding(16).background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 18))
 
                 measurement
                 Text(model.status).font(.subheadline).foregroundStyle(muted).accessibilityIdentifier("sessionStatus")
+                trialEvidence
 
                 if model.active {
                     VStack(alignment: .leading, spacing: 12) {
@@ -130,6 +132,59 @@ private struct NearbyLabView: View {
             }.padding(22).frame(maxWidth: .infinity, alignment: .leading)
                 .background(lime.opacity(0.055), in: RoundedRectangle(cornerRadius: 26))
                 .overlay(RoundedRectangle(cornerRadius: 26).stroke(lime.opacity(0.18)))
+        }
+    }
+
+    private var trialEvidence: some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+            let snapshot = model.trialSnapshot
+            VStack(alignment: .leading, spacing: 14) {
+                Text("BACKGROUND EVIDENCE").font(.caption.bold()).tracking(2).foregroundStyle(lime)
+                if model.active {
+                    Picker("Planned trial", selection: $trialKind) {
+                        ForEach(NearbyTrialJournal.Kind.allCases, id: \.self) { kind in
+                            Text(kind.rawValue).tag(kind)
+                        }
+                    }.pickerStyle(.segmented)
+                    Button { model.armTrial(trialKind) } label: {
+                        Label("Arm next background interval", systemImage: "record.circle")
+                            .frame(maxWidth: .infinity).padding(10)
+                    }.buttonStyle(.bordered).tint(lime).disabled(!model.canArmTrial)
+                    Text("First pair and enable the Live Activity. Choose your planned action, arm, then switch apps or lock. The label is your plan; the app cannot verify a lock from background notifications.")
+                        .font(.caption).foregroundStyle(muted)
+                }
+                if let armed = snapshot.armed {
+                    Text("Armed: \(armed.rawValue). Waiting for the next background notification.")
+                        .font(.subheadline).foregroundStyle(lime)
+                }
+                if snapshot.current != nil {
+                    Text("Interval in progress. Return to freeze its report.").font(.subheadline)
+                }
+                if snapshot.reports.isEmpty {
+                    Text("No completed trial. A fresh foreground distance or visible Live Activity is not background evidence.")
+                        .font(.subheadline).foregroundStyle(muted)
+                }
+                ForEach(snapshot.reports.reversed()) { report in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Trial \(report.id) · \(report.kind.rawValue) (planned)").font(.subheadline.bold())
+                        Text(report.endReason?.rawValue ?? "Incomplete").font(.caption).foregroundStyle(muted)
+                        Text(String(format: "%.1f s interval · %d distance callbacks\n%d after first second · %d unavailable",
+                                    report.duration ?? 0, report.distanceCallbacks,
+                                    report.callbacksAfterOneSecond, report.unavailableCallbacks))
+                            .font(.caption.monospaced())
+                        Text(report.lastDistanceAgeAtEnd.map { String(format: "Last distance age at end: %.1f s", $0) }
+                             ?? "No valid distance callback in this interval.")
+                            .font(.caption.monospaced()).foregroundStyle(muted)
+                        Text(String(format: "Longest silence: %.1f s · %d suspensions · %d resumptions",
+                                    report.largestSilence, report.suspensions, report.resumptions))
+                            .font(.caption.monospaced()).foregroundStyle(muted)
+                    }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
+                }
+                Text("Frozen at foreground return or earlier Stop/failure. Counts are callback receipts, not sensor acquisition times or proof of Live Activity display. Six reports stay in memory until new pairing or app exit.")
+                    .font(.caption).foregroundStyle(muted)
+            }.padding(20).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 22))
+                .accessibilityIdentifier("backgroundEvidence")
         }
     }
 }

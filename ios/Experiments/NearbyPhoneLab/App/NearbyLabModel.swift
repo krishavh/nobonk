@@ -47,9 +47,14 @@ final class NearbyLabModel: NSObject, ObservableObject {
     private var activityObserver: Task<Void, Never>?
     private var stopObserver: NSObjectProtocol?
     private var lastActivityUpdate: TimeInterval = -.infinity
+    nonisolated private let trialJournal = NearbyTrialJournal()
+    private var trialLifecycle: NearbyTrialLifecycle?
 
     override init() {
         super.init()
+        trialLifecycle = NearbyTrialLifecycle(journal: trialJournal,
+            background: UIApplication.didEnterBackgroundNotification,
+            foreground: UIApplication.willEnterForegroundNotification)
         stopObserver = NotificationCenter.default.addObserver(forName: .stopNearbyPhoneLab, object: nil, queue: .main) { [weak self] _ in
             // Notification is posted synchronously by the LiveActivityIntent on MainActor.
             MainActor.assumeIsolated { self?.stop() }
@@ -64,6 +69,16 @@ final class NearbyLabModel: NSObject, ObservableObject {
     var active: Bool { [.pairing, .ranging, .suspended].contains(state.phase) }
     var canEnableBackground: Bool {
         state.freshDistance(at: ProcessInfo.processInfo.systemUptime) != nil && !backgroundEnabled
+    }
+    var canArmTrial: Bool {
+        backgroundEnabled && state.freshDistance(at: ProcessInfo.processInfo.systemUptime) != nil
+    }
+    var trialSnapshot: NearbyTrialJournal.Snapshot { trialJournal.snapshot() }
+
+    func armTrial(_ kind: NearbyTrialJournal.Kind) {
+        guard UIApplication.shared.applicationState == .active, canArmTrial,
+              trialJournal.arm(kind) else { return }
+        record("Armed next background interval: \(kind.rawValue) (tester-selected label)")
     }
 
     func begin(hosting: Bool) {
@@ -82,6 +97,7 @@ final class NearbyLabModel: NSObject, ObservableObject {
         let nearby = NISession()
         nearby.delegate = self
         self.nearby = nearby
+        trialJournal.begin(producer: ObjectIdentifier(nearby), receiving: false)
         if hosting {
             let advertiser = MCNearbyServiceAdvertiser(peer: identity, discoveryInfo: ["v": "1"], serviceType: service)
             advertiser.delegate = self
@@ -165,6 +181,7 @@ final class NearbyLabModel: NSObject, ObservableObject {
 
     func stop(recordEvent: Bool = true) {
         // Invalidate the lease BEFORE framework calls: queued callbacks cannot revive it.
+        trialJournal.finish(at: ProcessInfo.processInfo.systemUptime, reason: .stopped)
         state.stop()
         tearDown()
         status = "Stopped. Both testers must pair again to restart."
@@ -172,6 +189,7 @@ final class NearbyLabModel: NSObject, ObservableObject {
     }
 
     private func fail(_ message: String) {
+        trialJournal.finish(at: ProcessInfo.processInfo.systemUptime, reason: .failed)
         state.fail()
         tearDown()
         status = message
@@ -240,6 +258,7 @@ final class NearbyLabModel: NSObject, ObservableObject {
             config.isExtendedDistanceMeasurementEnabled = false
             configuration = config
             state.startRanging(generation: state.generation)
+            trialJournal.resume(producer: ObjectIdentifier(nearby))
             nearby.run(config)
             advertiser?.stopAdvertisingPeer()
             browser?.stopBrowsingForPeers()
@@ -349,6 +368,13 @@ extension NearbyLabModel: NISessionDelegate {
         // queue cannot turn an old callback into an apparently fresh sample.
         let receivedAt = ProcessInfo.processInfo.systemUptime
         let wallDate = Date()
+        // This session runs exactly one peer configuration. Count receipt of a
+        // finite distance synchronously; delayed UI work cannot rewrite reports.
+        let hasDistance = nearbyObjects.contains { object in
+            guard let distance = object.distance else { return false }
+            return distance.isFinite && distance >= 0
+        }
+        trialJournal.receive(hasDistance: hasDistance, producer: ObjectIdentifier(session), at: receivedAt)
         Task { @MainActor in
             guard session === self.nearby, self.state.phase == .ranging,
                   let object = nearbyObjects.first(where: { $0.discoveryToken == self.remoteToken }) else { return }
@@ -361,6 +387,9 @@ extension NearbyLabModel: NISessionDelegate {
         }
     }
     nonisolated func session(_ session: NISession, didRemove nearbyObjects: [NINearbyObject], reason: NINearbyObject.RemovalReason) {
+        if !nearbyObjects.isEmpty {
+            trialJournal.finish(producer: ObjectIdentifier(session), at: ProcessInfo.processInfo.systemUptime, reason: .peerRemoved)
+        }
         Task { @MainActor in
             guard session === self.nearby, nearbyObjects.contains(where: { $0.discoveryToken == self.remoteToken }) else { return }
             // Deliberately stop on timeout rather than spin retries in a suspended app.
@@ -368,6 +397,7 @@ extension NearbyLabModel: NISessionDelegate {
         }
     }
     nonisolated func sessionWasSuspended(_ session: NISession) {
+        trialJournal.suspend(producer: ObjectIdentifier(session))
         Task { @MainActor in
             guard session === self.nearby else { return }
             self.state.suspend(generation: self.state.generation)
@@ -381,11 +411,13 @@ extension NearbyLabModel: NISessionDelegate {
         Task { @MainActor in
             guard session === self.nearby, self.state.phase == .suspended, let config = self.configuration else { return }
             self.state.startRanging(generation: self.state.generation)
+            self.trialJournal.resume(producer: ObjectIdentifier(session))
             session.run(config)
             self.record("iOS ended suspension; existing consenting session resumed")
         }
     }
     nonisolated func session(_ session: NISession, didInvalidateWith error: Error) {
+        trialJournal.finish(producer: ObjectIdentifier(session), at: ProcessInfo.processInfo.systemUptime, reason: .invalidated)
         Task { @MainActor in
             guard session === self.nearby else { return }
             self.fail("Nearby Interaction ended: \(error.localizedDescription). Check Nearby Interaction permission if needed, then pair again.")
