@@ -58,7 +58,7 @@ Use the same Google account to [join the tester group](https://groups.google.com
 4. **Approach tracking** — IoU tracking plus time-to-collision physics (`ApproachTracker.kt`) flags anything closing distance fast enough to hit you within ~2 seconds.
 5. **Hazards the model can't classify** — `FrameAnalyzer.kt` detects blank walls (gradient-invariant adjacent-cell brightness analysis) and ground hazards like potholes and step-downs.
 6. **Alerts** — escalating haptic + on-screen warnings (LOW / MEDIUM / HIGH) based on the alert distance you choose, plus a short synthesised chirp on MEDIUM/HIGH that is stereo-panned toward the hazard — with earbuds, someone approaching on your left is heard on your left. Sound and haptics can each be switched off.
-7. **Detection history** — sessions, alert counts, peak-danger hours, and danger hotspots, stored only on your device.
+7. **Detection history** — foreground sessions, alert counts, busiest alert hours, and approximate event locations, stored only on your device.
 
 ## Alerts you can hear, feel and read
 
@@ -73,14 +73,16 @@ Sound and voice are **stereo-panned toward the hazard** (constant-power pan law,
 ## Privacy by design
 
 - **No video or photos are ever recorded, stored, or transmitted.** Camera frames are processed in memory and immediately discarded — nothing from the camera is ever written to disk or sent anywhere.
-- **Everything runs on-device.** There is no `INTERNET` permission and no network connection is used or required — the app works in airplane mode, so nothing *can* leave your phone.
-- **The one thing NoBonk does store is a local detection-event history** (session stats + close-call hotspots), kept only in the app's private storage and never uploaded. You can clear it at any time from within the app.
+- **Everything runs on-device.** Camera analysis has no `INTERNET` permission and works offline. Optional system text-to-speech and Google Play updates are handled by those separate services under their policies. Camera frames and history are not sent to them.
+- **Foreground detection-event history is encrypted locally**, kept only in private storage and never uploaded. The app also stores settings, the safety acknowledgment and update/execution-provider preferences. You can clear it at any time from within the app.
 - **Location is optional, approximate, and off by default.** If — and only if — you turn it on, NoBonk tags those history events with your *coarse* (approximate) location so the history screen can map roughly where your close calls happen. It stays *on your phone only*. Deny or leave it off and everything else still works.
 - **`allowBackup` is disabled** (and backup/transfer rules explicitly exclude the history file) so nothing is swept into cloud backups.
 
-> So "nothing recorded" means exactly that for **camera imagery** — no photos, no video, ever. The optional on-device event history (and its optional coarse-location tags) is the only thing persisted, it never leaves the device, and you can wipe it whenever you like.
+> So "nothing recorded" means exactly that for **camera imagery** — no photos, no video, ever. Event history and optional approximate-location tags stay in private local storage alongside settings. Clear history removes the event records; the app reports a deletion failure.
 
-## Measured results (Pixel 9a)
+## Earlier prototype observations (Pixel 9a)
+
+These figures were reported in earlier project notes. They are not a controlled benchmark of the current model/runtime or a guarantee for any phone. The current release still needs physical-device accuracy, battery and thermal testing.
 
 | Metric | Result |
 |---|---|
