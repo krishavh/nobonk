@@ -54,21 +54,25 @@ final class CuePlaybackTests: XCTestCase {
         XCTAssertEqual(output.snapshot(), ["prepare", "activate", "play", "stop"])
     }
     func testOldCueCompletionCannotStopNewCue() {
-        let output = FakeCueOutput(); output.duration = 0.12
+        // Run delayed callbacks manually: even a callback dequeued before cancel
+        // must not stop a later cue. Wall-clock sleeps make this race test flaky.
+        final class Pending: @unchecked Sendable { var bodies: [@Sendable () -> Void] = [] }
+        let pending = Pending()
+        let output = FakeCueOutput()
         let queue = DispatchQueue(label: "test.cue.replacement")
-        let controller = CuePlaybackController(queue: queue) { output }
-        let first = expectation(description: "first")
-        controller.play { ok in XCTAssertTrue(ok); first.fulfill() }
-        wait(for: [first], timeout: 2)
-        let second = expectation(description: "second")
-        queue.asyncAfter(deadline: .now() + 0.08) { controller.play { _ in second.fulfill() } }
-        wait(for: [second], timeout: 2)
-        let beforeSecondEnd = expectation(description: "old completion passed")
-        queue.asyncAfter(deadline: .now() + 0.11) {
+        let controller = CuePlaybackController(queue: queue, scheduleFinish: { _, body in
+            pending.bodies.append(body)
+            return DispatchWorkItem(block: body)
+        }) { output }
+        controller.play(); queue.sync {}
+        controller.play(); queue.sync {}
+        queue.sync {
+            XCTAssertEqual(pending.bodies.count, 2)
+            pending.bodies[0]()
             XCTAssertEqual(output.snapshot().filter { $0 == "stop" }.count, 0)
-            beforeSecondEnd.fulfill()
+            pending.bodies[1]()
+            XCTAssertEqual(output.snapshot().filter { $0 == "stop" }.count, 1)
         }
-        wait(for: [beforeSecondEnd], timeout: 2)
         controller.stop(); queue.sync {}
         XCTAssertEqual(output.snapshot().last, "stop")
     }

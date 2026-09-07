@@ -12,14 +12,22 @@ protocol CueAudioOutput: AnyObject {
 /// Activation can block. Keep it off Main and invalidate pending work on Stop.
 /// A delayed completion from an old cue must not silence a newer cue.
 final class CuePlaybackController: @unchecked Sendable {
+    typealias FinishScheduler = @Sendable (TimeInterval, @escaping @Sendable () -> Void) -> DispatchWorkItem
     private let queue: DispatchQueue
+    private let scheduleFinish: FinishScheduler
     private let outputFactory: @Sendable () -> any CueAudioOutput
     private let gate = CaptureGeneration()
     private var output: (any CueAudioOutput)?
     private var finish: DispatchWorkItem?
     init(queue: DispatchQueue = DispatchQueue(label: "ai.genwhy.nobonk.cue", qos: .userInitiated),
+         scheduleFinish: FinishScheduler? = nil,
          outputFactory: @escaping @Sendable () -> any CueAudioOutput) {
         self.queue = queue
+        self.scheduleFinish = scheduleFinish ?? { delay, body in
+            let work = DispatchWorkItem(block: body)
+            queue.asyncAfter(deadline: .now() + delay, execute: work)
+            return work
+        }
         self.outputFactory = outputFactory
     }
     func play(result: @escaping @Sendable (Bool) -> Void = { _ in }) {
@@ -40,12 +48,10 @@ final class CuePlaybackController: @unchecked Sendable {
                 guard gate.accepts(token) else { output.stopAndDeactivate(); return }
                 result(played)
                 guard played else { output.stopAndDeactivate(); return }
-                let end = DispatchWorkItem { [weak self] in
+                finish = scheduleFinish(max(0.05, min(1, output.duration)) + 0.05) { [weak self] in
                     guard let self, self.gate.accepts(token) else { return }
                     self.output?.stopAndDeactivate()
                 }
-                finish = end
-                queue.asyncAfter(deadline: .now() + max(0.05, min(1, output.duration)) + 0.05, execute: end)
             } catch {
                 output.stopAndDeactivate()
                 if gate.accepts(token) { result(false) }
