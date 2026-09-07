@@ -88,6 +88,16 @@ class DetectionViewModel : ViewModel() {
     private var lastResultAt = 0L
     private var fpsEma = 0f
 
+    /** Foreground scanning on/off. Off after the user presses Stop (in-app or notification) until Start. */
+    var scanningEnabled by mutableStateOf(true)
+        private set
+    fun stopScanning() {
+        scanningEnabled = false
+        detections = emptyList(); frameAlert = AlertLevel.NONE; lookUpLabel = null; bearingPan = null
+        isWallDetected = false; isGroundHazardDetected = false
+    }
+    fun startScanning() { scanningEnabled = true }
+
     /** Stereo pan of the current top hazard, −1 (left) … +1 (right); null when clear. */
     var bearingPan by mutableStateOf<Float?>(null)
         private set
@@ -368,7 +378,7 @@ class DetectionViewModel : ViewModel() {
     }
 
     fun processFrame(imageProxy: ImageProxy) {
-        if (isInitializing || batteryLevel < 10) { imageProxy.close(); return }
+        if (!scanningEnabled || isInitializing || batteryLevel < 10) { imageProxy.close(); return }
         val now = System.currentTimeMillis()
         val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryLevel, cadenceBlocked, cadenceStationaryMs)
         if (now - lastProcessTime < interval) { imageProxy.close(); return }

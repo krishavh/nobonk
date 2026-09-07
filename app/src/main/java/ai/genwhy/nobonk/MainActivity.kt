@@ -225,8 +225,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         ai.genwhy.nobonk.safety.SessionState.gate.activityResumed = true
-        // Stop the background service so the camera is released back to the activity.
-        stopDetectionService()
+        // Take the camera back from the background service (hand-off, not a user Stop).
+        stopDetectionService(DetectionService.STOP_REASON_HANDOFF)
+        // If the user pressed Stop (notification or app) since we last looked, do not resume scanning.
+        if (ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser) {
+            ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = false
+            viewModel.stopScanning()
+        }
         canDrawOverlays = Settings.canDrawOverlays(this)
         // Increment the key AFTER stopping the service so CameraPreview recreates
         // itself and calls cameraProvider.unbindAll() + bindToLifecycle fresh.
@@ -268,11 +273,12 @@ class MainActivity : ComponentActivity() {
         moveTaskToBack(true)
     }
 
-    private fun stopDetectionService() {
+    private fun stopDetectionService(reason: String = DetectionService.STOP_REASON_USER) {
         val intent = Intent(this, DetectionService::class.java).apply {
             action = DetectionService.ACTION_STOP
+            putExtra(DetectionService.EXTRA_STOP_REASON, reason)
         }
-        startService(intent)
+        try { startService(intent) } catch (e: Exception) { ai.genwhy.nobonk.util.Dbg.w("MainActivity", "stop intent failed: ${e.message}") }
     }
 
     companion object {

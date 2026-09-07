@@ -248,7 +248,24 @@ class DetectionEngine(private val appContext: Context) {
      * sound. Returns a [Result] the caller renders however it likes (Compose overlay or
      * WindowManager HUD).
      */
+    /** Set by [halt]: no further processing, cues or speech, even for a frame already in flight. */
+    @Volatile var halted: Boolean = false
+        private set
+
+    /** Stop emitting anything immediately (cues, speech, sensors); [close] releases the rest. */
+    fun halt() {
+        halted = true
+        stopSensors()
+        audioTrack?.let { t -> runCatching { t.stop() } }
+        tts?.let { t -> runCatching { t.stop() } }
+        vibrator?.let { v -> runCatching { v.cancel() } }
+    }
+
     suspend fun process(imageProxy: ImageProxy, config: Config): Result {
+        if (halted) {
+            imageProxy.close()
+            return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
+        }
         val detector = objectDetector
         val work = try {
             val raw = proxyToRawBitmap(imageProxy)
@@ -342,6 +359,7 @@ class DetectionEngine(private val appContext: Context) {
 
         // ── Shared feedback (identical in both modes), driven by the debounced level ──
         val pan = topDet?.let { AlertCue.panFor(it.boundingBox.centerX) }
+        if (halted) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
         if (displayAlert != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(displayAlert)
         // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
         // The cue is panned toward the object so a left-side hazard is heard on the left.

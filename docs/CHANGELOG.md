@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.10 (versionCode 11) — 2026-09-07 reliable Stop
+- **Root cause.** Stop only called `stopSelf()`. Work queued before the Stop kept completing after it: a frame in flight re-posted the alert notification and re-created the red warning overlay from an already-destroyed service (so Stop "did not work"), and a Stop during the multi-second model load left the loaded model and sensors alive, then bound the camera anyway.
+- **Fix.** `service/ServiceLifecycle.kt` — an explicit, unit-tested state machine every asynchronous step consults: model-load completion, camera binding, frame processing, HUD/notification posting and cues are all refused once Stop has been requested, from any phase. One idempotent `shutdown()` path (app Stop, notification Stop, bind failure, onDestroy): cancel the startup job, halt the engine (cues, speech, vibration, sensors), clear the analyzer and unbind the camera, drop queued main-thread work, remove warning/scan/return overlays, `stopForeground(REMOVE)` + cancel the notification, then `stopSelf()`. `ACTION_STOP` returns `START_NOT_STICKY`; a start after Stop on the same instance is refused.
+- **No silent resume.** Stop in the app stops the background service *and* foreground scanning (camera released, dock shows *Stopped — tap Start scanning*); Stop from the notification is remembered so returning to NoBonk shows the stopped state until the user presses Start. Returning to a live session via the pill still hands the camera over (not a user Stop). Safety gates unchanged.
+- Tests: `ServiceLifecycleTest` (rapid Stop during model load, Stop during camera binding, in-flight frame after Stop, start-after-stop refused, repeated cycles, hand-off vs user, idempotence).
+
 ## 1.0.9 (versionCode 10) — 2026-09-06 every-launch reminder on warm reopen
 - On Android 12+ Back moves the root task to the background without finishing, so a warm reopen gets no `onCreate`. The gate now resets in `onStop` (unless a configuration change, a hand-off we started — permission dialog, overlay-settings screen, *Run in background* — or an authorized background session) and is re-evaluated in `onStart`, so Back/Home → launcher → reopen shows the reminder. Exercised on an Android 15 emulator profile.
 

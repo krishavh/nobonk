@@ -87,8 +87,11 @@ fun DetectionScreen(
     val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize().background(NB.Night)) {
-        key(cameraRebindKey) {
-            CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) }, onCameraBound = { viewModel.onCameraBound(it) })
+        // The camera is bound only while scanning; Stop releases it (CameraPreview unbinds on dispose).
+        if (viewModel.scanningEnabled) {
+            key(cameraRebindKey) {
+                CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) }, onCameraBound = { viewModel.onCameraBound(it) })
+            }
         }
 
         DetectionOverlay(detections = detections, frameAlert = viewModel.frameAlert)
@@ -131,7 +134,9 @@ fun DetectionScreen(
             distanceThreshold = distanceThreshold,
             onThresholdChange = { viewModel.setThreshold(it) },
             onStartBackground = onStartBackground,
-            onStopBackground = onStopBackground,
+            onStopBackground = { onStopBackground(); viewModel.stopScanning() },
+            scanningEnabled = viewModel.scanningEnabled,
+            onStartScanning = { viewModel.startScanning() },
             canDrawOverlays = canDrawOverlays,
             onGrantOverlay = onGrantOverlay,
             isObjectDetectionEnabled = isObjectDetectionEnabled,
@@ -149,6 +154,7 @@ fun DetectionScreen(
             onShowAbout = onShowAbout,
             heuristicObstacle = isWallDetected || isGroundHazard,
             pausedReason = when {
+                !viewModel.scanningEnabled -> "Stopped — tap Start scanning"
                 isInitializing -> "Starting…"
                 isCameraBlocked -> "Camera blocked"
                 phoneAngleQuality == SensorMonitor.AngleQuality.BAD -> "Point phone forward"
@@ -267,6 +273,8 @@ private fun ControlDock(
     onThresholdChange: (Float) -> Unit,
     onStartBackground: () -> Unit,
     onStopBackground: () -> Unit,
+    scanningEnabled: Boolean = true,
+    onStartScanning: () -> Unit = {},
     canDrawOverlays: Boolean,
     onGrantOverlay: () -> Unit,
     isObjectDetectionEnabled: Boolean,
@@ -356,14 +364,21 @@ private fun ControlDock(
         Spacer(Modifier.height(12.dp))
         // Row 3 — actions
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { if (canDrawOverlays) onStartBackground() else onGrantOverlay() },
-                modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
-                colors = ButtonDefaults.buttonColors(containerColor = if (canDrawOverlays) NB.Safe else NB.Watch, contentColor = Color(0xFF04140D))
-            ) { Text(if (canDrawOverlays) "Run in background" else "Allow overlay", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
-            OutlinedButton(onClick = onStopBackground, modifier = Modifier.height(48.dp), shape = NB.ChipShape,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Danger),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NB.Danger.copy(alpha = 0.6f))) { Text("Stop", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            if (scanningEnabled) {
+                Button(
+                    onClick = { if (canDrawOverlays) onStartBackground() else onGrantOverlay() },
+                    modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (canDrawOverlays) NB.Safe else NB.Watch, contentColor = Color(0xFF04140D))
+                ) { Text(if (canDrawOverlays) "Run in background" else "Allow overlay", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
+                OutlinedButton(onClick = onStopBackground, modifier = Modifier.height(48.dp), shape = NB.ChipShape,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Danger),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NB.Danger.copy(alpha = 0.6f))) { Text("Stop", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            } else {
+                // Stopped: nothing scans until the user explicitly starts again.
+                Button(onClick = onStartScanning, modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = NB.Safe, contentColor = Color(0xFF04140D))
+                ) { Text("Start scanning", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
+            }
             IconButton(onClick = onShowHistory, modifier = Modifier.size(48.dp).clip(NB.ChipShape).background(Color.White.copy(alpha = 0.06f))) {
                 Icon(Icons.Default.List, contentDescription = "History", tint = NB.Sub)
             }
@@ -529,9 +544,14 @@ fun CameraPreview(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val providerRef = remember { java.util.concurrent.atomic.AtomicReference<ProcessCameraProvider?>(null) }
 
     DisposableEffect(Unit) {
-        onDispose { cameraExecutor.shutdown() }
+        onDispose {
+            // Leaving the preview (Stop, screen change) releases the camera deterministically.
+            try { providerRef.get()?.unbindAll() } catch (_: Exception) {}
+            cameraExecutor.shutdown()
+        }
     }
 
     AndroidView(modifier = modifier, factory = { ctx ->
@@ -542,6 +562,7 @@ fun CameraPreview(
         // normalized detection boxes line up with the FILL_CENTER preview on tall screens.
         cameraProviderFuture.addListener({ previewView.post {
             val cameraProvider = cameraProviderFuture.get()
+            providerRef.set(cameraProvider)
             val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
