@@ -46,6 +46,19 @@ class ServiceLifecycleTest {
         val l = running(); l.stop(StopReason.HANDOFF)
         assertFalse(l.stoppedByUser); assertTrue(l.isStopped)
     }
+    @Test fun concurrentStopAndModelLoadedNeverLeavesTheServiceRunning() {
+        // Real threads: main-side stop() racing the worker-side onModelLoaded(). Whatever the
+        // interleaving, the end state is STOPPED and a true onModelLoaded implies the engine will
+        // be adopted by a shutdown that runs after it (never a lost Stop).
+        repeat(300) {
+            val l = ServiceLifecycle(); l.onStartRequested()
+            val loaded = java.util.concurrent.atomic.AtomicBoolean(false)
+            val t1 = Thread { l.stop(StopReason.USER) }
+            val t2 = Thread { loaded.set(l.onModelLoaded()) }
+            t2.start(); t1.start(); t1.join(); t2.join()
+            assertEquals(Phase.STOPPED, l.phase); assertFalse(l.mayBindCamera()); assertFalse(l.mayPostAlerts())
+        }
+    }
     @Test fun stopIsIdempotentAndFirstReasonWins() {
         val l = running(); l.stop(StopReason.USER); l.stop(StopReason.HANDOFF)
         assertEquals(StopReason.USER, l.stopReason)

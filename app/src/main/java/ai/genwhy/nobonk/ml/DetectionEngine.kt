@@ -252,6 +252,9 @@ class DetectionEngine(private val appContext: Context) {
     @Volatile var halted: Boolean = false
         private set
 
+    /** Reversible: cues/speech suppressed while the foreground session is stopped (results still computed, caller discards). */
+    @Volatile var muted: Boolean = false
+
     /** Stop emitting anything immediately (cues, speech, sensors); [close] releases the rest. */
     fun halt() {
         halted = true
@@ -359,7 +362,7 @@ class DetectionEngine(private val appContext: Context) {
 
         // ── Shared feedback (identical in both modes), driven by the debounced level ──
         val pan = topDet?.let { AlertCue.panFor(it.boundingBox.centerX) }
-        if (halted) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
+        if (halted || muted) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
         if (displayAlert != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(displayAlert)
         // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
         // The cue is panned toward the object so a left-side hazard is heard on the left.

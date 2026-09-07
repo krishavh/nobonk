@@ -22,6 +22,7 @@ import ai.genwhy.nobonk.data.DetectionRepository
 import ai.genwhy.nobonk.data.SessionSummary
 import ai.genwhy.nobonk.ml.DetectionEngine
 import ai.genwhy.nobonk.ml.FrameCadence
+import ai.genwhy.nobonk.ml.ScanSession
 import ai.genwhy.nobonk.ml.SensorMonitor
 import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.model.Detection
@@ -91,12 +92,16 @@ class DetectionViewModel : ViewModel() {
     /** Foreground scanning on/off. Off after the user presses Stop (in-app or notification) until Start. */
     var scanningEnabled by mutableStateOf(true)
         private set
+    /** Generation-tagged session: in-flight frames from before Stop cannot post results, cues or history. */
+    private val session = ScanSession()
     fun stopScanning() {
+        session.stop()
+        engine?.muted = true
         scanningEnabled = false
         detections = emptyList(); frameAlert = AlertLevel.NONE; lookUpLabel = null; bearingPan = null
         isWallDetected = false; isGroundHazardDetected = false
     }
-    fun startScanning() { scanningEnabled = true }
+    fun startScanning() { session.start(); engine?.muted = false; scanningEnabled = true }
 
     /** Stereo pan of the current top hazard, −1 (left) … +1 (right); null when clear. */
     var bearingPan by mutableStateOf<Float?>(null)
@@ -385,11 +390,14 @@ class DetectionViewModel : ViewModel() {
         if (!_processingGate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
         val eng = engine ?: run { imageProxy.close(); _processingGate.set(false); return }
+        val gen = session.current()
 
         viewModelScope.launch(Dispatchers.Default) {
             try {
                 val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled)
                 val result = eng.process(imageProxy, cfg)
+                // Stop (or Stop+Start) happened while this frame was in inference: drop everything.
+                if (!session.isCurrent(gen)) return@launch
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()
                 cadenceBlocked = result.cameraBlocked

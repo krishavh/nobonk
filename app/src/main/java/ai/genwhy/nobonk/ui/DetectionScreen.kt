@@ -545,11 +545,15 @@ fun CameraPreview(
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val providerRef = remember { java.util.concurrent.atomic.AtomicReference<ProcessCameraProvider?>(null) }
+    val ownedUseCases = remember { java.util.concurrent.atomic.AtomicReference<List<androidx.camera.core.UseCase>>(emptyList()) }
+    val disposed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
     DisposableEffect(Unit) {
         onDispose {
-            // Leaving the preview (Stop, screen change) releases the camera deterministically.
-            try { providerRef.get()?.unbindAll() } catch (_: Exception) {}
+            // Leaving the preview (Stop, screen change): no late callback may bind, and we release
+            // only the use cases THIS preview owns (a newly started background service keeps its own).
+            disposed.set(true)
+            try { val p = providerRef.get(); val u = ownedUseCases.get(); if (p != null && u.isNotEmpty()) p.unbind(*u.toTypedArray()) } catch (_: Exception) {}
             cameraExecutor.shutdown()
         }
     }
@@ -560,7 +564,8 @@ fun CameraPreview(
         // Bind after layout so the PreviewView can hand us its ViewPort: Preview and
         // ImageAnalysis then share one field of view (same crop), which is what makes the
         // normalized detection boxes line up with the FILL_CENTER preview on tall screens.
-        cameraProviderFuture.addListener({ previewView.post {
+        cameraProviderFuture.addListener({ if (disposed.get()) return@addListener; previewView.post {
+            if (disposed.get()) return@post   // disposed between provider resolution and layout
             val cameraProvider = cameraProviderFuture.get()
             providerRef.set(cameraProvider)
             val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
@@ -577,6 +582,8 @@ fun CameraPreview(
                 ).build()
                 val group = androidx.camera.core.UseCaseGroup.Builder().setViewPort(viewPort).addUseCase(preview).addUseCase(imageAnalysis).build()
                 val cam = cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, group)
+                ownedUseCases.set(listOf(preview, imageAnalysis))
+                if (disposed.get()) { cameraProvider.unbind(preview, imageAnalysis); return@post }   // disposed during bind
                 onCameraBound(cam.cameraInfo)
             } catch (e: Exception) { e.printStackTrace() }
         } }, ContextCompat.getMainExecutor(ctx))

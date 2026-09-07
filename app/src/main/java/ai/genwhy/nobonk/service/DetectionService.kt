@@ -25,6 +25,7 @@ import ai.genwhy.nobonk.ml.FrameCadence
 import ai.genwhy.nobonk.model.AlertLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
@@ -149,15 +150,19 @@ class DetectionService : LifecycleService() {
                 DetectionEngine(this@DetectionService).also { it.loadModel(modelFile, inputPx, skipNms) }
             } catch (e: Exception) {
                 Dbg.e(TAG, "Model load failed: ${e.message}", e)
-                withContext(Dispatchers.Main) { shutdown(ServiceLifecycle.StopReason.HANDOFF) }
+                withContext(Dispatchers.Main + NonCancellable) { shutdown(ServiceLifecycle.StopReason.HANDOFF) }
                 return@launch
             }
-            // A Stop that arrived during the (long, blocking) model load must not leak the engine
-            // or start sensors/camera afterwards.
-            if (!life.onModelLoaded()) { eng.close(); return@launch }
-            engine = eng
-            if (voiceEnabled) eng.prepareVoice()
-            eng.startSensors()   // background angle gating
+            // Engine ownership is confined to the main thread. Adoption is NonCancellable so a Stop
+            // that races the load can never orphan a loaded engine: either shutdown() already ran
+            // (onModelLoaded → false → close here) or it sees `engine` set and releases it.
+            withContext(Dispatchers.Main + NonCancellable) {
+                if (!life.onModelLoaded()) { eng.close(); return@withContext }
+                engine = eng
+                if (voiceEnabled) eng.prepareVoice()
+                eng.startSensors()   // background angle gating
+            }
+            if (life.isStopped) return@launch
             kotlinx.coroutines.delay(400)   // let the activity release the camera first
             withContext(Dispatchers.Main) { if (life.mayBindCamera()) startCamera() }
         }
@@ -399,21 +404,36 @@ class DetectionService : LifecycleService() {
         life.stop(reason)
         if (!first) return
         startupJob?.cancel(); startupJob = null
-        engine?.halt()
+        val eng = engine; engine = null
+        eng?.halt()   // no further cues/speech/vibration/sensors, even for a frame already in flight
+        try { analysis?.let { cameraProvider?.unbind(it) } } catch (_: Exception) {}   // only OUR use case — never a foreground preview
         try { analysis?.clearAnalyzer() } catch (_: Exception) {}
-        try { cameraProvider?.unbindAll() } catch (_: Exception) {}
         analysis = null
         mainHandler.removeCallbacksAndMessages(null)
         knightRiderAnimator?.cancel(); knightRiderAnimator = null
         hudView?.let { v -> try { windowManager.removeView(v) } catch (_: Exception) {} }; hudView = null
         removeReturnControl()
         scanningView?.let { v -> try { windowManager.removeView(v) } catch (_: Exception) {} }; scanningView = null
-        engine?.close(); engine = null
+        releaseEngineWhenIdle(eng)
         try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_: Exception) {}
         if (life.stoppedByUser) ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = true
         ai.genwhy.nobonk.safety.SessionState.gate.onServiceStopped()
         stopSelf()
+    }
+
+    /**
+     * Never close the ONNX session under an in-flight inference: the frame coroutine holds the
+     * single-flight [gate] while it runs, so wait for it (bounded) on a small daemon thread that
+     * does not depend on the (already cancelled) lifecycle scope, then release.
+     */
+    private fun releaseEngineWhenIdle(eng: DetectionEngine?) {
+        eng ?: return
+        Thread({
+            val t0 = System.currentTimeMillis()
+            while (gate.get() && System.currentTimeMillis() - t0 < 3000) Thread.sleep(20)
+            runCatching { eng.close() }
+        }, "nobonk-engine-release").apply { isDaemon = true }.start()
     }
 
     override fun onDestroy() {

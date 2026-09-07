@@ -225,8 +225,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         ai.genwhy.nobonk.safety.SessionState.gate.activityResumed = true
-        // Take the camera back from the background service (hand-off, not a user Stop).
-        stopDetectionService(DetectionService.STOP_REASON_HANDOFF)
+        // Take the camera back from the background service (hand-off, not a user Stop). Only when a
+        // service is actually active — never create a service just to stop it.
+        if (ai.genwhy.nobonk.safety.SessionState.gate.serviceActive) stopDetectionService(DetectionService.STOP_REASON_HANDOFF)
         // If the user pressed Stop (notification or app) since we last looked, do not resume scanning.
         if (ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser) {
             ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = false
