@@ -1,4 +1,46 @@
+# 1.0.13 (versionCode 14) — September 7, 2026
+
+- Reuse native input/output tensor storage through model warmup and scanning, removing the large copied output array on each frame. Verify provider selection and both Fast/Sharp models through the same inference path.
+- Refresh battery state during use. Foreground scanning pauses below 10%, clears stale alerts and releases the camera and sensors; recovery respects a user's Stop. Background scanning keeps its existing reduced-cadence policy.
+- Release foreground sensor and cue ownership when the setup screen is hidden or hands off to background mode. Reject late results across Stop, screen changes and power pauses, and ignore duplicate background-start commands.
+- Use elapsed time for scanning and alert intervals so clock changes do not stall detection. Reset and synchronize motion state between sessions.
+- Verified with 151 unit tests, native model-output parity tests and actual emulator camera/background/Open/notification Stop flows. Physical-phone startup, temperature and battery-energy measurements remain separate; no measured phone-speed claim is made.
+
+---
+
+# 1.0.12 (versionCode 13) — September 7, 2026
+
+- Correct the class mapping against the bundled YOLO model metadata: cats use COCO class 15, dogs remain class 16, and class 17 (horse) is excluded from the selected classes. Previously, cats were omitted and horse detections could be labeled as cats.
+- Share raw-head class selection and labels in the decoder. Regression tests feed model-shaped tensors through that production decoder and NMS using class IDs extracted from the pinned model metadata; they cover cats, dogs, horse exclusion and existing people/vehicle classes.
+- Model weights, confidence/NMS thresholds, scanning lifecycle and launcher artwork are unchanged. This is a separate follow-up to version 1.0.11; the submitted vc12 artifact is not replaced.
+
+---
+
+# Review release — 1.0.11 (versionCode 12), September 7, 2026
+
+- Faster repeat startup: cache the measured execution-provider choice per model/device/runtime/app version, verify it before reuse, rebenchmark on failure or expiry. Fast is the initial model for new installations; saved preferences are preserved.
+- Correct provider labels: NNAPI is not advertised as proof of NPU execution. Direct input buffers reduce avoidable tensor copies.
+- Serialize foreground model replacement, inference and cleanup; invalidate stale model jobs; keep Stop effective during startup. Show permission and camera recovery screens instead of a blank or misleadingly active view.
+- Keep warning overlays translucent and clear of the Open NoBonk control; reflow on rotation. Report inference failures instead of treating them as empty scenes.
+- Wire backup exclusions for private files/preferences/databases. Fix legacy encryption initialization, queued history writes after Clear, bounded history compaction and truncated append-log recovery.
+- Reuse the corrected Blender brand icon inside the app. Clarify approximate alert sensitivity and possible-obstacle wording.
+- Install checksum-verified model assets before CI builds. Correct model and privacy documentation.
+
+Physical-device camera timing, accuracy, thermal behavior and Google Play installation/update checks remain required. This source entry does not mean the release has passed Play review.
+
+---
+
 # Changelog
+
+## 1.0.10 (versionCode 11) — 2026-09-07 reliable Stop · edge indicator · Play update suggestion
+- **Slim screen-edge indicator replaces the top scan bar in background mode.** Four 3 dp non-touchable strips just inside the status-bar/cutout and gesture-bar insets; static (no animation) — calm mint while watching, amber on MEDIUM, red on HIGH, grey when the camera is blocked (`service/EdgeIndicatorPolicy.kt`, tested). The Open NoBonk pill and the notification Stop are unchanged; the red warning text still appears for HIGH.
+- **Google Play flexible in-app update suggestion** (app-update-ktx 2.1.0). A quiet check runs when the app resumes with the gate cleared; a dismissible *Update available* / *Update downloaded* card is shown **only while nothing is scanning** (never over the safety gate, never during foreground or background scanning). *Later* snoozes for a day and remembers the dismissed version; declined/failed flows are quiet; a downloaded update is applied only by a user tap when idle; no Play (sideload/emulator) means no suggestion. About → *Check for updates* + a plain-language note on what Play processes (`update/UpdatePolicy.kt` tested with fake states; real-device validation is Play-installed builds only).
+- **Review follow-ups (18:44):** engine release is a deferred ownership hand-off (whoever finishes last closes; no timeout), frame coroutines start ATOMIC so a cancelled launch cannot hold the single-flight gate; foreground Stop cancels a playing chirp/speech/vibration; cue emission is validated per frame inside the engine (`Config.cuesAllowed`), so Stop+Start cannot un-mute a stale inference; the ViewModel re-checks the generation at the main-thread publication boundary and commits history only for the owned session. Cue emission itself now runs on the main thread with the validity checks inside that block, so it serializes with Stop/silence (no chirp can start after a Stop); the Test chip follows the same rule. Edge strips use window alpha 0.75 (under Android's obscuring-touch limit) with explicit side heights and no corner overlap; the update coordinator guards late callbacks after dispose, honours the flow's start result and refreshes the single-use update info; *Later* is a plain day snooze; no-Play reports "couldn't check", never "latest". Service HUD/edge/notification publication is one main-thread block with the lifecycle check inside (serialized with Stop); foreground Stop also stops the motion/angle sensors, Start resumes them. Edge strips are re-laid out on service configuration changes (another app may rotate the display during a background session), preserving the current colour state.
+- **Root cause.** Stop only called `stopSelf()`. Work queued before the Stop kept completing after it: a frame in flight re-posted the alert notification and re-created the red warning overlay from an already-destroyed service (so Stop "did not work"), and a Stop during the multi-second model load left the loaded model and sensors alive, then bound the camera anyway.
+- **Fix.** `service/ServiceLifecycle.kt` — an explicit, unit-tested state machine every asynchronous step consults: model-load completion, camera binding, frame processing, HUD/notification posting and cues are all refused once Stop has been requested, from any phase. One idempotent `shutdown()` path (app Stop, notification Stop, bind failure, onDestroy): cancel the startup job, halt the engine (cues, speech, vibration, sensors), clear the analyzer and unbind the camera, drop queued main-thread work, remove warning/scan/return overlays, `stopForeground(REMOVE)` + cancel the notification, then `stopSelf()`. `ACTION_STOP` returns `START_NOT_STICKY`; a start after Stop on the same instance is refused.
+- **No silent resume.** Stop in the app stops the background service *and* foreground scanning (camera released, dock shows *Stopped — tap Start scanning*); Stop from the notification is remembered so returning to NoBonk shows the stopped state until the user presses Start. Returning to a live session via the pill still hands the camera over (not a user Stop). Safety gates unchanged.
+- **Review follow-ups (Astra):** lifecycle transitions synchronized (a Stop can never be overwritten by a late model-load completion); engine adoption happens on the main thread inside a non-cancellable block so a Stop racing the load either closes the just-loaded engine or finds it owned; the ONNX session is released only after the in-flight inference finishes (bounded wait on a daemon thread); the foreground pipeline is generation-tagged (`ml/ScanSession`) and the engine muted on Stop, so a frame already in inference cannot post results, cues or history, and Start begins a fresh generation; the preview guards its async callbacks against disposal and unbinds only its own use cases (the service likewise unbinds only its analysis use case); the activity no longer creates a service just to stop it.
+- Tests: `ServiceLifecycleTest` (rapid Stop during model load, Stop during camera binding, in-flight frame after Stop, start-after-stop refused, repeated cycles, hand-off vs user, idempotence, 300-iteration real-thread Stop/onModelLoaded race), `ScanSessionTest`.
 
 ## 1.0.9 (versionCode 10) — 2026-09-06 every-launch reminder on warm reopen
 - On Android 12+ Back moves the root task to the background without finishing, so a warm reopen gets no `onCreate`. The gate now resets in `onStop` (unless a configuration change, a hand-off we started — permission dialog, overlay-settings screen, *Run in background* — or an authorized background session) and is re-evaluated in `onStart`, so Back/Home → launcher → reopen shows the reminder. Exercised on an Android 15 emulator profile.
@@ -81,4 +123,3 @@
 - ONNX Runtime 1.21.1 → 1.29.0 (all native libs 16 KB-aligned; Play requirement). Per-ABI sideload APKs; AAB for Play.
 - GitHub Actions CI: unit tests, debug APK, unsigned release AAB, 16 KB check.
 - README model section and acknowledgments brought current; `docs/MODEL_CHOICE.md` added.
-

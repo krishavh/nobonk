@@ -27,8 +27,9 @@ android {
         applicationId = "ai.genwhy.nobonk"
         minSdk = 29        // Android 10+ (floor 26 for the SYSTEM_ALERT_WINDOW overlay; 29 ≈ 95%+ device reach)
         targetSdk = 36     // Android 16 — required for new-app submissions (Play API-36 cutoff)
-        versionCode = 10
-        versionName = "1.0.9"
+        versionCode = 14
+        versionName = "1.0.13"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -135,10 +136,14 @@ dependencies {
 
     // Encrypted on-device history at rest (Keystore master key + EncryptedFile)
     implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.fragment)   // app-update-ktx transitively pulls an old fragment; ActivityResult APIs need >= 1.3
+    implementation(libs.play.app.update.ktx)   // Google Play flexible in-app updates (Play-installed builds only)
 
     // Core library desugaring runtime (enables java.time etc. down to minSdk)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     // Unit tests (pure-Kotlin safety-core tests under src/test)
     testImplementation(libs.junit)
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }

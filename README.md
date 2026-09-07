@@ -1,10 +1,12 @@
 # NoBonk
 
+<img src="docs/images/nobonk-icon.png" width="96" height="96" alt="NoBonk app icon: a lime path around an amber obstacle, framed by inward-facing corners">
+
 ![NoBonk — on-device obstacle detection, illustrated with a phone and a stylized pedestrian](docs/images/nobonk-blender-banner.png)
 
 **A little more awareness for the path ahead.**
 
-NoBonk is an Android app that taps you on the shoulder before you walk into someone. It uses an on-device AI vision model to spot approaching people, walls, and ground hazards through your phone's back camera — and warns you with vibration and on-screen alerts — all while you're still staring at your screen.
+NoBonk is Krishav’s Android project for an extra nudge to look up. It uses the rear camera and on-device AI to detect nearby people and obstacles, with vibration, sound and on-screen alerts. **Background use is the main Android experience:** start detection in NoBonk, then switch to the home screen or another app. NoBonk can miss or misidentify hazards and does not replace watching your surroundings.
 
 [![Android CI](https://github.com/krishavh/nobonk/actions/workflows/android.yml/badge.svg)](https://github.com/krishavh/nobonk/actions/workflows/android.yml)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
@@ -14,7 +16,7 @@ NoBonk is an Android app that taps you on the shoulder before you walk into some
 
 Built by **Krishav**, now a 9th grader, who started NoBonk as an 8th grader for the 2026 Alameda County Science & Engineering Fair (Project MS-SOFT-241) and is continuing it for the 2026 Congressional App Challenge.
 
-> **Don't be a smombie.** NoBonk's on-device AI keeps an eye on the path ahead so a glance at your phone doesn't end in a collision.
+> **Stay aware.** No alert does not mean the path is clear. Keep looking where you’re going.
 
 ## Awards
 
@@ -24,17 +26,46 @@ Built by **Krishav**, now a 9th grader, who started NoBonk as an 8th grader for 
 
 ## The problem
 
-People walk while looking at their phones and run into each other, walls, and curbs. Unlike distracted *driving*, you can't realistically pass a law against walking with a phone. So instead of fighting the phone, NoBonk makes the phone itself watch the path ahead.
+Krishav saw students at school bump into each other—or into walls—while looking at their phones. He wanted to explore whether the phone could give people a useful heads-up without requiring them to keep a dedicated camera app on screen. That observation shaped NoBonk’s focus on Android background detection.
+
+## Creator videos
+
+- **[Current Android walkthrough](https://www.youtube.com/watch?v=uj7l9rwRWSQ)** — September 7, 2026 · 1:57. Krishav walks through the settings and alert cues, then shows background use. [Jump to the background demo at 1:14](https://www.youtube.com/watch?v=uj7l9rwRWSQ&t=74).
+- **[Original project presentation](https://www.youtube.com/watch?v=MhQoMuKx1zM)** — February 16, 2026 · 1:31. The school-hallway idea, early prototype and exploration of ultrasonic alternatives. This is the historical project pitch, not a specification for the current release.
+
+Current Android distance estimates are approximate, and hazards may be missed. Neither video establishes a guarantee of accurate distances or collision prevention; always stay aware of your surroundings.
+
+## Set up in the foreground. Use it in the background.
+
+1. **Open NoBonk to set up and test.** Acknowledge the safety reminder, allow the camera, check what your phone detects, and adjust sensitivity and sound, vibration or voice cues in a safe space.
+2. **Choose Run in background on Android.** Allow the requested notification and overlay permissions, then switch apps. Keep the rear camera uncovered and pointed toward the scene.
+3. **Receive alerts above other apps.** Use **Open NoBonk** to return to the settings. The app and notification include Stop controls; reliable shutdown is an active testing priority.
+
+The foreground view is the Android setup and testing space; background operation is its primary intended use. The separate **iPhone development preview** supports foreground People and Fast Objects detection, plus Browse & scan. Opening native message composition pauses the camera. It does not scan in the background, and there is no public App Store or TestFlight release yet. Follow [iPhone development](https://github.com/krishavh/nobonk/pull/2) or see the [iPhone preview details](https://nobonk.genwhy.ai/#iphone).
+
+## Real Android screenshots
+
+Unretouched frames from a developer-supplied phone recording—not mockups.
+
+| Foreground: test and adjust settings | Background: alert over the home screen |
+|---|---|
+| <img src="docs/images/nobonk-android-setup.png" width="280" alt="NoBonk camera view with sensitivity controls and Run in background button"> | <img src="docs/images/nobonk-android-background.png" width="280" alt="NoBonk PERSON AHEAD alert and Open NoBonk control over the Android home screen"> |
+
+These show the interface in one test, not verified detection accuracy. [Watch the real walkthrough](https://nobonk.genwhy.ai/#background).
+
+## Join the Android closed test
+
+Use the same Google account to [join the tester group](https://groups.google.com/g/nobonk-android-testers), then [opt into the Google Play test and install](https://play.google.com/apps/testing/ai.genwhy.nobonk). Stay opted in for at least 14 consecutive days, try the app regularly, and send feedback to support@genwhy.ai. [Full testing instructions](https://nobonk.genwhy.ai/#testing-guide).
 
 ## How it works
 
-1. **Camera** — the back camera captures frames in real time (up to ~10 fps, backing off to ~3 fps when the path has been clear for a while to save battery). When you're looking at your screen, the back camera naturally faces forward.
+1. **Camera** — the back camera captures frames in real time (up to ~10 fps, backing off to ~3 fps when the path has been clear for a while to save battery). Useful detections depend on holding the phone so the rear camera can see the scene; camera angle and lighting matter.
 2. **On-device AI** — a YOLO26 model (nano or small; via ONNX Runtime with NNAPI/XNNPACK acceleration) detects people, animals, and obstacles in each frame. No internet needed.
 3. **Distance estimation** — a pinhole-camera model converts bounding-box size to approximate distance; a box growing frame-over-frame means something is approaching.
 4. **Approach tracking** — IoU tracking plus time-to-collision physics (`ApproachTracker.kt`) flags anything closing distance fast enough to hit you within ~2 seconds.
 5. **Hazards the model can't classify** — `FrameAnalyzer.kt` detects blank walls (gradient-invariant adjacent-cell brightness analysis) and ground hazards like potholes and step-downs.
 6. **Alerts** — escalating haptic + on-screen warnings (LOW / MEDIUM / HIGH) based on the alert distance you choose, plus a short synthesised chirp on MEDIUM/HIGH that is stereo-panned toward the hazard — with earbuds, someone approaching on your left is heard on your left. Sound and haptics can each be switched off.
-7. **Detection history** — sessions, alert counts, peak-danger hours, and danger hotspots, stored only on your device.
+7. **Detection history** — foreground sessions, alert counts, busiest alert hours, and approximate event locations, stored only on your device.
 
 ## Alerts you can hear, feel and read
 
@@ -49,14 +80,16 @@ Sound and voice are **stereo-panned toward the hazard** (constant-power pan law,
 ## Privacy by design
 
 - **No video or photos are ever recorded, stored, or transmitted.** Camera frames are processed in memory and immediately discarded — nothing from the camera is ever written to disk or sent anywhere.
-- **Everything runs on-device.** There is no `INTERNET` permission and no network connection is used or required — the app works in airplane mode, so nothing *can* leave your phone.
-- **The one thing NoBonk does store is a local detection-event history** (session stats + close-call hotspots), kept only in the app's private storage and never uploaded. You can clear it at any time from within the app.
+- **Everything runs on-device.** Camera analysis has no `INTERNET` permission and works offline. Optional system text-to-speech and Google Play updates are handled by those separate services under their policies. Camera frames and history are not sent to them.
+- **Foreground detection-event history is encrypted locally**, kept only in private storage and never uploaded. The app also stores settings, the safety acknowledgment and update/execution-provider preferences. You can clear it at any time from within the app.
 - **Location is optional, approximate, and off by default.** If — and only if — you turn it on, NoBonk tags those history events with your *coarse* (approximate) location so the history screen can map roughly where your close calls happen. It stays *on your phone only*. Deny or leave it off and everything else still works.
 - **`allowBackup` is disabled** (and backup/transfer rules explicitly exclude the history file) so nothing is swept into cloud backups.
 
-> So "nothing recorded" means exactly that for **camera imagery** — no photos, no video, ever. The optional on-device event history (and its optional coarse-location tags) is the only thing persisted, it never leaves the device, and you can wipe it whenever you like.
+> So "nothing recorded" means exactly that for **camera imagery** — no photos, no video, ever. Event history and optional approximate-location tags stay in private local storage alongside settings. Clear history removes the event records; the app reports a deletion failure.
 
-## Measured results (Pixel 9a)
+## Earlier prototype observations (Pixel 9a)
+
+These figures were reported in earlier project notes. They are not a controlled benchmark of the current model/runtime or a guarantee for any phone. The current release still needs physical-device accuracy, battery and thermal testing.
 
 | Metric | Result |
 |---|---|
@@ -72,15 +105,13 @@ The detector weights are **not** committed (large binaries; Ultralytics distribu
 
 | Asset | Mode in app | Size | Notes |
 |---|---|---|---|
-| `yolo26n_416.onnx` | **Fast** | ~9 MB | nano; best battery, everyday default on mid-range phones |
-| `yolo26s_416.onnx` | **Sharp** (default) | ~36 MB | small; sharper on far/small objects |
+| `yolo26n_416.onnx` | **Fast** (default for new installs) | ~9 MB | nano; best battery, everyday default on mid-range phones |
+| `yolo26s_416.onnx` | **Sharp** | ~36 MB | small; sharper on far/small objects |
 
-Reproduce them with the pinned recipe (ultralytics 8.4.142 torch 2.14.0+cpu):
+Install the exact shipped assets from the checksum-verified release bundle:
 
 ```bash
-pip install ultralytics onnx onnxslim onnxruntime
-yolo export model=yolo26n.pt format=onnx imgsz=416 opset=17 simplify=True && mv yolo26n.onnx app/src/main/assets/yolo26n_416.onnx
-yolo export model=yolo26s.pt format=onnx imgsz=416 opset=17 simplify=True && mv yolo26s.onnx app/src/main/assets/yolo26s_416.onnx
+python3 scripts/install_verified_models.py
 ```
 
 The exported graph outputs `[1, 84, 3549]` (cx, cy, w, h + 80 class scores per candidate); `ml/Nms.kt` keeps the eight classes NoBonk cares about and suppresses duplicates. Provenance, the AGPL §13 obligations, and why YOLO26 over the alternatives we evaluated (RF-DETR, D-FINE, YOLOX) are in [`docs/MODEL.md`](docs/MODEL.md) and [`docs/MODEL_CHOICE.md`](docs/MODEL_CHOICE.md).
@@ -109,7 +140,7 @@ From the command line:
 - **Debug build / install:** `./gradlew assembleDebug` (a helper script, `build_and_install.sh`, builds and installs to a connected device).
 - **Signed release bundle (for Play):** `./gradlew bundleRelease` produces `app/build/outputs/bundle/release/app-release.aab`. Signing reads keystore credentials from `~/.gradle/gradle.properties` or the `NOBONK_*` environment variables — **no secrets are committed**. See [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md) for keystore generation and the full Play submission steps, and [`docs/PLAY_16KB_CHECK.md`](docs/PLAY_16KB_CHECK.md) for the required 16 KB native-library check (`scripts/check_16kb_alignment.sh`).
 
-**Requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Best results on recent Pixel devices. Android background scanning is the primary experience. An [iPhone development preview](ios/README.md) adds foreground People/Fast Objects detection, Browse & scan, and native message composition that pauses scanning. It has no background camera scanning and no public App Store/TestFlight link yet.
+**Android requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Background scanning is Android's primary mode. The [iPhone development preview](ios/README.md) supports foreground People/Fast Objects and Browse & scan; native message composition pauses its camera. It has no background scanning or public App Store/TestFlight release yet. See the [current iPhone status](https://nobonk.genwhy.ai/#iphone).
 
 ## Known limitations
 
@@ -124,7 +155,9 @@ Issues and pull requests welcome! Some good areas to dig into: better low-light 
 
 ## Acknowledgments
 
-Created by **Krishav**. **Haarith** supplied parental support, handled publishing, and paid the AI bills—mostly while watching Krishav put the tools to work. 🙂
+Created by **Krishav**.
+
+**Haarith (Dad)** — Thank you for believing in this idea and sitting with me through the frustrating parts, especially when nothing seemed to work. Having you there made it easier to keep going. And thank you, Mom and Dad, for faithfully paying the increasingly ridiculous AI bills without asking too many questions :)
 
 Krishav leads the project: identifying the problem, choosing the app's approach, shaping its privacy and alert behavior, and testing it on real phones.
 
@@ -132,7 +165,7 @@ Krishav leads the project: identifying the problem, choosing the app's approach,
 
 - **Claude** (Anthropic) — substantial Kotlin implementation, performance work, model export, and release engineering.
 - **OpenAI Codex** and **ChatGPT Astra** — code review and refactoring, the website, and Google Play setup.
-- **Kaaval** (the family's local coding agent) — automated build-and-test iterations.
+- **Kaaval** — the family’s local AI coding setup, running across multiple **NVIDIA DGX Spark** systems. Over the months of development, it used a mix of **Qwen, DeepSeek and GLM 5.x** models to help with coding and build-and-test iterations. This is development infrastructure; the Android app does not send camera frames to Kaaval.
 - **Google Gemini** — debugging, privacy/security review, and diagrams.
 - **Warp** — terminal workflow and build scripting.
 

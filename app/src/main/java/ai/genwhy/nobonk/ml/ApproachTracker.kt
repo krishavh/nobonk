@@ -105,6 +105,9 @@ class ApproachTracker(
         val approaching = mutableSetOf<String>()
         val imminent = mutableSetOf<String>()
         val idMap = mutableMapOf<String, String>()
+        // Expire before matching: otherwise a reappearing box revives old velocity
+        // and closing streaks by refreshing lastSeen before the stale-track sweep.
+        tracks.removeAll { now < it.lastSeen || now - it.lastSeen > maxMissedMs }
         val available = tracks.toMutableList()
 
         for (det in detections) {

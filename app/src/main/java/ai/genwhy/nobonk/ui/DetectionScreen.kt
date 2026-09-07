@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -68,7 +70,11 @@ fun DetectionScreen(
     onGrantOverlay: () -> Unit,
     onShowHistory: () -> Unit = {},
     onShowAbout: () -> Unit = {},
-    cameraRebindKey: Int = 0
+    cameraRebindKey: Int = 0,
+    /** Play in-app update prompt (NONE = nothing to show). Only rendered while not scanning. */
+    updatePrompt: ai.genwhy.nobonk.update.UpdatePolicy.Prompt = ai.genwhy.nobonk.update.UpdatePolicy.Prompt.NONE,
+    onUpdateNow: () -> Unit = {},
+    onUpdateLater: () -> Unit = {}
 ) {
     val detections = viewModel.detections
     val distanceThreshold = viewModel.distanceThreshold
@@ -83,23 +89,35 @@ fun DetectionScreen(
     val phoneAngleHint = viewModel.phoneAngleHint
     val phoneAngleQuality = viewModel.phoneAngleQuality
     val isLowLight = viewModel.isLowLight
-    val isHardwareAccelerated = viewModel.isHardwareAccelerated
+    val executionProvider = viewModel.executionProvider
     val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(viewModel, lifecycle) {
+        val observer = LifecycleEventObserver { _, _ ->
+            viewModel.setForegroundActive(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        }
+        lifecycle.addObserver(observer)
+        viewModel.setForegroundActive(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        onDispose { lifecycle.removeObserver(observer); viewModel.setForegroundActive(false) }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(NB.Night)) {
-        key(cameraRebindKey) {
-            CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) }, onCameraBound = { viewModel.onCameraBound(it) })
+        // The camera is bound only while scanning; Stop releases it (CameraPreview unbinds on dispose).
+        if (viewModel.scanningEnabled && batteryLevel >= ai.genwhy.nobonk.ml.BatteryLevel.MIN_SCAN_PERCENT) {
+            key(cameraRebindKey) {
+                CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) }, onCameraBound = { viewModel.onCameraBound(it) }, onError = { viewModel.reportCameraError(it) })
+            }
         }
 
         DetectionOverlay(detections = detections, frameAlert = viewModel.frameAlert)
 
-        if (!isInitializing) {
+        if (!isInitializing || !viewModel.scanningEnabled) {
             TopStatusBar(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
                 batteryLevel = batteryLevel,
-                isHardwareAccelerated = isHardwareAccelerated,
+                executionProvider = executionProvider,
                 mode = accuracyMode,
-                live = !isCameraBlocked,
+                live = viewModel.scanningEnabled && batteryLevel >= ai.genwhy.nobonk.ml.BatteryLevel.MIN_SCAN_PERCENT && !isCameraBlocked && viewModel.cameraError == null,
                 stats = if (viewModel.fps > 0f) String.format(Locale.US, "%.0f fps · %d ms", viewModel.fps, viewModel.inferMs) else null
             )
         }
@@ -109,6 +127,7 @@ fun DetectionScreen(
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 58.dp, start = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            viewModel.cameraError?.let { NoticeBanner("!", "Scanning unavailable", it, color = NB.Watch) }
             when {
                 isCameraBlocked -> Unit
                 phoneAngleQuality != SensorMonitor.AngleQuality.OK && phoneAngleHint.isNotEmpty() ->
@@ -117,6 +136,8 @@ fun DetectionScreen(
                         description = "Camera angle warning. $phoneAngleHint")
                 isLowLight -> NoticeBanner("🔅", if (viewModel.isNightBoost) "Low light · night boost on" else "Low light", "Detection is less reliable in the dark", color = NB.Watch)
             }
+            if (!viewModel.scanningEnabled && updatePrompt != ai.genwhy.nobonk.update.UpdatePolicy.Prompt.NONE)
+                ai.genwhy.nobonk.ui.components.UpdateCard(restart = updatePrompt == ai.genwhy.nobonk.update.UpdatePolicy.Prompt.OFFER_RESTART, onPrimary = onUpdateNow, onLater = onUpdateLater)
             if (isWallDetected && !isCameraBlocked)
                 NoticeBanner("🧱", "Possible obstacle", "Surface warning · wall-like surface ahead, object not identified", color = NB.Watch, description = "Possible obstacle. Surface warning: wall-like surface ahead, object not identified.")
         }
@@ -131,7 +152,9 @@ fun DetectionScreen(
             distanceThreshold = distanceThreshold,
             onThresholdChange = { viewModel.setThreshold(it) },
             onStartBackground = onStartBackground,
-            onStopBackground = onStopBackground,
+            onStopBackground = { onStopBackground(); viewModel.stopScanning() },
+            scanningEnabled = viewModel.scanningEnabled,
+            onStartScanning = { viewModel.startScanning() },
             canDrawOverlays = canDrawOverlays,
             onGrantOverlay = onGrantOverlay,
             isObjectDetectionEnabled = isObjectDetectionEnabled,
@@ -149,6 +172,7 @@ fun DetectionScreen(
             onShowAbout = onShowAbout,
             heuristicObstacle = isWallDetected || isGroundHazard,
             pausedReason = when {
+                !viewModel.scanningEnabled -> "Stopped — tap Start scanning"
                 isInitializing -> "Starting…"
                 isCameraBlocked -> "Camera blocked"
                 phoneAngleQuality == SensorMonitor.AngleQuality.BAD -> "Point phone forward"
@@ -162,7 +186,12 @@ fun DetectionScreen(
         } else if (viewModel.frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
             LookUpOverlay(className = viewModel.lookUpLabel ?: "person", bearingPan = viewModel.bearingPan)
         }
-        if (isInitializing) InitializingOverlay(initializationStatus)
+        // Warming overlay only while a scan session actually wants the model: after a foreground Stop
+        // the stopped dock must be visible immediately while the cancelled load unwinds.
+        if (isInitializing && viewModel.scanningEnabled) {
+            InitializingOverlay(initializationStatus)
+            TextButton(onClick = { onStopBackground(); viewModel.stopScanning() }, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp)) { Text("Stop", color = NB.Ink) }
+        }
     }
 }
 
@@ -232,7 +261,7 @@ private fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel
 /* ───────────────────────── top status ───────────────────────── */
 
 @Composable
-private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, isHardwareAccelerated: Boolean, mode: AccuracyMode, live: Boolean, stats: String? = null) {
+private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, executionProvider: String, mode: AccuracyMode, live: Boolean, stats: String? = null) {
   Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
     Row(
         modifier = Modifier
@@ -240,13 +269,13 @@ private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, isHardwareAccele
             .background(NB.Glass)
             .border(1.dp, NB.GlassLine, NB.PillShape)
             .padding(horizontal = 14.dp, vertical = 8.dp)
-            .semantics { contentDescription = "NoBonk ${if (live) "active" else "paused"}. ${if (isHardwareAccelerated) "Hardware accelerated" else "CPU"}. Battery $batteryLevel percent." },
+            .semantics { contentDescription = "NoBonk ${if (live) "active" else "paused"}. ${if (executionProvider == "NNAPI") "NNAPI, device-selected processing" else "CPU"}. Battery $batteryLevel percent." },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         PulseDot(if (live) NB.Safe else NB.Watch)
         Text("NOBONK", color = NB.Ink, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-        Pill(if (isHardwareAccelerated) "NPU" else "CPU", color = if (isHardwareAccelerated) NB.Accent else NB.Sub)
+        Pill(if (executionProvider == "NNAPI") "NNAPI" else "CPU", color = if (executionProvider == "NNAPI") NB.Accent else NB.Sub)
         Pill(mode.label.uppercase(), color = NB.Accent2)
         Text("$batteryLevel%", color = if (batteryLevel < 20) NB.Watch else NB.Sub, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
@@ -267,6 +296,8 @@ private fun ControlDock(
     onThresholdChange: (Float) -> Unit,
     onStartBackground: () -> Unit,
     onStopBackground: () -> Unit,
+    scanningEnabled: Boolean = true,
+    onStartScanning: () -> Unit = {},
     canDrawOverlays: Boolean,
     onGrantOverlay: () -> Unit,
     isObjectDetectionEnabled: Boolean,
@@ -307,7 +338,7 @@ private fun ControlDock(
         }
         Spacer(Modifier.height(12.dp))
         // Row 2 — alert distance
-        SectionLabel("Alert at")
+        SectionLabel("Alert sensitivity · approximate metres")
         Spacer(Modifier.height(6.dp))
         val presets = listOf(0.5f to "0.5 m", 1.0f to "1 m", 2.0f to "2 m", 3.5f to "3.5 m")
         Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -356,14 +387,21 @@ private fun ControlDock(
         Spacer(Modifier.height(12.dp))
         // Row 3 — actions
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { if (canDrawOverlays) onStartBackground() else onGrantOverlay() },
-                modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
-                colors = ButtonDefaults.buttonColors(containerColor = if (canDrawOverlays) NB.Safe else NB.Watch, contentColor = Color(0xFF04140D))
-            ) { Text(if (canDrawOverlays) "Run in background" else "Allow overlay", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
-            OutlinedButton(onClick = onStopBackground, modifier = Modifier.height(48.dp), shape = NB.ChipShape,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Danger),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NB.Danger.copy(alpha = 0.6f))) { Text("Stop", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            if (scanningEnabled) {
+                Button(
+                    onClick = { if (canDrawOverlays) onStartBackground() else onGrantOverlay() },
+                    modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (canDrawOverlays) NB.Safe else NB.Watch, contentColor = Color(0xFF04140D))
+                ) { Text(if (canDrawOverlays) "Run in background" else "Allow overlay", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
+                OutlinedButton(onClick = onStopBackground, modifier = Modifier.height(48.dp), shape = NB.ChipShape,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Danger),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NB.Danger.copy(alpha = 0.6f))) { Text("Stop", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            } else {
+                // Stopped: nothing scans until the user explicitly starts again.
+                Button(onClick = onStartScanning, modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = NB.Safe, contentColor = Color(0xFF04140D))
+                ) { Text("Start scanning", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
+            }
             IconButton(onClick = onShowHistory, modifier = Modifier.size(48.dp).clip(NB.ChipShape).background(Color.White.copy(alpha = 0.06f))) {
                 Icon(Icons.Default.List, contentDescription = "History", tint = NB.Sub)
             }
@@ -481,7 +519,7 @@ fun InitializingOverlay(status: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
             Wordmark()
             Spacer(Modifier.height(28.dp))
-            Text(if (critical) "SOMETHING WENT WRONG" else "WARMING UP THE EYES", color = if (critical) NB.Danger else NB.Sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.4.sp)
+            Text(if (critical) "SOMETHING WENT WRONG" else "GETTING READY", color = if (critical) NB.Danger else NB.Sub, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.4.sp)
             Spacer(Modifier.height(10.dp))
             Text(status, color = if (critical) NB.Danger else NB.Ink, fontSize = 14.sp, textAlign = TextAlign.Center)
             if (!critical) { Spacer(Modifier.height(18.dp)); LinearProgressIndicator(modifier = Modifier.width(180.dp).clip(NB.PillShape), color = NB.Accent, trackColor = NB.Line) }
@@ -502,16 +540,15 @@ fun CameraBlockedOverlay() {
     }
 }
 
-/** NoBonk wordmark: an eye-like mark plus the name. Drawn, not an asset, so it scales anywhere. */
+/** NoBonk wordmark: the approved NoBonk icon (R.drawable.nobonk_brand, same image as the launcher/store icon) plus the name. Formerly a drawn eye-like mark; kept as one composable so it scales anywhere. */
 @Composable
 fun Wordmark(size: Int = 64) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Canvas(Modifier.size(size.dp)) {
-            val r = this.size.minDimension / 2f
-            drawCircle(Brush.linearGradient(listOf(NB.Accent, NB.Accent2)), radius = r, style = Stroke(width = r * 0.22f))
-            drawCircle(NB.Ink, radius = r * 0.34f)
-            drawCircle(NB.Night, radius = r * 0.16f, center = center + Offset(r * 0.1f, -r * 0.08f))
-        }
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(ai.genwhy.nobonk.R.drawable.nobonk_brand),
+            contentDescription = null,
+            modifier = Modifier.size(size.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape((size * 0.22f).dp))
+        )
         Column {
             Text("NoBonk", color = NB.Ink, fontSize = (size * 0.5f).sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp)
             Text("look up, not down", color = NB.Sub, fontSize = (size * 0.19f).sp, letterSpacing = 1.sp)
@@ -525,13 +562,23 @@ fun Wordmark(size: Int = 64) {
 fun CameraPreview(
     modifier: Modifier = Modifier,
     onFrameAnalyzed: (androidx.camera.core.ImageProxy) -> Unit,
-    onCameraBound: (androidx.camera.core.CameraInfo) -> Unit = {}
+    onCameraBound: (androidx.camera.core.CameraInfo) -> Unit = {},
+    onError: (String) -> Unit = {}
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val providerRef = remember { java.util.concurrent.atomic.AtomicReference<ProcessCameraProvider?>(null) }
+    val ownedUseCases = remember { java.util.concurrent.atomic.AtomicReference<List<androidx.camera.core.UseCase>>(emptyList()) }
+    val disposed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
     DisposableEffect(Unit) {
-        onDispose { cameraExecutor.shutdown() }
+        onDispose {
+            // Leaving the preview (Stop, screen change): no late callback may bind, and we release
+            // only the use cases THIS preview owns (a newly started background service keeps its own).
+            disposed.set(true)
+            try { val p = providerRef.get(); val u = ownedUseCases.get(); if (p != null && u.isNotEmpty()) p.unbind(*u.toTypedArray()) } catch (_: Exception) {}
+            cameraExecutor.shutdown()
+        }
     }
 
     AndroidView(modifier = modifier, factory = { ctx ->
@@ -540,8 +587,10 @@ fun CameraPreview(
         // Bind after layout so the PreviewView can hand us its ViewPort: Preview and
         // ImageAnalysis then share one field of view (same crop), which is what makes the
         // normalized detection boxes line up with the FILL_CENTER preview on tall screens.
-        cameraProviderFuture.addListener({ previewView.post {
+        cameraProviderFuture.addListener({ if (disposed.get()) return@addListener; previewView.post {
+            if (disposed.get()) return@post   // disposed between provider resolution and layout
             val cameraProvider = cameraProviderFuture.get()
+            providerRef.set(cameraProvider)
             val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -556,9 +605,27 @@ fun CameraPreview(
                 ).build()
                 val group = androidx.camera.core.UseCaseGroup.Builder().setViewPort(viewPort).addUseCase(preview).addUseCase(imageAnalysis).build()
                 val cam = cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, group)
+                ownedUseCases.set(listOf(preview, imageAnalysis))
+                if (disposed.get()) { cameraProvider.unbind(preview, imageAnalysis); return@post }   // disposed during bind
                 onCameraBound(cam.cameraInfo)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { ai.genwhy.nobonk.util.Dbg.e("CameraPreview", "Camera bind failed", e); onError("Camera unavailable. Check camera access, then tap Start scanning.") }
         } }, ContextCompat.getMainExecutor(ctx))
         previewView
     })
+}
+
+
+@Composable
+fun CameraPermissionScreen(onRetry: () -> Unit, onSettings: () -> Unit, onExit: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(NB.Night).safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Wordmark(48)
+        Spacer(Modifier.height(24.dp))
+        Text("Camera access is off", color = NB.Ink, style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(12.dp))
+        Text("NoBonk needs the rear camera to scan. Frames stay on your phone. You can allow access now, or open Settings if Android no longer shows the permission prompt.", color = NB.Sub, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onRetry) { Text("Allow camera") }
+        TextButton(onClick = onSettings) { Text("Open app settings") }
+        TextButton(onClick = onExit) { Text("Not now") }
+    }
 }

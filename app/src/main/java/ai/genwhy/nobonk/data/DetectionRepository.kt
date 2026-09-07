@@ -5,17 +5,13 @@ import androidx.security.crypto.MasterKey
 import ai.genwhy.nobonk.util.Dbg
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.DataInputStream
-import java.io.EOFException
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.security.KeyStore
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 /**
@@ -23,7 +19,7 @@ import kotlin.concurrent.write
  *
  * ## Encrypted at rest (SEC-N02 / T-SEC-ENCRYPT)
  * Every record is independently AES-256-GCM encrypted before it touches disk, using a
- * hardware-backed key held in the Android Keystore (created + managed via
+ * Keystore-backed key held in the Android Keystore (created + managed via
  * `androidx.security.crypto`'s [MasterKey]). The file `detection_events.enc` is therefore
  * unreadable at rest — GPS-geotagged events are no longer plaintext JSON.
  *
@@ -49,17 +45,13 @@ class DetectionRepository(context: Context) {
     private val file: File = File(appContext.filesDir, "detection_events.enc")
     // Pre-round-2 plaintext store. It held GPS-geotagged events in the clear — the exact
     // thing SEC-N02 / T-SEC-ENCRYPT set out to fix. On upgrade we migrate its records into
-    // the encrypted log and then securely erase it, so nothing is silently lost AND no
-    // plaintext GPS lingers on disk.
+    // the encrypted log and then remove it after a successful migration. Flash storage cannot guarantee secure erasure.
     private val legacyFile: File = File(appContext.filesDir, "detection_events.json")
     private val lock = ReentrantReadWriteLock()
 
     // Authoritative in-memory copy (decrypted once, lazily). addEvent appends in O(1).
     private var cache: MutableList<DetectionEvent>? = null
 
-    init {
-        migrateLegacyPlaintext()
-    }
 
     companion object {
         private const val TAG = "DetectionRepository"
@@ -72,7 +64,7 @@ class DetectionRepository(context: Context) {
     // ── Keystore-backed AES-256-GCM key (via androidx.security MasterKey) ─────────
 
     private val secretKey: SecretKey by lazy {
-        // Building the MasterKey creates (or reuses) the hardware-backed AES-GCM key in the
+        // Building the MasterKey creates (or reuses) the Keystore-managed AES-GCM key in the
         // AndroidKeyStore under DEFAULT_MASTER_KEY_ALIAS; we then load the SecretKey to run
         // our own per-record AEAD.
         MasterKey.Builder(appContext)
@@ -81,6 +73,8 @@ class DetectionRepository(context: Context) {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         ks.getKey(MasterKey.DEFAULT_MASTER_KEY_ALIAS, null) as SecretKey
     }
+
+    init { migrateLegacyPlaintext() } // all property delegates must exist before migration uses them
 
     private fun encryptRecord(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -106,31 +100,30 @@ class DetectionRepository(context: Context) {
     // ── Write ────────────────────────────────────────────────────────────────
 
     /** Appends a single [DetectionEvent] — one encrypted record, one append, no rewrite. */
-    fun addEvent(event: DetectionEvent) {
-        lock.write {
+    fun addEvent(event: DetectionEvent): Boolean {
+        return lock.write {
             try {
                 val list = loadCacheLocked()
-                list.add(event)
                 appendRecord(event)
+                list.add(event)
                 // Trimming is the only full rewrite, and it happens at most once per
-                // MAX_EVENTS additions — amortised O(1).
+                // 500 additions after reaching the cap — amortised O(1).
                 if (list.size > MAX_EVENTS) {
-                    val trimmed = ArrayList(list.subList(list.size - MAX_EVENTS, list.size))
-                    cache = trimmed
+                    val trimmed = ArrayList(list.subList(list.size - (MAX_EVENTS - 500), list.size))
                     rewriteAllLocked(trimmed)
+                    cache = trimmed
                 }
+                true
             } catch (e: Exception) {
                 Dbg.e(TAG, "Failed to persist event: ${e.message}")
+                false
             }
         }
     }
 
     private fun appendRecord(event: DetectionEvent) {
         val rec = encryptRecord(event.toJson().toString().toByteArray(Charsets.UTF_8))
-        FileOutputStream(file, /* append = */ true).use { out ->
-            out.write(lengthPrefix(rec.size))
-            out.write(rec)
-        }
+        FramedLog.append(file, rec)
     }
 
     private fun rewriteAllLocked(events: List<DetectionEvent>) {
@@ -142,18 +135,14 @@ class DetectionRepository(context: Context) {
                 out.write(rec)
             }
         }
-        if (!tmp.renameTo(file)) {
-            // renameTo can fail across some filesystems — fall back to copy+delete.
-            file.delete()
-            tmp.copyTo(file, overwrite = true)
-            tmp.delete()
-        }
+        // Same-directory replacement is atomic. Never delete the original on a failed rename.
+        if (!tmp.renameTo(file)) throw java.io.IOException("Could not replace history")
     }
 
     // ── Read ─────────────────────────────────────────────────────────────────
 
     /** Returns ALL stored events in chronological order (oldest first). */
-    fun getAllEvents(): List<DetectionEvent> = lock.read {
+    fun getAllEvents(): List<DetectionEvent> = lock.write {
         ArrayList(loadCacheLocked())
     }
 
@@ -177,46 +166,39 @@ class DetectionRepository(context: Context) {
 
     /** Clears all stored history. */
     fun clearAll() = lock.write {
+        if (file.exists() && !file.delete()) throw java.io.IOException("History deletion failed")
+        val tmp = File(file.parentFile, "${file.name}.tmp")
+        if (tmp.exists() && !tmp.delete()) throw java.io.IOException("Temporary history deletion failed")
         cache = mutableListOf()
-        try { file.delete() } catch (e: Exception) { Dbg.e(TAG, "Clear failed: ${e.message}") }
     }
 
     // ── Legacy plaintext migration (SEC-N02 upgrade path) ──────────────────────
 
-    /**
-     * One-shot upgrade: if the old plaintext `detection_events.json` exists, re-encrypt each
-     * record into the append log, then **securely erase** the plaintext file. The erase runs
-     * even if parsing fails, so a corrupt/partial legacy file's geotagged contents never
-     * linger. Idempotent (the file is gone afterwards) and safe on a fresh install (no-op).
-     */
+    /** Encrypt the legacy store before deleting it; failures preserve the source for retry. */
     private fun migrateLegacyPlaintext() {
         if (!legacyFile.exists()) return
         lock.write {
             if (!legacyFile.exists()) return@write
-            try {
-                val text = legacyFile.readText().trim()
-                if (text.isNotEmpty()) {
-                    val arr = JSONArray(text)
-                    val list = loadCacheLocked()
-                    for (i in 0 until arr.length()) {
-                        try {
-                            val ev = DetectionEvent.fromJson(arr.getJSONObject(i))
-                            list.add(ev)
-                            appendRecord(ev)
-                        } catch (e: Exception) {
-                            // Skip an unparseable legacy record; keep migrating the rest.
-                        }
-                    }
+            val list = loadCacheLocked().toMutableList()
+            val known = list.map { it.id }.toMutableSet()
+            val text = legacyFile.readText().trim()
+            if (text.isNotEmpty()) {
+                val arr = JSONArray(text)
+                for (i in 0 until arr.length()) {
+                    val event = DetectionEvent.fromJson(arr.getJSONObject(i))
+                    if (known.add(event.id)) list.add(event)
                 }
-            } catch (e: Exception) {
-                Dbg.e(TAG, "Legacy migration failed (erasing plaintext anyway): ${e.message}")
-            } finally {
-                secureDeleteLegacy()
             }
+            // Migration is transactional: retain the private legacy source if encryption
+            // or replacement fails, and deduplicate by id when retried.
+            val retained = list.takeLast(MAX_EVENTS)
+            rewriteAllLocked(retained)
+            cache = retained.toMutableList()
+            secureDeleteLegacy()
         }
     }
 
-    /** Overwrite the plaintext file with zeros, flush, then delete — no plaintext GPS left. */
+    /** Best-effort overwrite and deletion; flash wear levelling prevents an erase guarantee. */
     private fun secureDeleteLegacy() {
         try {
             if (!legacyFile.exists()) return
@@ -247,25 +229,16 @@ class DetectionRepository(context: Context) {
         cache?.let { return it }
         val list = mutableListOf<DetectionEvent>()
         if (file.exists()) {
-            try {
-                DataInputStream(FileInputStream(file)).use { din ->
-                    while (true) {
-                        val len = try { din.readInt() } catch (eof: EOFException) { break }
-                        if (len <= 0 || len > 1_000_000) break   // guard against corruption
-                        val rec = ByteArray(len)
-                        din.readFully(rec)
-                        try {
-                            val json = JSONObject(String(decryptRecord(rec), Charsets.UTF_8))
-                            list.add(DetectionEvent.fromJson(json))
-                        } catch (e: Exception) {
-                            // Skip a single corrupt/undecryptable record; keep the rest.
-                        }
-                    }
+            for (rec in FramedLog.readAndRepair(file)) {
+                try {
+                    val json = JSONObject(String(decryptRecord(rec), Charsets.UTF_8))
+                    list.add(DetectionEvent.fromJson(json))
+                } catch (e: Exception) {
+                    Dbg.w(TAG, "Skipping an unreadable history record")
                 }
-            } catch (e: Exception) {
-                Dbg.e(TAG, "Failed to load events: ${e.message}")
             }
         }
+
         cache = list
         return list
     }

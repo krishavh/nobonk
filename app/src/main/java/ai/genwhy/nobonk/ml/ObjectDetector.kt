@@ -1,6 +1,5 @@
 package ai.genwhy.nobonk.ml
 
-import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
@@ -33,7 +32,15 @@ class ObjectDetector(
     val skipNms: Boolean = false
 ) {
     private val ortEnvironment = OrtEnvironment.getEnvironment()
-    private val ortSession: OrtSession
+    private val preparedModel: PreparedModel
+
+    /** A benchmark candidate already owns the same reusable buffers used for real frames. */
+    private class PreparedModel(
+        val session: OrtSession, val size: Int, val input: FloatBuffer, val runner: OrtFloatRunner
+    ) : AutoCloseable {
+        fun infer() = runner.run { _, _ -> Unit }
+        override fun close() { try { runner.close() } finally { session.close() } }
+    }
 
     /**
      * The execution provider actually verified to run inference (via a warm-up pass):
@@ -43,13 +50,6 @@ class ObjectDetector(
     var activeExecutionProvider: String = "CPU"
         private set
 
-    /**
-     * True ONLY when inference is verified to run on a hardware accelerator (NNAPI).
-     * XNNPACK is a CPU provider, so it does NOT count as hardware acceleration — this
-     * keeps the UI "NPU" chip honest (fixes the false-NPU concern in T-PERF-INFER).
-     */
-    val isHardwareAccelerated: Boolean get() = activeExecutionProvider == "NNAPI"
-
     private val confidenceThreshold = 0.40f
     private val iouThreshold = 0.45f
 
@@ -58,94 +58,77 @@ class ObjectDetector(
     // Pre-allocated per-frame buffers — sized after inputSize is resolved.
     private val pixels: IntArray
     private val floatBuffer: FloatBuffer
+    private val inference: OrtFloatRunner
     // Reused letterbox input bitmap (avoids a per-frame ARGB allocation).
     private var lbBitmap: Bitmap? = null
     private val lbPaint = Paint().apply { isFilterBitmap = true; isAntiAlias = true }
 
     companion object {
         private const val TAG = "ObjectDetector"
-        /** Timed inferences per execution provider at load (after one warm-up). */
-        private const val BENCH_RUNS = 3
-
-        /** COCO class ids we actually map to a display name — scanning only these
-         *  (instead of all 80) shortens the per-box post-processing loop ~10× (PERF-P04). */
-        private val RELEVANT_CLASS_IDS = intArrayOf(0, 1, 2, 3, 5, 7, 16, 17)
 
         /** COCO id → display name. Only the classes we care about for a walker are named. */
-        fun classNameFor(classId: Int): String = when (classId) {
-            0 -> "person"
-            1 -> "bicycle"
-            2 -> "car"
-            3 -> "motorcycle"
-            5 -> "bus"
-            7 -> "truck"
-            16 -> "dog"
-            17 -> "cat"
-            else -> "object"
-        }
+        fun classNameFor(classId: Int): String = CocoRawHeadDecoder.classNameFor(classId)
     }
 
     init {
         val modelBytes = context.assets.open(modelName).use { it.readBytes() }
 
-        // Try execution providers in order of preference. Each candidate is not just
-        // *configured* but actually *verified* with a warm-up inference before we claim
-        // it — so the reported EP (and the "NPU" chip) reflects reality, never intent.
-        //   1. NNAPI    — device accelerator (NPU/GPU/DSP), best-effort.
-        //   2. XNNPACK  — optimized CPU kernels (reliable everywhere on ARM).
-        //   3. CPU      — plain reference kernels (always works).
-        // Build every provider that can run the graph, time each one for a few
-        // inferences, and keep the fastest (XNNPACK unless an accelerator clearly wins —
-        // see EpChooser). Losers are closed immediately.
-        data class Candidate(val session: OrtSession, val dim: Int, val medianMs: Double)
-        val candidates = LinkedHashMap<String, Candidate>()
-        val eps = if (android.os.Build.VERSION.SDK_INT >= 35) listOf("XNNPACK", "NNAPI", "CPU") else listOf("NNAPI", "XNNPACK", "CPU")
-        for (ep in eps) {
-            try {
-                val opts = OrtSession.SessionOptions().apply {
-                    setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        // Cache a verified measured choice, not a hardware assumption. Invalidate after
+        // model/app/runtime/OS changes; a failed cached warm-up triggers benchmarking.
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val modelHash = digest.digest(modelBytes).joinToString("") { "%02x".format(it) }
+        val identity = "$modelHash|${android.os.Build.FINGERPRINT}|${ortEnvironment.version}|${ai.genwhy.nobonk.BuildConfig.VERSION_CODE}|ep-v2"
+        val key = digest.digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
+        val prefs = context.getSharedPreferences("nobonk_execution", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val cached = if (ProviderSelection.validCache(prefs.getLong("$key.time", 0), now)) prefs.getString(key, null) else null
+        val choice = ProviderSelection.select(
+            providers = listOf("XNNPACK", "NNAPI", "CPU"), cached = cached,
+            create = { ep ->
+                OrtSession.SessionOptions().use { options ->
+                    options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                     when (ep) {
-                        "NNAPI"   -> { setIntraOpNumThreads(4); addNnapi() }
-                        // XNNPACK manages its own threadpool — force a single ORT
-                        // intra-op thread and hand the worker count to the provider.
-                        "XNNPACK" -> { setIntraOpNumThreads(1); addXnnpack(mapOf("intra_op_num_threads" to "4")) }
-                        else      -> { setIntraOpNumThreads(4) }
+                        "NNAPI" -> {
+                            options.setIntraOpNumThreads(4)
+                            // Avoid NNAPI's slow CPU reference implementation. ORT can
+                            // still execute unsupported graph nodes on CPU; NNAPI != NPU.
+                            options.addNnapi(java.util.EnumSet.of(ai.onnxruntime.providers.NNAPIFlags.CPU_DISABLED))
+                        }
+                        "XNNPACK" -> { options.setIntraOpNumThreads(1); options.addXnnpack(mapOf("intra_op_num_threads" to "4")) }
+                        else -> options.setIntraOpNumThreads(4)
+                    }
+                    val session = ortEnvironment.createSession(modelBytes, options)
+                    try {
+                        val size = readInputSize(session, modelName, requestedInputSize)
+                        val input = java.nio.ByteBuffer.allocateDirect(4 * 3 * size * size)
+                            .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+                        PreparedModel(session, size, input, OrtFloatRunner(ortEnvironment, session, input,
+                            longArrayOf(1, 3, size.toLong(), size.toLong())))
+                    } catch (failure: Exception) {
+                        session.close()
+                        throw failure
                     }
                 }
-                val candidate = ortEnvironment.createSession(modelBytes, opts)
-                val dim = readInputSize(candidate, modelName, requestedInputSize)
-                warmUp(candidate, dim)   // throws if this EP can't actually run the graph
-                val samples = ArrayList<Double>(BENCH_RUNS)
-                repeat(BENCH_RUNS) {
-                    val t0 = System.nanoTime(); warmUp(candidate, dim); samples += (System.nanoTime() - t0) / 1e6
-                }
-                val med = EpChooser.median(samples)
-                Dbg.i(TAG, "EP '$ep' runs $modelName @ ${dim}px: median ${"%.1f".format(med)} ms")
-                candidates[ep] = Candidate(candidate, dim, med)
-            } catch (e: Exception) {
-                Dbg.w(TAG, "EP '$ep' unavailable — skipping. Reason: ${e.message}")
+            },
+            verify = { it.infer() },
+            measure = {
+                val t0 = System.nanoTime()
+                it.infer()
+                (System.nanoTime() - t0) / 1e6
             }
-        }
-        val winner = EpChooser.pick(candidates.mapValues { it.value.medianMs })
-        var built: OrtSession? = null
-        var builtEp = "CPU"
-        var resolvedInput = requestedInputSize
-        for ((ep, c) in candidates) {
-            if (ep == winner) { built = c.session; builtEp = ep; resolvedInput = c.dim } else c.session.close()
-        }
-        if (winner != null) Dbg.i(TAG, "Execution provider chosen by measurement: $winner for $modelName")
-        ortSession = built ?: ortEnvironment.createSession(
-            modelBytes,
-            OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }
         )
-        activeExecutionProvider = if (built != null) builtEp else "CPU"
-        inputSize = resolvedInput
+        preparedModel = choice.resource
+        activeExecutionProvider = choice.name
+        inputSize = preparedModel.size
+        if (!choice.cached) prefs.edit().putString(key, choice.name).putLong("$key.time", now).apply()
+        Dbg.i(TAG, "Execution provider: ${choice.name} (${if (choice.cached) "cached + verified" else "measured"}) for $modelName")
 
         pixels = IntArray(inputSize * inputSize)
-        floatBuffer = FloatBuffer.allocate(3 * inputSize * inputSize)
+        floatBuffer = preparedModel.input
+        inference = preparedModel.runner
 
         val family = if (skipNms) "YOLO26 end-to-end (NMS-free)" else "YOLO26 raw head + in-app NMS"
-        Dbg.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider | HW accel: $isHardwareAccelerated")
+        Dbg.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider")
     }
 
     private fun readInputSize(session: OrtSession, modelName: String, requested: Int): Int = try {
@@ -160,16 +143,6 @@ class ObjectDetector(
         requested
     }
 
-    /** Runs one dummy inference so we only claim an EP that genuinely executes the graph. */
-    private fun warmUp(session: OrtSession, dim: Int) {
-        val buf = FloatBuffer.allocate(3 * dim * dim)
-        val shape = longArrayOf(1, 3, dim.toLong(), dim.toLong())
-        val name = session.inputNames.iterator().next()
-        OnnxTensor.createTensor(ortEnvironment, buf, shape).use { t ->
-            session.run(mapOf(name to t)).use { /* discard */ }
-        }
-    }
-
     /**
      * Run detection on a full-frame bitmap (any aspect ratio). Boxes are returned in the
      * ORIGINAL frame's normalized coordinates (0‥1), already letterbox-corrected + NMS'd.
@@ -178,33 +151,27 @@ class ObjectDetector(
         return try {
             val t = Letterbox.compute(bitmap.width, bitmap.height, inputSize)
             val input = letterbox(bitmap, t)
-            val floatBuffer = preprocessImage(input)
-            val shape = longArrayOf(1, 3, inputSize.toLong(), inputSize.toLong())
-            val inputName = ortSession.inputNames.iterator().next()
+            preprocessImage(input)
+            inference.run { rawOutput, shape ->
+                require(shape.size == 3 && shape[0] == 1L) { "Expected a batch-one YOLO output" }
+                val dim2 = shape[1].toInt()
+                val dim3 = shape[2].toInt()
+                val isYolo26Format = dim3 == 6 && dim2 > dim3
 
-            OnnxTensor.createTensor(ortEnvironment, floatBuffer, shape).use { inputTensor ->
-                ortSession.run(mapOf(inputName to inputTensor)).use { results ->
-                    @Suppress("UNCHECKED_CAST")
-                    val rawOutput = results[0].value as Array<Array<FloatArray>>
-                    val dim2 = rawOutput[0].size
-                    val dim3 = rawOutput[0][0].size
-                    val isYolo26Format = dim3 == 6 && dim2 > dim3
-
-                    val detections = if (isYolo26Format) {
-                        parseYolo26(rawOutput, t)
-                    } else {
-                        val isStandard = dim2 < dim3
-                        val numChannels = if (isStandard) dim2 else dim3
-                        val numClasses = (numChannels - 4).coerceAtLeast(1)
-                        parseAllObjects(rawOutput, isStandard, numClasses, t)
-                    }
-
-                    if (skipNms || isYolo26Format) detections else Nms.apply(detections, iouThreshold)
+                val detections = if (isYolo26Format) {
+                    parseYolo26(rawOutput, dim2, t)
+                } else {
+                    val isStandard = dim2 < dim3
+                    val numChannels = if (isStandard) dim2 else dim3
+                    val numClasses = (numChannels - 4).coerceAtLeast(1)
+                    parseAllObjects(rawOutput, isStandard, numClasses, if (isStandard) dim3 else dim2, t)
                 }
+
+                if (skipNms || isYolo26Format) detections else Nms.apply(detections, iouThreshold)
             }
         } catch (e: Exception) {
             Dbg.e(TAG, "Detection error: ${e.message}", e)
-            emptyList()
+            throw e // an inference failure is not an empty, successfully scanned scene
         }
     }
 
@@ -239,40 +206,19 @@ class ObjectDetector(
     // ── Parsers (return boxes in ORIGINAL normalized coords) ────────────────────
 
     private fun parseAllObjects(
-        output: Array<Array<FloatArray>>, isStandard: Boolean, numClasses: Int, t: Letterbox.Transform
-    ): List<Detection> {
-        val detections = mutableListOf<Detection>()
-        val numBoxes = if (isStandard) output[0][0].size else output[0].size
-        for (i in 0 until numBoxes) {
-            var maxScore = 0f
-            var classId = -1
-            // Only score the handful of COCO classes we display, not all ~80.
-            for (c in RELEVANT_CLASS_IDS) {
-                if (c >= numClasses) continue
-                val score = if (isStandard) output[0][4 + c][i] else output[0][i][4 + c]
-                if (score > maxScore) { maxScore = score; classId = c }
-            }
-            if (maxScore >= confidenceThreshold) {
-                val xc = if (isStandard) output[0][0][i] else output[0][i][0]
-                val yc = if (isStandard) output[0][1][i] else output[0][i][1]
-                val w  = if (isStandard) output[0][2][i] else output[0][i][2]
-                val h  = if (isStandard) output[0][3][i] else output[0][i][3]
-                // center/size in model px → corner px → inverse-map to original normalized
-                val box = Letterbox.boxToOriginalNorm(xc - w / 2f, yc - h / 2f, xc + w / 2f, yc + h / 2f, t)
-                detections.add(makeDetection(box, maxScore, classId))
-            }
-        }
-        return detections
+        output: FloatBuffer, isStandard: Boolean, numClasses: Int, numBoxes: Int, t: Letterbox.Transform
+    ): List<Detection> = CocoRawHeadDecoder.decode(output, isStandard, numClasses, numBoxes, t, confidenceThreshold) { box, name ->
+        estimateDistance(box.height, box.width, name)
     }
 
-    private fun parseYolo26(output: Array<Array<FloatArray>>, t: Letterbox.Transform): List<Detection> {
+    private fun parseYolo26(output: FloatBuffer, numBoxes: Int, t: Letterbox.Transform): List<Detection> {
         val detections = mutableListOf<Detection>()
-        for (i in output[0].indices) {
-            val row = output[0][i]
-            val confidence = row[4]
+        for (i in 0 until numBoxes) {
+            val row = i * 6
+            val confidence = output.get(row + 4)
             if (confidence < confidenceThreshold) continue
-            val classId = row[5].toInt()
-            val box = Letterbox.boxToOriginalNorm(row[0], row[1], row[2], row[3], t)
+            val classId = output.get(row + 5).toInt()
+            val box = Letterbox.boxToOriginalNorm(output.get(row), output.get(row + 1), output.get(row + 2), output.get(row + 3), t)
             detections.add(makeDetection(box, confidence, classId))
         }
         return detections
@@ -319,7 +265,6 @@ class ObjectDetector(
 
     fun close() {
         lbBitmap?.recycle(); lbBitmap = null
-        ortSession.close()
-        ortEnvironment.close()
+        try { preparedModel.close() } finally { ortEnvironment.close() }
     }
 }

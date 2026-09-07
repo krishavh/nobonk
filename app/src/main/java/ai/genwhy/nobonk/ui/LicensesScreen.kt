@@ -39,7 +39,7 @@ private const val PRIVACY_URL = "krishavh.github.io/privacy/nobonk.html"
 
 /** About, credits and open-source licenses. Reached from History → "About". */
 @Composable
-fun LicensesScreen(onBack: () -> Unit) {
+fun LicensesScreen(onBack: () -> Unit, updateStatus: String = "", onCheckUpdates: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(NB.Night).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = NB.Accent) }
@@ -95,6 +95,17 @@ fun LicensesScreen(onBack: () -> Unit) {
         }
 
         Spacer(Modifier.height(10.dp))
+        SectionLabel("Updates")
+        Spacer(Modifier.height(8.dp))
+        Card {
+            Text("Updates come from Google Play. When NoBonk checks for one, the Play Store — not NoBonk — looks at your device details and installed version to decide whether an update exists; Google handles that data under its own policy. Camera frames, alerts and history never leave this phone and are never part of an update check.", color = NB.Sub, fontSize = 13.sp, lineHeight = 19.sp)
+            if (onCheckUpdates != null) {
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedButton(onClick = onCheckUpdates, shape = NB.ChipShape, colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = NB.Accent)) { Text("Check for updates", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                if (updateStatus.isNotEmpty()) Text(updateStatus, color = NB.Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
+        Spacer(Modifier.height(22.dp))
         SectionLabel("Source & privacy")
         Spacer(Modifier.height(8.dp))
         Card {

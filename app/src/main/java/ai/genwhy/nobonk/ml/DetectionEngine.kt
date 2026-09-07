@@ -24,6 +24,8 @@ import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.model.Detection
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * THE single detection pipeline (fixes audit PERF-U01 / the whole "two diverged
@@ -48,7 +50,11 @@ class DetectionEngine(private val appContext: Context) {
         val includeNonPerson: Boolean,
         val soundEnabled: Boolean = true,
         val hapticsEnabled: Boolean = true,
-        val voiceEnabled: Boolean = false
+        val voiceEnabled: Boolean = false,
+        val sessionToken: Int = 0,
+        /** Evaluated immediately before any cue is emitted: the caller's per-frame validity (session
+         *  generation / service lifecycle). A frame whose session ended during inference emits nothing. */
+        val cuesAllowed: () -> Boolean = { true }
     )
 
     data class Result(
@@ -75,7 +81,7 @@ class DetectionEngine(private val appContext: Context) {
         val stationaryMs: Long = 0L
     )
 
-    private val approachTracker = ApproachTracker()
+    private val approachTracker = ApproachTracker(clock = { android.os.SystemClock.elapsedRealtime() })
     private val frameAnalyzer = FrameAnalyzer()
 
     // Phone-angle monitor now lives in the ENGINE, so the background DetectionService
@@ -95,7 +101,6 @@ class DetectionEngine(private val appContext: Context) {
     }
 
     private var objectDetector: ObjectDetector? = null
-    val isHardwareAccelerated: Boolean get() = objectDetector?.isHardwareAccelerated ?: false
     /** The verified active execution provider ("NNAPI" | "XNNPACK" | "CPU"). */
     val executionProvider: String get() = objectDetector?.activeExecutionProvider ?: "CPU"
     val inputSize: Int get() = objectDetector?.inputSize ?: 416
@@ -120,6 +125,7 @@ class DetectionEngine(private val appContext: Context) {
     // Alert-level hysteresis (fixes ML-11 flicker): escalate immediately, but hold the
     // level for LINGER_MS before de-escalating so overlay/sound/HUD don't strobe when an
     // object hovers right at a ladder boundary.
+    private var processedSessionToken: Int? = null
     private var heldAlert = AlertLevel.NONE
     private var heldUntil = 0L
     private var heldLabel: String? = null
@@ -130,7 +136,10 @@ class DetectionEngine(private val appContext: Context) {
 
     /** (Re)load the model. Safe to call off the main thread. */
     fun loadModel(modelName: String, inputPx: Int, skipNms: Boolean) {
+        // Caller has drained inference under its owner lock. Release the old graph
+        // before opening candidates so model switching does not double native memory.
         objectDetector?.close()
+        objectDetector = null
         objectDetector = ObjectDetector(appContext, modelName, inputPx, skipNms).also { it.focalNorm = focalNorm }
     }
 
@@ -162,8 +171,7 @@ class DetectionEngine(private val appContext: Context) {
     fun warmUp() {
         val d = objectDetector ?: return
         val dummy = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888)
-        repeat(2) { d.detect(dummy) }
-        dummy.recycle()
+        try { d.detect(dummy) } finally { dummy.recycle() }
     }
 
     /**
@@ -248,11 +256,45 @@ class DetectionEngine(private val appContext: Context) {
      * sound. Returns a [Result] the caller renders however it likes (Compose overlay or
      * WindowManager HUD).
      */
+    /** Set by [halt]: no further processing, cues or speech, even for a frame already in flight. */
+    @Volatile var halted: Boolean = false
+        private set
+
+    /** Reversible: cues/speech suppressed while the foreground session is stopped (results still computed, caller discards). */
+    @Volatile var muted: Boolean = false
+
+    /** Cancel anything currently playing (audio chirp, speech, vibration). Reversible; used by foreground Stop. */
+    fun silence() {
+        audioTrack?.let { t -> runCatching { t.stop() } }
+        tts?.let { t -> runCatching { t.stop() } }
+        vibrator?.let { v -> runCatching { v.cancel() } }
+    }
+
+    /** Stop emitting anything immediately (cues, speech, sensors); [close] releases the rest. */
+    fun halt() {
+        halted = true
+        stopSensors()
+        silence()
+    }
+
     suspend fun process(imageProxy: ImageProxy, config: Config): Result {
+        if (halted) {
+            imageProxy.close()
+            return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
+        }
+        if (processedSessionToken != config.sessionToken) {
+            // Executed under the caller's native-work ownership, after any old frame
+            // drains. A rapid Stop/Start must not inherit its alert linger or tracks.
+            processedSessionToken = config.sessionToken
+            approachTracker.reset(); boxSmoother.reset(); highMute.reset()
+            heldAlert = AlertLevel.NONE; heldUntil = 0; heldLabel = null
+            lastAnyCueTime = 0; lastSpokenAt = 0; lastMeanBrightness = 128f
+        }
         val detector = objectDetector
         val work = try {
             val raw = proxyToRawBitmap(imageProxy)
-            toUprightWork(raw, imageProxy.imageInfo.rotationDegrees, imageProxy.cropRect)
+            try { toUprightWork(raw, imageProxy.imageInfo.rotationDegrees, imageProxy.cropRect) }
+            finally { if (raw !== rawBitmap) raw.recycle() }
         } finally {
             imageProxy.close()
         }
@@ -311,7 +353,7 @@ class DetectionEngine(private val appContext: Context) {
             .maxByOrNull { AlertPolicy.fillFraction(it.boundingBox, it.className) }
 
         // ── Alert-level linger ──
-        val now = System.currentTimeMillis()
+        val now = android.os.SystemClock.elapsedRealtime()
         if (rawHighest.ordinal >= heldAlert.ordinal) {
             heldAlert = rawHighest
             if (rawHighest != AlertLevel.NONE) { heldLabel = topDet?.className; heldUntil = now + lingerMs }
@@ -342,15 +384,19 @@ class DetectionEngine(private val appContext: Context) {
 
         // ── Shared feedback (identical in both modes), driven by the debounced level ──
         val pan = topDet?.let { AlertCue.panFor(it.boundingBox.centerX) }
-        if (displayAlert != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(displayAlert)
-        // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
-        // The cue is panned toward the object so a left-side hazard is heard on the left.
-        if (config.soundEnabled && !suppressSound && displayAlert.ordinal >= AlertLevel.MEDIUM.ordinal) {
-            playAlertCue(displayAlert, pan ?: 0f)
+        // Cues are emitted on the main thread so they serialize with Stop/silence (also main-thread):
+        // the validity checks run INSIDE that block, so no cue can start after a Stop was applied.
+        val label = heldLabel
+        val suppressed = withContext(Dispatchers.Main.immediate) {
+            if (halted || muted || !config.cuesAllowed()) return@withContext true
+            if (displayAlert != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(displayAlert)
+            // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
+            // The cue is panned toward the object so a left-side hazard is heard on the left.
+            if (config.soundEnabled && !suppressSound && displayAlert.ordinal >= AlertLevel.MEDIUM.ordinal) playAlertCue(displayAlert, pan ?: 0f)
+            if (config.voiceEnabled && !suppressSound && displayAlert == AlertLevel.HIGH) speak(VoiceCue.phrase(displayAlert, label, AlertCue.sideFor(pan)))
+            false
         }
-        if (config.voiceEnabled && !suppressSound && displayAlert == AlertLevel.HIGH) {
-            speak(VoiceCue.phrase(displayAlert, heldLabel, AlertCue.sideFor(pan)))
-        }
+        if (suppressed) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
 
         val lookUpLabel = if (displayAlert == AlertLevel.HIGH && !suppressVisual) heldLabel else null
         val hud = buildHud(
@@ -395,7 +441,7 @@ class DetectionEngine(private val appContext: Context) {
             }
             "⚠️ LOOK UP!  $label${if (closing) " (closing)" else ""}"
         }
-        wall   -> "🧱 WALL AHEAD — LOOK UP NOW"
+        wall   -> "🧱 POSSIBLE OBSTACLE — LOOK UP"
         ground -> "⚠️ WATCH YOUR STEP!"
         lowLight -> "🔅 LOW LIGHT — reduced reliability"
         else   -> null
@@ -433,7 +479,7 @@ class DetectionEngine(private val appContext: Context) {
     // ── Shared haptics + sound (de-duplicated from VM + Service) ──
     private fun handleHaptics(level: AlertLevel) {
         val vib = vibrator ?: return
-        val now = System.currentTimeMillis()
+        val now = android.os.SystemClock.elapsedRealtime()
         val interval = when (level) {
             AlertLevel.LOW -> 600L; AlertLevel.MEDIUM -> 300L; AlertLevel.HIGH -> 100L
             else -> return
@@ -470,7 +516,7 @@ class DetectionEngine(private val appContext: Context) {
      * over music at a sensible volume without hijacking the alarm stream.
      */
     private fun playAlertCue(level: AlertLevel, pan: Float) {
-        val now = System.currentTimeMillis()
+        val now = android.os.SystemClock.elapsedRealtime()
         if (now - (lastCueTime[level] ?: 0L) < AlertCue.repeatIntervalMs(level)) return
         if (now - lastAnyCueTime < 400L && level != AlertLevel.HIGH) return
         val pcm = AlertCue.pcm(level, pan) ?: return
@@ -533,7 +579,7 @@ class DetectionEngine(private val appContext: Context) {
     /** Lazily create the TTS engine (first HIGH with voice on), then speak [text] once per [VoiceCue.REPEAT_MS]. */
     private fun speak(text: String?) {
         text ?: return
-        val now = System.currentTimeMillis()
+        val now = android.os.SystemClock.elapsedRealtime()
         if (now - lastSpokenAt < VoiceCue.REPEAT_MS) return
         if (tts == null) prepareVoice()
         val engine = tts ?: return

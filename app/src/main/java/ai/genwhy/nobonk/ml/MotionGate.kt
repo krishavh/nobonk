@@ -19,7 +19,7 @@ class MotionGate(
     private var haveSample = false
     private var lastMotionAt = Long.MIN_VALUE
 
-    fun push(magnitude: Float, nowMs: Long) {
+    @Synchronized fun push(magnitude: Float, nowMs: Long) {
         if (!magnitude.isFinite()) return
         if (!haveSample) { gravityEstimate = magnitude; haveSample = true; lastMotionAt = nowMs; return }
         val dev = abs(magnitude - gravityEstimate)
@@ -28,7 +28,7 @@ class MotionGate(
     }
 
     /** Milliseconds since the last motion; 0 when unknown or moving. */
-    fun stationaryMs(nowMs: Long): Long = if (!haveSample) 0L else (nowMs - lastMotionAt).coerceAtLeast(0L)
+    @Synchronized fun stationaryMs(nowMs: Long): Long = if (!haveSample) 0L else (nowMs - lastMotionAt).coerceAtLeast(0L)
 
-    fun reset() { haveSample = false; lastMotionAt = Long.MIN_VALUE; gravityEstimate = 9.81f }
+    @Synchronized fun reset() { haveSample = false; lastMotionAt = Long.MIN_VALUE; gravityEstimate = 9.81f }
 }

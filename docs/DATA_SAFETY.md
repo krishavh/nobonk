@@ -47,6 +47,7 @@ internal note so the answers stay defensible if reviewed:
 | Approximate/coarse location (optional, off by default) | No — on-device only | No |
 | Settings (alert distance, model, cue toggles) in app-private SharedPreferences | No — on-device only | No |
 | Motion-sensor readings (phone angle, walking/still) in memory | No — never stored | No |
+| Google Play in-app update check (Play Store processes device/version data under Google's policy; nothing of NoBonk's is sent) | Performed by Play, not by NoBonk | No (Play's own disclosure) |
 | Alert phrase handed to the phone's own text-to-speech engine (voice cue, off by default) | No — local IPC to the system TTS engine; no personal data in the phrase | No |
 
 ---

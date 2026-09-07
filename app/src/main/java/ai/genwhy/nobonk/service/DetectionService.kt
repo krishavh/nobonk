@@ -1,6 +1,5 @@
 package ai.genwhy.nobonk.service
 
-import android.animation.ObjectAnimator
 import android.app.*
 import android.content.Context
 import android.content.Intent
@@ -9,7 +8,6 @@ import android.graphics.PixelFormat
 import android.os.*
 import ai.genwhy.nobonk.util.Dbg
 import android.view.*
-import android.view.animation.LinearInterpolator
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -22,8 +20,11 @@ import ai.genwhy.nobonk.MainActivity
 import ai.genwhy.nobonk.R
 import ai.genwhy.nobonk.ml.DetectionEngine
 import ai.genwhy.nobonk.ml.FrameCadence
+import ai.genwhy.nobonk.ml.BatteryMonitor
 import ai.genwhy.nobonk.model.AlertLevel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
@@ -39,21 +40,24 @@ import java.util.concurrent.atomic.AtomicBoolean
 class DetectionService : LifecycleService() {
 
     private var engine: DetectionEngine? = null
+    private lateinit var batteryMonitor: BatteryMonitor
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     private var distanceThreshold = 2.0f
     // Round-2: vehicles/bikes/obstacles ON by default (the marketing promises them, and
     // TTC gating now makes them safe to surface). The intent extra still overrides.
     private var includeNonPerson = true
-    private var modelFile = "yolo26s_416.onnx"
+    private var modelFile = "yolo26n_416.onnx"
     private var inputPx = 416
-    private var skipNms = true
+    private var skipNms = false
     private var soundEnabled = true
     private var hapticsEnabled = true
     private var voiceEnabled = false
 
     // FPS cap + single-flight gate (fixes PERF-C03: no unbounded background inference).
     private val gate = AtomicBoolean(false)
+    /** Engine awaiting release while a frame is in flight; whoever clears it last (frame finally / shutdown) closes it. */
+    private val pendingRelease = java.util.concurrent.atomic.AtomicReference<DetectionEngine?>(null)
     private var lastProcessTime = 0L
     @Volatile private var cadenceAlert = AlertLevel.NONE
     @Volatile private var cadenceHadDetections = false
@@ -64,10 +68,16 @@ class DetectionService : LifecycleService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var windowManager: WindowManager
     private var hudView: View? = null
-    private var scanningView: View? = null
+    private var edge: EdgeIndicator? = null
     /** Small always-available 'Open NoBonk' pill (top-end) shown for the whole background session. */
     private var returnView: View? = null
-    private var knightRiderAnimator: ObjectAnimator? = null
+    private var hudMessage: String? = null
+    private var lastNotificationContent: String? = null
+    /** Every async step asks this before proceeding; Stop flips it once, from any phase. */
+    private val life = ServiceLifecycle()
+    private var startupJob: Job? = null
+    private var cameraProvider: ProcessCameraProvider? = null
+    private var analysis: ImageAnalysis? = null
 
     companion object {
         private const val CHANNEL_ID = "DetectionServiceChannel"
@@ -84,93 +94,104 @@ class DetectionService : LifecycleService() {
         const val EXTRA_SOUND = "extra_sound"
         const val EXTRA_HAPTICS = "extra_haptics"
         const val EXTRA_VOICE = "extra_voice"
+        /** ACTION_STOP extra: "user" (default; app Stop button / notification) or "handoff" (activity taking the camera back). */
+        const val EXTRA_STOP_REASON = "extra_stop_reason"
+        const val STOP_REASON_USER = "user"
+        const val STOP_REASON_HANDOFF = "handoff"
     }
 
     override fun onCreate() {
         super.onCreate()
+        batteryMonitor = BatteryMonitor(this).also { it.start() }
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        intent?.let {
-            distanceThreshold = it.getFloatExtra(EXTRA_THRESHOLD, distanceThreshold)
-            includeNonPerson = it.getBooleanExtra(EXTRA_INCLUDE_NONPERSON, includeNonPerson)
-            modelFile = it.getStringExtra(EXTRA_MODEL) ?: modelFile
-            inputPx = it.getIntExtra(EXTRA_INPUT_PX, inputPx)
-            skipNms = it.getBooleanExtra(EXTRA_SKIP_NMS, skipNms)
-            soundEnabled = it.getBooleanExtra(EXTRA_SOUND, soundEnabled)
-            hapticsEnabled = it.getBooleanExtra(EXTRA_HAPTICS, hapticsEnabled)
-            voiceEnabled = it.getBooleanExtra(EXTRA_VOICE, voiceEnabled)
-        }
         when (intent?.action) {
-            ACTION_STOP -> stopSelf()
+            ACTION_STOP -> {
+                val reason = if (intent.getStringExtra(EXTRA_STOP_REASON) == STOP_REASON_HANDOFF) ServiceLifecycle.StopReason.HANDOFF else ServiceLifecycle.StopReason.USER
+                shutdown(reason)
+                return START_NOT_STICKY
+            }
             else -> {
+                if (!life.onStartRequested()) {
+                    if (life.isStopped) { stopSelf(); return START_NOT_STICKY }
+                    return START_STICKY // already loading/running; keep its single engine and settings
+                }
+                intent?.let {
+                    distanceThreshold = it.getFloatExtra(EXTRA_THRESHOLD, distanceThreshold)
+                    includeNonPerson = it.getBooleanExtra(EXTRA_INCLUDE_NONPERSON, includeNonPerson)
+                    modelFile = it.getStringExtra(EXTRA_MODEL) ?: modelFile
+                    inputPx = it.getIntExtra(EXTRA_INPUT_PX, inputPx)
+                    skipNms = it.getBooleanExtra(EXTRA_SKIP_NMS, skipNms)
+                    soundEnabled = it.getBooleanExtra(EXTRA_SOUND, soundEnabled)
+                    hapticsEnabled = it.getBooleanExtra(EXTRA_HAPTICS, hapticsEnabled)
+                    voiceEnabled = it.getBooleanExtra(EXTRA_VOICE, voiceEnabled)
+                }
                 // Defensive: never run detection for an install that has not acknowledged the
                 // current safety notice (the UI gate is the first line, this is the second).
                 val ack = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
                 val explicit = intent != null   // null = sticky restart after a process kill
                 if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack, explicitStart = explicit)) { Dbg.w(TAG, "start refused: safety gate not cleared (explicit=$explicit)"); stopSelf(); return START_NOT_STICKY }
-                startForegroundService()   // ACTION_START or null (restarted)
-                ai.genwhy.nobonk.safety.SessionState.gate.onServiceStarted()
+                try {
+                    startForegroundService()
+                    ai.genwhy.nobonk.safety.SessionState.gate.onServiceStarted()
+                } catch (e: Exception) {
+                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background camera could not start. Check camera access and try again."
+                    android.widget.Toast.makeText(this, "NoBonk could not start. Open the app to retry.", android.widget.Toast.LENGTH_LONG).show()
+                    shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                    return START_NOT_STICKY
+                }
             }
         }
-        return START_STICKY
+        return if (life.sticky()) START_STICKY else START_NOT_STICKY
     }
 
     private fun startForegroundService() {
-        val notification = createNotification("Watching your path · tap to open")
+        val notification = createNotification("Preparing camera · tap to open")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        showScanningIndicator()
+        showEdgeIndicator()
         showReturnControl()
 
-        lifecycleScope.launch(Dispatchers.Default) {
-            try {
-                engine = DetectionEngine(this@DetectionService).also {
-                    it.loadModel(modelFile, inputPx, skipNms)
-                    if (voiceEnabled) it.prepareVoice()
-                    it.startSensors()   // background angle gating (was never wired before)
-                }
+        startupJob = lifecycleScope.launch(Dispatchers.Default) {
+            val eng = try {
+                DetectionEngine(this@DetectionService).also { it.loadModel(modelFile, inputPx, skipNms) }
             } catch (e: Exception) {
                 Dbg.e(TAG, "Model load failed: ${e.message}", e)
+                withContext(Dispatchers.Main + NonCancellable) {
+                    if (!life.isStopped) {
+                        ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection could not load its model. Tap Start scanning to retry."
+                        shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                    }
+                }
                 return@launch
             }
-            kotlinx.coroutines.delay(400)   // let the activity release the camera first
-            withContext(Dispatchers.Main) { startCamera() }
-        }
-    }
-
-    private fun showScanningIndicator() {
-        if (scanningView != null) return
-        val density = resources.displayMetrics.density
-        val heightPx = (8 * density).toInt()
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, heightPx,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP; y = 0 }
-        try {
-            scanningView = LayoutInflater.from(this).inflate(R.layout.layout_scanning_indicator, null)
-            val line = scanningView!!.findViewById<View>(R.id.scanningLine)
-            windowManager.addView(scanningView, params)
-            knightRiderAnimator = ObjectAnimator.ofFloat(line, "alpha", 0.4f, 1.0f).apply {
-                duration = 800
-                repeatCount = ObjectAnimator.INFINITE
-                repeatMode = ObjectAnimator.REVERSE
-                interpolator = LinearInterpolator()
-                start()
+            // Engine ownership is confined to the main thread. Adoption is NonCancellable so a Stop
+            // that races the load can never orphan a loaded engine: either shutdown() already ran
+            // (onModelLoaded → false → close here) or it sees `engine` set and releases it.
+            withContext(Dispatchers.Main + NonCancellable) {
+                if (!life.onModelLoaded()) { eng.close(); return@withContext }
+                engine = eng
+                if (voiceEnabled) eng.prepareVoice()
+                eng.startSensors()   // background angle gating
             }
-        } catch (e: Exception) {
-            Dbg.e(TAG, "Failed to show scanning indicator", e)
+            if (life.isStopped) return@launch
+            kotlinx.coroutines.delay(400)   // let the activity release the camera first
+            withContext(Dispatchers.Main) { if (life.mayBindCamera()) startCamera() }
         }
     }
 
+    /** Slim static screen-edge indicator (replaces the wide top scan bar). Colour follows the alert level. */
+    private fun showEdgeIndicator() {
+        if (edge != null) return
+        edge = EdgeIndicator(this, windowManager).also { it.show(AlertLevel.NONE, cameraBlocked = false) }
+    }
     /** Top inset (status bar + display cutout) in px, so overlay windows never sit under the clock. */
     private fun topInsetPx(): Int = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -239,72 +260,97 @@ class DetectionService : LifecycleService() {
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                .build()
-                .also { it.setAnalyzer(cameraExecutor) { proxy -> processFrame(proxy) } }
+            if (!life.mayBindCamera()) return@addListener   // Stop arrived while the provider was resolving
             try {
-                cameraProvider.unbindAll()
-                val cam = cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis)
+                val provider = cameraProviderFuture.get()
+                cameraProvider = provider
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                    .build()
+                    .also { it.setAnalyzer(cameraExecutor) { proxy -> processFrame(proxy) } }
+                analysis = imageAnalysis
+                provider.unbindAll()
+                val cam = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis)
                 engine?.attachCamera(cam.cameraInfo)
+                life.onCameraBound()
+                updateNotification("Watching your path · tap to open")
             } catch (e: Exception) {
                 Dbg.e(TAG, "Camera binding failed", e)
+                ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background camera unavailable. Check camera access, then try again."
+                shutdown(ServiceLifecycle.StopReason.HANDOFF)
             }
         }, ContextCompat.getMainExecutor(this))
     }
 
     private fun processFrame(imageProxy: ImageProxy) {
+        if (!life.mayProcessFrames()) { imageProxy.close(); return }
         val eng = engine ?: run { imageProxy.close(); return }
-        val now = System.currentTimeMillis()
-        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryPct(), cadenceBlocked, cadenceStationaryMs)
+        val now = android.os.SystemClock.elapsedRealtime()
+        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryMonitor.level, cadenceBlocked, cadenceStationaryMs)
         if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!gate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
 
-        lifecycleScope.launch(Dispatchers.Default) {
+        // ATOMIC: the body always runs (and so does `finally`) even if the scope is cancelled first —
+        // otherwise a cancelled launch would leave the single-flight gate held forever.
+        lifecycleScope.launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.ATOMIC) {
             try {
-                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled)
+                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled, cuesAllowed = { life.mayPostAlerts() })
                 val result = eng.process(imageProxy, cfg)   // closes imageProxy, fires haptics+sound
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()
                 cadenceBlocked = result.cameraBlocked
                 cadenceStationaryMs = result.stationaryMs
-                if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
-                mainHandler.post { updateHud(result.hudMessage) }
-                if (result.highestAlert != AlertLevel.NONE) {
-                    val n = result.detections.size
-                    updateNotification("${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · $n object${if (n == 1) "" else "s"} in view")
+                if (cadenceHadDetections) lastSeenAt = android.os.SystemClock.elapsedRealtime()
+                // A frame that was in flight when Stop arrived must not re-create the HUD or re-post
+                // the notification from a stopped service (this was the visible "Stop didn't work").
+                // All publication (HUD, edge colour, notification) happens in ONE main-thread block with
+                // the lifecycle check inside it, so it serializes with shutdown() (also main-thread): a
+                // Stop that lands first removes this post or makes the check fail; nothing is re-posted.
+                mainHandler.post {
+                    if (!life.mayPostAlerts()) return@post
+                    updateHud(result.hudMessage); edge?.setLevel(result.highestAlert, result.cameraBlocked)
+                    if (result.highestAlert != AlertLevel.NONE) {
+                        val n = result.detections.size
+                        updateNotification("${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · $n object${if (n == 1) "" else "s"} in view")
+                    } else updateNotification(if (result.cameraBlocked) "Camera blocked · tap to open" else "Watching your path · tap to open")
                 }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 Dbg.e(TAG, "Frame processing error: ${e.message}", e)
+                withContext(Dispatchers.Main + NonCancellable) {
+                    if (!life.isStopped) {
+                        ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection was interrupted. Open NoBonk to retry."
+                        shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                    }
+                }
             } finally {
                 gate.set(false)
+                pendingRelease.getAndSet(null)?.let { runCatching { it.close() } }   // deferred release after Stop
             }
         }
     }
 
-    /** Cheap sticky-intent battery read for the cadence policy (no receiver needed). */
-    private fun batteryPct(): Int = try {
-        val i = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
-        val level = i?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale = i?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
-        if (level >= 0 && scale > 0) level * 100 / scale else 100
-    } catch (_: Exception) { 100 }
-
     private fun updateHud(message: String?) {
+        if (message != null && !life.mayPostAlerts()) return
+        hudMessage = message
         if (message != null) {
             if (hudView == null) {
                 val params = WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
+                    (resources.displayMetrics.widthPixels - 32 * resources.displayMetrics.density).toInt().coerceAtLeast(1),
                     WindowManager.LayoutParams.WRAP_CONTENT,
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                     PixelFormat.TRANSLUCENT
-                ).apply { gravity = Gravity.TOP; y = topInsetPx() + (8 * resources.displayMetrics.density).toInt() }
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                    y = topInsetPx() + (68 * resources.displayMetrics.density).toInt()
+                    alpha = 0.75f // no overlap with the edge strips or Open NoBonk pill
+                }
                 try {
                     hudView = LayoutInflater.from(this).inflate(R.layout.layout_collision_warning, null)
                     windowManager.addView(hudView, params)
@@ -349,6 +395,8 @@ class DetectionService : LifecycleService() {
     }
 
     private fun updateNotification(content: String) {
+        if (!life.mayPostAlerts() || content == lastNotificationContent) return
+        lastNotificationContent = content
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, createNotification(content))
     }
@@ -360,17 +408,60 @@ class DetectionService : LifecycleService() {
         }
     }
 
+    /**
+     * The one Stop path (ACTION_STOP from the app or the notification, bind failure, onDestroy).
+     * Idempotent. Order matters: flip the lifecycle first so nothing queued can post anything,
+     * then silence the engine, release the camera, tear down UI, drop the notification.
+     */
+    private fun shutdown(reason: ServiceLifecycle.StopReason) {
+        val first = !life.isStopped
+        life.stop(reason)
+        if (!first) return
+        batteryMonitor.close()
+        startupJob?.cancel(); startupJob = null
+        val eng = engine; engine = null
+        eng?.halt()   // no further cues/speech/vibration/sensors, even for a frame already in flight
+        try { analysis?.let { cameraProvider?.unbind(it) } } catch (_: Exception) {}   // only OUR use case — never a foreground preview
+        try { analysis?.clearAnalyzer() } catch (_: Exception) {}
+        analysis = null
+        mainHandler.removeCallbacksAndMessages(null)
+        hudView?.let { v -> try { windowManager.removeView(v) } catch (_: Exception) {} }; hudView = null
+        removeReturnControl()
+        edge?.hide(); edge = null
+        releaseEngineWhenIdle(eng)
+        try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
+        try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_: Exception) {}
+        if (life.stoppedByUser) ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = true
+        ai.genwhy.nobonk.safety.SessionState.gate.onServiceStopped()
+        stopSelf()
+    }
+
+    /**
+     * Never close the ONNX session under an in-flight inference: the frame coroutine holds the
+     * single-flight [gate] while it runs, so release is deferred to whoever finishes last.
+     */
+    private fun releaseEngineWhenIdle(eng: DetectionEngine?) {
+        eng ?: return
+        // Ownership hand-off, no timeout: park the engine, then if no frame holds the gate, take it
+        // back and close it; if a frame does, its `finally` (ATOMIC start guarantees it runs) closes it.
+        // getAndSet makes exactly one party the closer.
+        pendingRelease.set(eng)
+        if (!gate.get()) pendingRelease.getAndSet(null)?.let { runCatching { it.close() } }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (!life.isStopped) {
+            edge?.relayout()
+            removeReturnControl(); showReturnControl()
+            val message = hudMessage
+            updateHud(null); updateHud(message)
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        ai.genwhy.nobonk.safety.SessionState.gate.onServiceStopped()
-        knightRiderAnimator?.cancel()
-        updateHud(null)
-        removeReturnControl()
-        if (scanningView != null) {
-            try { windowManager.removeView(scanningView) } catch (_: Exception) {}
-            scanningView = null
-        }
-        engine?.close()
+        shutdown(life.stopReason ?: ServiceLifecycle.StopReason.HANDOFF)
         cameraExecutor.shutdown()
     }
 }

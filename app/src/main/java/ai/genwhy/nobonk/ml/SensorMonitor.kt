@@ -31,8 +31,8 @@ import android.hardware.SensorManager
  *
  * Thread-safety: [onSensorChanged] is invoked on the main thread (the listener
  * is registered with [SensorManager.SENSOR_DELAY_UI]), so the mutable pitch
- * state is confined to that thread and needs no synchronization. [start] and
- * [stop] are also expected to be called from the main thread.
+ * updates originate on Main; the inference worker reads the volatile pitch and synchronized
+ * motion snapshot. [start] and [stop] are expected to be called from Main.
  */
 class SensorMonitor(context: Context) : SensorEventListener {
 
@@ -55,7 +55,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
     private val accelSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     val motion = MotionGate()
     /** Milliseconds the phone has been held still; 0 = moving or unknown. */
-    fun stationaryMs(nowMs: Long = System.currentTimeMillis()): Long = motion.stationaryMs(nowMs)
+    fun stationaryMs(nowMs: Long = android.os.SystemClock.elapsedRealtime()): Long = motion.stationaryMs(nowMs)
 
     /**
      * Camera pitch in degrees, clamped to [-90, 90].
@@ -64,7 +64,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
      * misbehaving driver (NaN/Inf components, degenerate vectors) are ignored
      * rather than propagated.
      */
-    var cameraPitchDegrees: Float = 0f
+    @Volatile var cameraPitchDegrees: Float = 0f
         private set
 
     /**
@@ -124,6 +124,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
     /** Unregisters this monitor; safe to call multiple times, even without a prior [start]. */
     fun stop() {
         sensorManager?.unregisterListener(this)
+        motion.reset()
     }
 
     // ── SensorEventListener ─────────────────────────────────────
@@ -143,7 +144,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         val values = event?.values?.takeIf { it.size >= AXIS_COUNT } ?: return
         if (event.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
             val x = values[0]; val y = values[1]; val z = values[2]
-            motion.push(kotlin.math.sqrt(x * x + y * y + z * z), System.currentTimeMillis())
+            motion.push(kotlin.math.sqrt(x * x + y * y + z * z), android.os.SystemClock.elapsedRealtime())
             if (gravitySensor?.type != Sensor.TYPE_ACCELEROMETER) return   // pitch comes from the gravity sensor
         }
 

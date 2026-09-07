@@ -418,7 +418,7 @@ private fun HourlyChart(hourly: IntArray, peakHour: Int) {
         Column(Modifier.padding(16.dp)) {
             if (peakHour >= 0) {
                 Text(
-                    "Peak danger: ${AnalyticsEngine.formatHour(peakHour)}",
+                    "Most alerts: ${AnalyticsEngine.formatHour(peakHour)}",
                     color = Orange,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
