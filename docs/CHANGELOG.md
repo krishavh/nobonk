@@ -32,6 +32,13 @@ Physical-device camera timing, accuracy, thermal behavior and Google Play instal
 
 # Changelog
 
+## 1.0.14 (version code 15) — 2026-09-07
+
+- Stop and model replacement now cancel remaining startup provider probes between native calls.
+- A new Start owns its loading state; an older cancelled job cannot reset it.
+- Ready models remain reusable after Stop/Start. No provider preference, model, permission or detection-threshold changes.
+- Validation and native-call limits: [startup cancellation review](STARTUP_CANCELLATION_REVIEW_2026-09-07.md).
+
 ## 1.0.10 (versionCode 11) — 2026-09-07 reliable Stop · edge indicator · Play update suggestion
 - **Slim screen-edge indicator replaces the top scan bar in background mode.** Four 3 dp non-touchable strips just inside the status-bar/cutout and gesture-bar insets; static (no animation) — calm mint while watching, amber on MEDIUM, red on HIGH, grey when the camera is blocked (`service/EdgeIndicatorPolicy.kt`, tested). The Open NoBonk pill and the notification Stop are unchanged; the red warning text still appears for HIGH.
 - **Google Play flexible in-app update suggestion** (app-update-ktx 2.1.0). A quiet check runs when the app resumes with the gate cleared; a dismissible *Update available* / *Update downloaded* card is shown **only while nothing is scanning** (never over the safety gate, never during foreground or background scanning). *Later* snoozes for a day and remembers the dismissed version; declined/failed flows are quiet; a downloaded update is applied only by a user tap when idle; no Play (sideload/emulator) means no suggestion. About → *Check for updates* + a plain-language note on what Play processes (`update/UpdatePolicy.kt` tested with fake states; real-device validation is Play-installed builds only).
