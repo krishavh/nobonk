@@ -12,7 +12,7 @@ The alert demo follows `AlertPolicy.kt` at app revision `23a5452db093a8547e63ddd
 
 The website does not access your camera. Its approved phone recordings and screenshots demonstrate the app; Blender illustrations are labeled as concepts. No passwords or signing material are included. Public support uses support@genwhy.ai.
 
-Website source revision: `f975435a75df8b5b8574d9081048322dfb3fbc73`.
+Website source revision: `08f4cd0dc3e53912ae27b33915cb7ce3d28c2723`.
 
 ## Brand consistency
 
