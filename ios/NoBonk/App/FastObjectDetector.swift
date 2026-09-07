@@ -27,7 +27,7 @@ final class FastObjectDetector {
     static let runtimeVersion = "1.24.2"
     static var assetURL: URL? { Bundle.main.url(forResource: "yolo26n_416", withExtension: "onnx", subdirectory: "Models") }
     private let environment: ORTEnv
-    private var session: ORTSession
+    private var session: ORTSession?
     private let inputData: NSMutableData
     private let input: ORTValue
     private let signs = OSSignposter(subsystem: "ai.genwhy.nobonk", category: "FastDetector")
@@ -81,14 +81,14 @@ final class FastObjectDetector {
             session = try makeSession(coreML: false)
             configuration = preferCoreML ? "CPU · Core ML provider unavailable" : "CPU · explicit validation configuration"
         }
-        guard try session.inputNames() == [FastModelContract.inputName],
-              try session.outputNames() == [FastModelContract.outputName] else { throw FastDetectorError.outputContract }
+        guard try session?.inputNames() == [FastModelContract.inputName],
+              try session?.outputNames() == [FastModelContract.outputName] else { throw FastDetectorError.outputContract }
         do { _ = try checkedOutput() }
         catch {
             // A provider can initialize successfully but fail on its first graph run.
             // Retry the SAME verified graph on CPU; never silently change detector scope.
             guard configuration.hasPrefix("Core ML") else { throw error }
-            session = try makeSession(coreML: false)
+            try NativeSessionOwnership.discardAndReplace(&session) { try makeSession(coreML: false) }
             configuration = "CPU · Core ML warm-up unavailable"
             _ = try checkedOutput()
         }
@@ -121,16 +121,21 @@ final class FastObjectDetector {
         let inferred = ProcessInfo.processInfo.systemUptime
         let decode = signs.beginInterval("FastDecode")
         defer { signs.endInterval("FastDecode", decode) }
-        let data = try output.tensorData()
-        let values = UnsafeBufferPointer(start: data.bytes.assumingMemoryBound(to: Float.self), count: data.length / 4)
-        inspectRawOutput?(values)
-        let detections = try FastDecoder.decode(values, shape: [1, 84, 3549], transform: transform)
+        // tensorData is a non-owning view of ORT-allocated memory. Keeping its
+        // NSMutableData wrapper alive does not keep the owning ORTValue alive.
+        let detections = try withExtendedLifetime(output) {
+            let data = try output.tensorData()
+            let values = UnsafeBufferPointer(start: data.bytes.assumingMemoryBound(to: Float.self), count: data.length / 4)
+            inspectRawOutput?(values)
+            return try FastDecoder.decode(values, shape: [1, 84, 3549], transform: transform)
+        }
         let decoded = ProcessInfo.processInfo.systemUptime
         return (detections, DetectorTiming(setupMS: setupMS, preprocessMS: (prepared - started) * 1000,
                                            inferenceMS: (inferred - prepared) * 1000, decodeMS: (decoded - inferred) * 1000,
                                            configuration: configuration))
     }
     private func checkedOutput() throws -> ORTValue {
+        guard let session else { throw FastDetectorError.outputContract }
         let outputs = try session.run(withInputs: [FastModelContract.inputName: input],
                                       outputNames: [FastModelContract.outputName], runOptions: nil)
         guard let output = outputs[FastModelContract.outputName] else { throw FastDetectorError.outputContract }
