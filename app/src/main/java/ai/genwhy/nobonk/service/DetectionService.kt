@@ -20,6 +20,7 @@ import ai.genwhy.nobonk.MainActivity
 import ai.genwhy.nobonk.R
 import ai.genwhy.nobonk.ml.DetectionEngine
 import ai.genwhy.nobonk.ml.FrameCadence
+import ai.genwhy.nobonk.ml.BatteryMonitor
 import ai.genwhy.nobonk.model.AlertLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,6 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class DetectionService : LifecycleService() {
 
     private var engine: DetectionEngine? = null
+    private lateinit var batteryMonitor: BatteryMonitor
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     private var distanceThreshold = 2.0f
@@ -100,22 +102,13 @@ class DetectionService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        batteryMonitor = BatteryMonitor(this).also { it.start() }
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        intent?.let {
-            distanceThreshold = it.getFloatExtra(EXTRA_THRESHOLD, distanceThreshold)
-            includeNonPerson = it.getBooleanExtra(EXTRA_INCLUDE_NONPERSON, includeNonPerson)
-            modelFile = it.getStringExtra(EXTRA_MODEL) ?: modelFile
-            inputPx = it.getIntExtra(EXTRA_INPUT_PX, inputPx)
-            skipNms = it.getBooleanExtra(EXTRA_SKIP_NMS, skipNms)
-            soundEnabled = it.getBooleanExtra(EXTRA_SOUND, soundEnabled)
-            hapticsEnabled = it.getBooleanExtra(EXTRA_HAPTICS, hapticsEnabled)
-            voiceEnabled = it.getBooleanExtra(EXTRA_VOICE, voiceEnabled)
-        }
         when (intent?.action) {
             ACTION_STOP -> {
                 val reason = if (intent.getStringExtra(EXTRA_STOP_REASON) == STOP_REASON_HANDOFF) ServiceLifecycle.StopReason.HANDOFF else ServiceLifecycle.StopReason.USER
@@ -123,7 +116,20 @@ class DetectionService : LifecycleService() {
                 return START_NOT_STICKY
             }
             else -> {
-                if (!life.onStartRequested()) { Dbg.w(TAG, "start refused: this instance is already stopped"); stopSelf(); return START_NOT_STICKY }
+                if (!life.onStartRequested()) {
+                    if (life.isStopped) { stopSelf(); return START_NOT_STICKY }
+                    return START_STICKY // already loading/running; keep its single engine and settings
+                }
+                intent?.let {
+                    distanceThreshold = it.getFloatExtra(EXTRA_THRESHOLD, distanceThreshold)
+                    includeNonPerson = it.getBooleanExtra(EXTRA_INCLUDE_NONPERSON, includeNonPerson)
+                    modelFile = it.getStringExtra(EXTRA_MODEL) ?: modelFile
+                    inputPx = it.getIntExtra(EXTRA_INPUT_PX, inputPx)
+                    skipNms = it.getBooleanExtra(EXTRA_SKIP_NMS, skipNms)
+                    soundEnabled = it.getBooleanExtra(EXTRA_SOUND, soundEnabled)
+                    hapticsEnabled = it.getBooleanExtra(EXTRA_HAPTICS, hapticsEnabled)
+                    voiceEnabled = it.getBooleanExtra(EXTRA_VOICE, voiceEnabled)
+                }
                 // Defensive: never run detection for an install that has not acknowledged the
                 // current safety notice (the UI gate is the first line, this is the second).
                 val ack = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
@@ -158,8 +164,12 @@ class DetectionService : LifecycleService() {
                 DetectionEngine(this@DetectionService).also { it.loadModel(modelFile, inputPx, skipNms) }
             } catch (e: Exception) {
                 Dbg.e(TAG, "Model load failed: ${e.message}", e)
-                ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection could not load its model. Tap Start scanning to retry."
-                withContext(Dispatchers.Main + NonCancellable) { shutdown(ServiceLifecycle.StopReason.HANDOFF) }
+                withContext(Dispatchers.Main + NonCancellable) {
+                    if (!life.isStopped) {
+                        ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection could not load its model. Tap Start scanning to retry."
+                        shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                    }
+                }
                 return@launch
             }
             // Engine ownership is confined to the main thread. Adoption is NonCancellable so a Stop
@@ -276,8 +286,8 @@ class DetectionService : LifecycleService() {
     private fun processFrame(imageProxy: ImageProxy) {
         if (!life.mayProcessFrames()) { imageProxy.close(); return }
         val eng = engine ?: run { imageProxy.close(); return }
-        val now = System.currentTimeMillis()
-        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryPct(), cadenceBlocked, cadenceStationaryMs)
+        val now = android.os.SystemClock.elapsedRealtime()
+        val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryMonitor.level, cadenceBlocked, cadenceStationaryMs)
         if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!gate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
@@ -292,7 +302,7 @@ class DetectionService : LifecycleService() {
                 cadenceHadDetections = result.detections.isNotEmpty()
                 cadenceBlocked = result.cameraBlocked
                 cadenceStationaryMs = result.stationaryMs
-                if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
+                if (cadenceHadDetections) lastSeenAt = android.os.SystemClock.elapsedRealtime()
                 // A frame that was in flight when Stop arrived must not re-create the HUD or re-post
                 // the notification from a stopped service (this was the visible "Stop didn't work").
                 // All publication (HUD, edge colour, notification) happens in ONE main-thread block with
@@ -311,8 +321,10 @@ class DetectionService : LifecycleService() {
             } catch (e: Exception) {
                 Dbg.e(TAG, "Frame processing error: ${e.message}", e)
                 withContext(Dispatchers.Main + NonCancellable) {
-                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection was interrupted. Open NoBonk to retry."
-                    shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                    if (!life.isStopped) {
+                        ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection was interrupted. Open NoBonk to retry."
+                        shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                    }
                 }
             } finally {
                 gate.set(false)
@@ -320,14 +332,6 @@ class DetectionService : LifecycleService() {
             }
         }
     }
-
-    /** Cheap sticky-intent battery read for the cadence policy (no receiver needed). */
-    private fun batteryPct(): Int = try {
-        val i = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
-        val level = i?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale = i?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
-        if (level >= 0 && scale > 0) level * 100 / scale else 100
-    } catch (_: Exception) { 100 }
 
     private fun updateHud(message: String?) {
         if (message != null && !life.mayPostAlerts()) return
@@ -413,6 +417,7 @@ class DetectionService : LifecycleService() {
         val first = !life.isStopped
         life.stop(reason)
         if (!first) return
+        batteryMonitor.close()
         startupJob?.cancel(); startupJob = null
         val eng = engine; engine = null
         eng?.halt()   // no further cues/speech/vibration/sensors, even for a frame already in flight

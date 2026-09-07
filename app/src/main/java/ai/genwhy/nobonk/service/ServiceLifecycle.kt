@@ -22,22 +22,22 @@ class ServiceLifecycle {
 
     val isStopped: Boolean get() = synchronized(this) { phase == Phase.STOPPED }
 
-    /** ACTION_START (or sticky restart) arrived. False = refuse (already stopped on this instance). */
+    /** True exactly once per instance. Duplicate starts must not allocate another native engine. */
     @Synchronized fun onStartRequested(): Boolean {
-        if (isStopped) return false
-        if (phase == Phase.IDLE) phase = Phase.LOADING_MODEL
+        if (phase != Phase.IDLE) return false
+        phase = Phase.LOADING_MODEL
         startedBeforeStop = true
         return true
     }
     /** Model finished loading. False = a Stop arrived meanwhile: release the engine, do NOT bind the camera. */
     @Synchronized fun onModelLoaded(): Boolean {
-        if (isStopped) return false
+        if (phase != Phase.LOADING_MODEL) return false
         phase = Phase.BINDING_CAMERA
         return true
     }
     /** About to bind the camera. False = stopped meanwhile. */
     @Synchronized fun mayBindCamera(): Boolean = phase == Phase.BINDING_CAMERA
-    @Synchronized fun onCameraBound() { if (!isStopped) phase = Phase.RUNNING }
+    @Synchronized fun onCameraBound() { if (phase == Phase.BINDING_CAMERA) phase = Phase.RUNNING }
 
     /** Frames are analysed only while running. */
     @Synchronized fun mayProcessFrames(): Boolean = phase == Phase.RUNNING

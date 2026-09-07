@@ -1,6 +1,8 @@
 package ai.genwhy.nobonk.ml
 
 import java.util.Properties
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,8 +30,18 @@ class CocoRawHeadDecoderTest {
         output[0][4 + classId(name)][index] = score
     }
 
-    private fun decode(output: Array<Array<FloatArray>>, isStandard: Boolean = true) =
-        CocoRawHeadDecoder.decode(output, isStandard, classCount, portrait, 0.40f)
+    private fun decode(output: Array<Array<FloatArray>>, isStandard: Boolean = true): List<ai.genwhy.nobonk.model.Detection> {
+        val reference = CocoRawHeadDecoder.decode(output, isStandard, classCount, portrait, 0.40f)
+        val buffer = ByteBuffer.allocateDirect(output[0].sumOf { it.size } * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer()
+        output[0].forEach { buffer.put(it) }; buffer.rewind()
+        val boxes = if (isStandard) output[0][0].size else output[0].size
+        val actual = CocoRawHeadDecoder.decode(buffer, isStandard, classCount, boxes, portrait, 0.40f)
+        assertEquals(reference.map { Triple(it.classId, it.boundingBox, it.confidence) },
+            actual.map { Triple(it.classId, it.boundingBox, it.confidence) })
+        assertEquals(0, buffer.position()) // frame-to-frame reusable output stays untouched
+        return actual
+    }
 
     @Test fun rawModelClassesSelectOnlyTheIntendedPeopleVehiclesAndAnimals() {
         val output = tensor()

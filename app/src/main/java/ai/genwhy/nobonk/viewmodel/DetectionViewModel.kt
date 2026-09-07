@@ -2,13 +2,10 @@ package ai.genwhy.nobonk.viewmodel
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
-import android.os.BatteryManager
 import android.os.Bundle
 import ai.genwhy.nobonk.util.Dbg
 import androidx.camera.core.ImageProxy
@@ -23,6 +20,8 @@ import ai.genwhy.nobonk.data.SessionSummary
 import ai.genwhy.nobonk.ml.DetectionEngine
 import ai.genwhy.nobonk.ml.FrameCadence
 import ai.genwhy.nobonk.ml.ScanSession
+import ai.genwhy.nobonk.ml.BatteryLevel
+import ai.genwhy.nobonk.ml.BatteryMonitor
 import ai.genwhy.nobonk.ml.SensorMonitor
 import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.model.Detection
@@ -97,26 +96,43 @@ class DetectionViewModel : ViewModel() {
     var scanningEnabled by mutableStateOf(true)
         private set
     /** Generation-tagged session: in-flight frames from before Stop cannot post results, cues or history. */
-    private val session = ScanSession()
+    private val session = ScanSession().also { it.setOwnerAvailable(false) }
+
+    /** DetectionScreen owns foreground work only while resumed and visible past the safety gate. */
+    fun setForegroundActive(active: Boolean) {
+        session.setOwnerAvailable(active)
+        engine?.muted = !session.mayScan
+        if (session.mayScan && modelReady && !isInitializing) engine?.startSensors()
+        else {
+            engine?.silence(); engine?.stopSensors()
+            if (!active) clearScanResult()
+        }
+    }
     fun stopScanning() {
         session.stop()
         engine?.muted = true
         engine?.silence()   // cancel a chirp / speech / vibration already playing
         engine?.stopSensors()   // no accelerometer/gravity sampling while stopped
         scanningEnabled = false
+        clearScanResult()
+        try { locationListener?.let { locationManager?.removeUpdates(it) } } catch (_: Exception) {}
+    }
+
+    private fun clearScanResult() {
         detections = emptyList(); frameAlert = AlertLevel.NONE; lookUpLabel = null; bearingPan = null
         isWallDetected = false; isGroundHazardDetected = false
         isCameraBlocked = false; isLowLight = false; isNightBoost = false
         phoneAngleHint = ""; phoneAngleQuality = SensorMonitor.AngleQuality.OK
         fps = 0f; inferMs = 0; lastResultAt = 0L; fpsEma = 0f
         cadenceAlert = AlertLevel.NONE; cadenceHadDetections = false; cadenceBlocked = false
-        try { locationListener?.let { locationManager?.removeUpdates(it) } } catch (_: Exception) {}
     }
     fun startScanning() {
         if (cleared.get()) return
         cameraError = null
         ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = false   // explicit new session: obsolete stop memory cleared
-        session.start(); engine?.muted = false; engine?.startSensors(); scanningEnabled = true
+        session.start(); scanningEnabled = true
+        engine?.muted = !session.mayScan
+        if (session.mayScan) engine?.startSensors()
         if (locationTaggingEnabled) appContext?.let { enableLocationTagging(it) }
         if (!modelReady && !isInitializing) appContext?.let { requestModel(it, accuracyMode) }
     }
@@ -137,6 +153,22 @@ class DetectionViewModel : ViewModel() {
 
     var batteryLevel by mutableIntStateOf(100)
         private set
+    private var batteryMonitor: BatteryMonitor? = null
+
+    private fun onBatteryLevel(level: Int) {
+        val wasPaused = batteryLevel < BatteryLevel.MIN_SCAN_PERCENT
+        batteryLevel = level
+        val available = level >= BatteryLevel.MIN_SCAN_PERCENT
+        session.setPowerAvailable(available)
+        if (!available) {
+            engine?.muted = true
+            engine?.silence(); engine?.stopSensors()
+            clearScanResult()
+        } else if (wasPaused && session.mayScan && modelReady && !isInitializing) {
+            engine?.muted = false
+            engine?.startSensors()
+        }
+    }
     var isCameraBlocked by mutableStateOf(false)
         private set
 
@@ -236,7 +268,7 @@ class DetectionViewModel : ViewModel() {
     fun testAlert() {
         val eng = engine ?: return
         viewModelScope.launch(Dispatchers.Main.immediate) {   // same cue ownership rule as live cues
-            if (!scanningEnabled) return@launch
+            if (!session.mayScan) return@launch
             eng.previewCue(DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled))
         }
     }
@@ -251,10 +283,7 @@ class DetectionViewModel : ViewModel() {
         initialized = true
         appContext = context.applicationContext
         restoreSettings()
-        val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-        batteryLevel = if (level >= 0 && scale > 0) level * 100 / scale else 100
+        batteryMonitor = BatteryMonitor(context, ::onBatteryLevel).also { it.start() }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 historyMutex.withLock { repository = DetectionRepository(context.applicationContext) }
@@ -294,9 +323,10 @@ class DetectionViewModel : ViewModel() {
                 }
                 if (cleared.get() || request != modelGeneration.get()) return@launch
                 engine?.let { eng ->
-                    eng.muted = !scanningEnabled
                     if (voiceEnabled) eng.prepareVoice()
-                    if (scanningEnabled) { eng.startSensors(); session.start() } else eng.stopSensors()
+                    if (scanningEnabled) session.start()
+                    eng.muted = !session.mayScan
+                    if (session.mayScan) eng.startSensors() else eng.stopSensors()
                     executionProvider = eng.executionProvider
                 }
                 modelReady = true
@@ -412,8 +442,9 @@ class DetectionViewModel : ViewModel() {
 
     private fun logEvent(detection: Detection) {
         val now = System.currentTimeMillis()
-        if (now - (lastEventTime[detection.className] ?: 0L) < EVENT_LOG_DEBOUNCE_MS) return
-        lastEventTime[detection.className] = now
+        val elapsed = android.os.SystemClock.elapsedRealtime()
+        if (elapsed - (lastEventTime[detection.className] ?: 0L) < EVENT_LOG_DEBOUNCE_MS) return
+        lastEventTime[detection.className] = elapsed
         val loc = if (locationTaggingEnabled) lastKnownLocation else null
         val generation = historyGeneration.get()
         val event = DetectionEvent(sessionId = sessionId, timestamp = now, latitude = loc?.latitude,
@@ -433,8 +464,9 @@ class DetectionViewModel : ViewModel() {
     }
 
     fun processFrame(imageProxy: ImageProxy) {
-        if (!scanningEnabled || isInitializing || batteryLevel < 10) { imageProxy.close(); return }
-        val now = System.currentTimeMillis()
+        if (!session.mayScan || isInitializing) { imageProxy.close(); return }
+        // Wall-clock changes must not freeze frame admission or inflate cue cooldowns.
+        val now = android.os.SystemClock.elapsedRealtime()
         val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryLevel, cadenceBlocked, cadenceStationaryMs)
         if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!_processingGate.compareAndSet(false, true)) { imageProxy.close(); return }
@@ -460,7 +492,7 @@ class DetectionViewModel : ViewModel() {
                 cadenceHadDetections = result.detections.isNotEmpty()
                 cadenceBlocked = result.cameraBlocked
                 cadenceStationaryMs = result.stationaryMs
-                if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
+                if (cadenceHadDetections) lastSeenAt = android.os.SystemClock.elapsedRealtime()
 
                 withContext(Dispatchers.Main) {
                     // Re-check at the publication boundary: a Stop queued ahead of us on Main wins.
@@ -478,7 +510,7 @@ class DetectionViewModel : ViewModel() {
                     bearingPan = result.bearingPan
                     isNightBoost = result.nightBoost
                     inferMs = result.inferMs.toInt()
-                    val t = System.currentTimeMillis()
+                    val t = android.os.SystemClock.elapsedRealtime()
                     if (lastResultAt != 0L) {
                         val inst = 1000f / (t - lastResultAt).coerceAtLeast(1L)
                         fpsEma = if (fpsEma == 0f) inst else fpsEma * 0.8f + inst * 0.2f
@@ -511,6 +543,7 @@ class DetectionViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         cleared.set(true); session.stop(); modelGeneration.incrementAndGet()
+        batteryMonitor?.close(); batteryMonitor = null
         engine?.halt()
         // ViewModel scope is cancelled now. A separate bounded cleanup waits for native work to drain.
         CoroutineScope(Dispatchers.Default).launch {

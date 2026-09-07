@@ -3,6 +3,7 @@ package ai.genwhy.nobonk.ml
 import ai.genwhy.nobonk.model.Detection
 import ai.genwhy.nobonk.model.NormBox
 import java.util.UUID
+import java.nio.FloatBuffer
 
 /** Shared class selection and raw YOLO decoding, independent of Android/model loading. */
 internal object CocoRawHeadDecoder {
@@ -24,21 +25,43 @@ internal object CocoRawHeadDecoder {
         confidenceThreshold: Float,
         distanceFor: (NormBox, String) -> Float = { _, _ -> Float.NaN }
     ): List<Detection> {
-        val detections = mutableListOf<Detection>()
         val numBoxes = if (isStandard) output[0][0].size else output[0].size
+        return decodeValues(numBoxes, numClasses, transform, confidenceThreshold, distanceFor) { channel, box ->
+            if (isStandard) output[0][channel][box] else output[0][box][channel]
+        }
+    }
+
+    fun decode(
+        output: FloatBuffer, isStandard: Boolean, numClasses: Int, numBoxes: Int,
+        transform: Letterbox.Transform, confidenceThreshold: Float,
+        distanceFor: (NormBox, String) -> Float = { _, _ -> Float.NaN }
+    ): List<Detection> {
+        val channels = numClasses + 4
+        require(numBoxes > 0 && numClasses > 0 && channels.toLong() * numBoxes <= output.remaining())
+        val offset = output.position()
+        return decodeValues(numBoxes, numClasses, transform, confidenceThreshold, distanceFor) { channel, box ->
+            output.get(offset + if (isStandard) channel * numBoxes + box else box * channels + channel)
+        }
+    }
+
+    private inline fun decodeValues(
+        numBoxes: Int, numClasses: Int, transform: Letterbox.Transform, confidenceThreshold: Float,
+        distanceFor: (NormBox, String) -> Float, value: (Int, Int) -> Float
+    ): List<Detection> {
+        val detections = mutableListOf<Detection>()
         for (i in 0 until numBoxes) {
             var maxScore = 0f
             var classId = -1
             for (c in classIds) {
                 if (c >= numClasses) continue
-                val score = if (isStandard) output[0][4 + c][i] else output[0][i][4 + c]
+                val score = value(4 + c, i)
                 if (score > maxScore) { maxScore = score; classId = c }
             }
             if (maxScore >= confidenceThreshold) {
-                val xc = if (isStandard) output[0][0][i] else output[0][i][0]
-                val yc = if (isStandard) output[0][1][i] else output[0][i][1]
-                val w = if (isStandard) output[0][2][i] else output[0][i][2]
-                val h = if (isStandard) output[0][3][i] else output[0][i][3]
+                val xc = value(0, i)
+                val yc = value(1, i)
+                val w = value(2, i)
+                val h = value(3, i)
                 val box = Letterbox.boxToOriginalNorm(xc - w / 2f, yc - h / 2f, xc + w / 2f, yc + h / 2f, transform)
                 val name = classNameFor(classId)
                 detections.add(Detection(

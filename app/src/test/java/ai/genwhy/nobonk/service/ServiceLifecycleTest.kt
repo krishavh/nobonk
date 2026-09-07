@@ -38,6 +38,26 @@ class ServiceLifecycleTest {
         val l = running(); l.stop(StopReason.USER)
         assertFalse(l.onStartRequested()); assertFalse(l.sticky())
     }
+    @Test fun rapidRepeatedStartsAllocateExactlyOneEngineAcrossAllPhases() {
+        val life = ServiceLifecycle()
+        var enginesStarted = 0
+        fun startCommand() { if (life.onStartRequested()) enginesStarted++ }
+        startCommand(); repeat(10) { startCommand() }
+        assertEquals(Phase.LOADING_MODEL, life.phase)
+        assertTrue(life.onModelLoaded())
+        repeat(10) { startCommand() }
+        assertEquals(Phase.BINDING_CAMERA, life.phase)
+        life.onCameraBound()
+        repeat(10) { startCommand() }
+        assertEquals(Phase.RUNNING, life.phase)
+        assertFalse(life.onModelLoaded()) // a late duplicate cannot reset RUNNING to BINDING
+        assertTrue(life.mayProcessFrames())
+        assertEquals(1, enginesStarted)
+        life.stop(StopReason.USER)
+        startCommand()
+        assertEquals(1, enginesStarted)
+        assertTrue(life.stoppedByUser)
+    }
     @Test fun repeatedStartStopCyclesAreIndependentInstances() {
         repeat(5) { val l = running(); l.stop(if (it % 2 == 0) StopReason.USER else StopReason.HANDOFF); assertTrue(l.isStopped) }
         val fresh = ServiceLifecycle(); assertTrue(fresh.onStartRequested())   // a new service instance starts clean

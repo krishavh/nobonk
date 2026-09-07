@@ -81,7 +81,7 @@ class DetectionEngine(private val appContext: Context) {
         val stationaryMs: Long = 0L
     )
 
-    private val approachTracker = ApproachTracker()
+    private val approachTracker = ApproachTracker(clock = { android.os.SystemClock.elapsedRealtime() })
     private val frameAnalyzer = FrameAnalyzer()
 
     // Phone-angle monitor now lives in the ENGINE, so the background DetectionService
@@ -353,7 +353,7 @@ class DetectionEngine(private val appContext: Context) {
             .maxByOrNull { AlertPolicy.fillFraction(it.boundingBox, it.className) }
 
         // ── Alert-level linger ──
-        val now = System.currentTimeMillis()
+        val now = android.os.SystemClock.elapsedRealtime()
         if (rawHighest.ordinal >= heldAlert.ordinal) {
             heldAlert = rawHighest
             if (rawHighest != AlertLevel.NONE) { heldLabel = topDet?.className; heldUntil = now + lingerMs }
@@ -479,7 +479,7 @@ class DetectionEngine(private val appContext: Context) {
     // ── Shared haptics + sound (de-duplicated from VM + Service) ──
     private fun handleHaptics(level: AlertLevel) {
         val vib = vibrator ?: return
-        val now = System.currentTimeMillis()
+        val now = android.os.SystemClock.elapsedRealtime()
         val interval = when (level) {
             AlertLevel.LOW -> 600L; AlertLevel.MEDIUM -> 300L; AlertLevel.HIGH -> 100L
             else -> return
@@ -516,7 +516,7 @@ class DetectionEngine(private val appContext: Context) {
      * over music at a sensible volume without hijacking the alarm stream.
      */
     private fun playAlertCue(level: AlertLevel, pan: Float) {
-        val now = System.currentTimeMillis()
+        val now = android.os.SystemClock.elapsedRealtime()
         if (now - (lastCueTime[level] ?: 0L) < AlertCue.repeatIntervalMs(level)) return
         if (now - lastAnyCueTime < 400L && level != AlertLevel.HIGH) return
         val pcm = AlertCue.pcm(level, pan) ?: return
@@ -579,7 +579,7 @@ class DetectionEngine(private val appContext: Context) {
     /** Lazily create the TTS engine (first HIGH with voice on), then speak [text] once per [VoiceCue.REPEAT_MS]. */
     private fun speak(text: String?) {
         text ?: return
-        val now = System.currentTimeMillis()
+        val now = android.os.SystemClock.elapsedRealtime()
         if (now - lastSpokenAt < VoiceCue.REPEAT_MS) return
         if (tts == null) prepareVoice()
         val engine = tts ?: return

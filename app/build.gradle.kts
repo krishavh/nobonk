@@ -29,6 +29,7 @@ android {
         targetSdk = 36     // Android 16 — required for new-app submissions (Play API-36 cutoff)
         versionCode = 13
         versionName = "1.0.12"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -143,4 +144,6 @@ dependencies {
 
     // Unit tests (pure-Kotlin safety-core tests under src/test)
     testImplementation(libs.junit)
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }

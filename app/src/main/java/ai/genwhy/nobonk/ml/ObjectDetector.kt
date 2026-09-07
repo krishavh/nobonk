@@ -1,6 +1,5 @@
 package ai.genwhy.nobonk.ml
 
-import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
@@ -33,7 +32,15 @@ class ObjectDetector(
     val skipNms: Boolean = false
 ) {
     private val ortEnvironment = OrtEnvironment.getEnvironment()
-    private val ortSession: OrtSession
+    private val preparedModel: PreparedModel
+
+    /** A benchmark candidate already owns the same reusable buffers used for real frames. */
+    private class PreparedModel(
+        val session: OrtSession, val size: Int, val input: FloatBuffer, val runner: OrtFloatRunner
+    ) : AutoCloseable {
+        fun infer() = runner.run { _, _ -> Unit }
+        override fun close() { try { runner.close() } finally { session.close() } }
+    }
 
     /**
      * The execution provider actually verified to run inference (via a warm-up pass):
@@ -51,6 +58,7 @@ class ObjectDetector(
     // Pre-allocated per-frame buffers — sized after inputSize is resolved.
     private val pixels: IntArray
     private val floatBuffer: FloatBuffer
+    private val inference: OrtFloatRunner
     // Reused letterbox input bitmap (avoids a per-frame ARGB allocation).
     private var lbBitmap: Bitmap? = null
     private val lbPaint = Paint().apply { isFilterBitmap = true; isAntiAlias = true }
@@ -89,24 +97,35 @@ class ObjectDetector(
                         "XNNPACK" -> { options.setIntraOpNumThreads(1); options.addXnnpack(mapOf("intra_op_num_threads" to "4")) }
                         else -> options.setIntraOpNumThreads(4)
                     }
-                    ortEnvironment.createSession(modelBytes, options)
+                    val session = ortEnvironment.createSession(modelBytes, options)
+                    try {
+                        val size = readInputSize(session, modelName, requestedInputSize)
+                        val input = java.nio.ByteBuffer.allocateDirect(4 * 3 * size * size)
+                            .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+                        PreparedModel(session, size, input, OrtFloatRunner(ortEnvironment, session, input,
+                            longArrayOf(1, 3, size.toLong(), size.toLong())))
+                    } catch (failure: Exception) {
+                        session.close()
+                        throw failure
+                    }
                 }
             },
-            verify = { warmUp(it, readInputSize(it, modelName, requestedInputSize)) },
+            verify = { it.infer() },
             measure = {
                 val t0 = System.nanoTime()
-                warmUp(it, readInputSize(it, modelName, requestedInputSize))
+                it.infer()
                 (System.nanoTime() - t0) / 1e6
             }
         )
-        ortSession = choice.resource
+        preparedModel = choice.resource
         activeExecutionProvider = choice.name
-        inputSize = readInputSize(ortSession, modelName, requestedInputSize)
+        inputSize = preparedModel.size
         if (!choice.cached) prefs.edit().putString(key, choice.name).putLong("$key.time", now).apply()
         Dbg.i(TAG, "Execution provider: ${choice.name} (${if (choice.cached) "cached + verified" else "measured"}) for $modelName")
 
         pixels = IntArray(inputSize * inputSize)
-        floatBuffer = java.nio.ByteBuffer.allocateDirect(4 * 3 * inputSize * inputSize).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+        floatBuffer = preparedModel.input
+        inference = preparedModel.runner
 
         val family = if (skipNms) "YOLO26 end-to-end (NMS-free)" else "YOLO26 raw head + in-app NMS"
         Dbg.i(TAG, "Model ready: $modelName | family: $family | input: ${inputSize}px | EP: $activeExecutionProvider")
@@ -124,16 +143,6 @@ class ObjectDetector(
         requested
     }
 
-    /** Runs one dummy inference so we only claim an EP that genuinely executes the graph. */
-    private fun warmUp(session: OrtSession, dim: Int) {
-        val buf = FloatBuffer.allocate(3 * dim * dim)
-        val shape = longArrayOf(1, 3, dim.toLong(), dim.toLong())
-        val name = session.inputNames.iterator().next()
-        OnnxTensor.createTensor(ortEnvironment, buf, shape).use { t ->
-            session.run(mapOf(name to t)).use { /* discard */ }
-        }
-    }
-
     /**
      * Run detection on a full-frame bitmap (any aspect ratio). Boxes are returned in the
      * ORIGINAL frame's normalized coordinates (0‥1), already letterbox-corrected + NMS'd.
@@ -142,29 +151,23 @@ class ObjectDetector(
         return try {
             val t = Letterbox.compute(bitmap.width, bitmap.height, inputSize)
             val input = letterbox(bitmap, t)
-            val floatBuffer = preprocessImage(input)
-            val shape = longArrayOf(1, 3, inputSize.toLong(), inputSize.toLong())
-            val inputName = ortSession.inputNames.iterator().next()
+            preprocessImage(input)
+            inference.run { rawOutput, shape ->
+                require(shape.size == 3 && shape[0] == 1L) { "Expected a batch-one YOLO output" }
+                val dim2 = shape[1].toInt()
+                val dim3 = shape[2].toInt()
+                val isYolo26Format = dim3 == 6 && dim2 > dim3
 
-            OnnxTensor.createTensor(ortEnvironment, floatBuffer, shape).use { inputTensor ->
-                ortSession.run(mapOf(inputName to inputTensor)).use { results ->
-                    @Suppress("UNCHECKED_CAST")
-                    val rawOutput = results[0].value as Array<Array<FloatArray>>
-                    val dim2 = rawOutput[0].size
-                    val dim3 = rawOutput[0][0].size
-                    val isYolo26Format = dim3 == 6 && dim2 > dim3
-
-                    val detections = if (isYolo26Format) {
-                        parseYolo26(rawOutput, t)
-                    } else {
-                        val isStandard = dim2 < dim3
-                        val numChannels = if (isStandard) dim2 else dim3
-                        val numClasses = (numChannels - 4).coerceAtLeast(1)
-                        parseAllObjects(rawOutput, isStandard, numClasses, t)
-                    }
-
-                    if (skipNms || isYolo26Format) detections else Nms.apply(detections, iouThreshold)
+                val detections = if (isYolo26Format) {
+                    parseYolo26(rawOutput, dim2, t)
+                } else {
+                    val isStandard = dim2 < dim3
+                    val numChannels = if (isStandard) dim2 else dim3
+                    val numClasses = (numChannels - 4).coerceAtLeast(1)
+                    parseAllObjects(rawOutput, isStandard, numClasses, if (isStandard) dim3 else dim2, t)
                 }
+
+                if (skipNms || isYolo26Format) detections else Nms.apply(detections, iouThreshold)
             }
         } catch (e: Exception) {
             Dbg.e(TAG, "Detection error: ${e.message}", e)
@@ -203,19 +206,19 @@ class ObjectDetector(
     // ── Parsers (return boxes in ORIGINAL normalized coords) ────────────────────
 
     private fun parseAllObjects(
-        output: Array<Array<FloatArray>>, isStandard: Boolean, numClasses: Int, t: Letterbox.Transform
-    ): List<Detection> = CocoRawHeadDecoder.decode(output, isStandard, numClasses, t, confidenceThreshold) { box, name ->
+        output: FloatBuffer, isStandard: Boolean, numClasses: Int, numBoxes: Int, t: Letterbox.Transform
+    ): List<Detection> = CocoRawHeadDecoder.decode(output, isStandard, numClasses, numBoxes, t, confidenceThreshold) { box, name ->
         estimateDistance(box.height, box.width, name)
     }
 
-    private fun parseYolo26(output: Array<Array<FloatArray>>, t: Letterbox.Transform): List<Detection> {
+    private fun parseYolo26(output: FloatBuffer, numBoxes: Int, t: Letterbox.Transform): List<Detection> {
         val detections = mutableListOf<Detection>()
-        for (i in output[0].indices) {
-            val row = output[0][i]
-            val confidence = row[4]
+        for (i in 0 until numBoxes) {
+            val row = i * 6
+            val confidence = output.get(row + 4)
             if (confidence < confidenceThreshold) continue
-            val classId = row[5].toInt()
-            val box = Letterbox.boxToOriginalNorm(row[0], row[1], row[2], row[3], t)
+            val classId = output.get(row + 5).toInt()
+            val box = Letterbox.boxToOriginalNorm(output.get(row), output.get(row + 1), output.get(row + 2), output.get(row + 3), t)
             detections.add(makeDetection(box, confidence, classId))
         }
         return detections
@@ -262,7 +265,6 @@ class ObjectDetector(
 
     fun close() {
         lbBitmap?.recycle(); lbBitmap = null
-        ortSession.close()
-        ortEnvironment.close()
+        try { preparedModel.close() } finally { ortEnvironment.close() }
     }
 }

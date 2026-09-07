@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -89,10 +91,19 @@ fun DetectionScreen(
     val isLowLight = viewModel.isLowLight
     val executionProvider = viewModel.executionProvider
     val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(viewModel, lifecycle) {
+        val observer = LifecycleEventObserver { _, _ ->
+            viewModel.setForegroundActive(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        }
+        lifecycle.addObserver(observer)
+        viewModel.setForegroundActive(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        onDispose { lifecycle.removeObserver(observer); viewModel.setForegroundActive(false) }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(NB.Night)) {
         // The camera is bound only while scanning; Stop releases it (CameraPreview unbinds on dispose).
-        if (viewModel.scanningEnabled) {
+        if (viewModel.scanningEnabled && batteryLevel >= ai.genwhy.nobonk.ml.BatteryLevel.MIN_SCAN_PERCENT) {
             key(cameraRebindKey) {
                 CameraPreview(modifier = Modifier.fillMaxSize(), onFrameAnalyzed = { viewModel.processFrame(it) }, onCameraBound = { viewModel.onCameraBound(it) }, onError = { viewModel.reportCameraError(it) })
             }
@@ -106,7 +117,7 @@ fun DetectionScreen(
                 batteryLevel = batteryLevel,
                 executionProvider = executionProvider,
                 mode = accuracyMode,
-                live = viewModel.scanningEnabled && !isCameraBlocked && viewModel.cameraError == null,
+                live = viewModel.scanningEnabled && batteryLevel >= ai.genwhy.nobonk.ml.BatteryLevel.MIN_SCAN_PERCENT && !isCameraBlocked && viewModel.cameraError == null,
                 stats = if (viewModel.fps > 0f) String.format(Locale.US, "%.0f fps · %d ms", viewModel.fps, viewModel.inferMs) else null
             )
         }

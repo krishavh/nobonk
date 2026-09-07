@@ -10,6 +10,7 @@ onnxruntime = "1.29.0"
 desugarJdkLibs = "2.1.5"
 securityCrypto = "1.1.0-alpha06"
 junit = "4.13.2"
+androidxTestRunner = "1.7.0"
 
 [libraries]
 androidx-fragment = { group = "androidx.fragment", name = "fragment", version = "1.8.5" }
@@ -43,6 +44,7 @@ androidx-security-crypto = { group = "androidx.security", name = "security-crypt
 
 # Unit testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
