@@ -33,6 +33,7 @@
 		A7231E6292B6AEC689694024 /* DetectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8482C5F050091DBED235E512 /* DetectionPolicy.swift */; };
 		AA14AEEEF4043C859B244A30 /* CuePlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA69C0659000DDE4AFB63D86 /* CuePlayback.swift */; };
 		BA9567C22CCF95B0387CA63E /* OpenNoBonkIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662E23CD886FC9C4858EC556 /* OpenNoBonkIntent.swift */; };
+		C0B78DAFC87E22935813BC36 /* BrowserIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5DF08C002B5E8BD806FC18D /* BrowserIntegrationTests.swift */; };
 		C39DB3C4F312EEC7CC1C2D96 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 582D9E4271DDA6F53D1F54F7 /* main.swift */; };
 		C98B1986F0FC752015E64115 /* NoBonkControls.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E5EA845808027A67BE524E37 /* NoBonkControls.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D1A126B003376428862DCF36 /* NoBonkShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BCB86245317D9626E6EF09 /* NoBonkShortcuts.swift */; };
@@ -105,6 +106,7 @@
 		DBAF85E5999C760C8D1DE3C4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E5EA845808027A67BE524E37 /* NoBonkControls.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = NoBonkControls.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E993C3B18ACF78EDC9B9D9BB /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
+		F5DF08C002B5E8BD806FC18D /* BrowserIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserIntegrationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -158,6 +160,7 @@
 				AD613D09953915605693947D /* QuickAccess */,
 				569E2506714DAA1B04425779 /* QuickAccessTests */,
 				FD81B182408B11E55A445D3F /* RuntimeValidation */,
+				7AFF400DF39394E9BE6FD7BE /* WebKitTests */,
 				8B70E8B000408CBA555940D1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -191,6 +194,14 @@
 				CB35E66848BBD8D5B883E4F3 /* FastDeviceBenchmarkTests.swift */,
 			);
 			path = DeviceBenchmarks;
+			sourceTree = "<group>";
+		};
+		7AFF400DF39394E9BE6FD7BE /* WebKitTests */ = {
+			isa = PBXGroup;
+			children = (
+				F5DF08C002B5E8BD806FC18D /* BrowserIntegrationTests.swift */,
+			);
+			path = WebKitTests;
 			sourceTree = "<group>";
 		};
 		8B70E8B000408CBA555940D1 /* Products */ = {
@@ -428,6 +439,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0B78DAFC87E22935813BC36 /* BrowserIntegrationTests.swift in Sources */,
 				FA857B6FD3642C7051C2D78B /* FastDeviceBenchmarkTests.swift in Sources */,
 				DFF0740B13AE2CD09C0C5CC3 /* QuickAccessTests.swift in Sources */,
 			);

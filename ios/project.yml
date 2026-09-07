@@ -92,6 +92,8 @@ targets:
     platform: iOS
     sources:
       - path: QuickAccessTests
+      - path: WebKitTests
+        excludes: [README.md]
       - path: DeviceBenchmarks
         excludes: [README.md]
       - path: Tests/Fixtures/fast-graph-reference.json
