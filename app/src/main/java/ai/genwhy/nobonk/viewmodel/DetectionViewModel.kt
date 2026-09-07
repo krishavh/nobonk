@@ -97,6 +97,7 @@ class DetectionViewModel : ViewModel() {
     fun stopScanning() {
         session.stop()
         engine?.muted = true
+        engine?.silence()   // cancel a chirp / speech / vibration already playing
         scanningEnabled = false
         detections = emptyList(); frameAlert = AlertLevel.NONE; lookUpLabel = null; bearingPan = null
         isWallDetected = false; isGroundHazardDetected = false
@@ -202,7 +203,8 @@ class DetectionViewModel : ViewModel() {
     /** Play the HIGH cue set once so the user knows what an alert feels like. */
     fun testAlert() {
         val eng = engine ?: return
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.Main.immediate) {   // same cue ownership rule as live cues
+            if (!scanningEnabled) return@launch
             eng.previewCue(DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled))
         }
     }
@@ -392,9 +394,10 @@ class DetectionViewModel : ViewModel() {
         val eng = engine ?: run { imageProxy.close(); _processingGate.set(false); return }
         val gen = session.current()
 
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.ATOMIC) {
             try {
-                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled)
+                // Cues are validated per frame inside the engine (Stop+Start cannot unmute a stale inference).
+                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled, cuesAllowed = { session.isCurrent(gen) })
                 val result = eng.process(imageProxy, cfg)
                 // Stop (or Stop+Start) happened while this frame was in inference: drop everything.
                 if (!session.isCurrent(gen)) return@launch
@@ -404,9 +407,10 @@ class DetectionViewModel : ViewModel() {
                 cadenceStationaryMs = result.stationaryMs
                 if (cadenceHadDetections) lastSeenAt = System.currentTimeMillis()
 
-                for (d in result.detections) if (d.alertLevel != AlertLevel.NONE) logEvent(d)
-
                 withContext(Dispatchers.Main) {
+                    // Re-check at the publication boundary: a Stop queued ahead of us on Main wins.
+                    if (!session.isCurrent(gen)) return@withContext
+                    for (d in result.detections) if (d.alertLevel != AlertLevel.NONE) logEvent(d)   // history commit only for the owned session
                     detections = result.detections
                     frameAlert = result.highestAlert
                     lookUpLabel = result.lookUpLabel

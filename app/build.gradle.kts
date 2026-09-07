@@ -135,6 +135,8 @@ dependencies {
 
     // Encrypted on-device history at rest (Keystore master key + EncryptedFile)
     implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.fragment)   // app-update-ktx transitively pulls an old fragment; ActivityResult APIs need >= 1.3
+    implementation(libs.play.app.update.ktx)   // Google Play flexible in-app updates (Play-installed builds only)
 
     // Core library desugaring runtime (enables java.time etc. down to minSdk)
     coreLibraryDesugaring(libs.desugar.jdk.libs)

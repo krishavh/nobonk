@@ -40,6 +40,59 @@ class MainActivity : ComponentActivity() {
     // (permission dialogs, the overlay-settings screen, starting the background session):
     // those stops are hand-offs, not the user leaving the app.
     private var expectingReturn = false
+
+    // Google Play flexible in-app updates (Play-installed builds only; sideload/emulator → silently none).
+    private var updateCoordinator: ai.genwhy.nobonk.update.UpdateCoordinator? = null
+    private var updateAvailability by mutableStateOf(ai.genwhy.nobonk.update.UpdatePolicy.Availability.UNKNOWN)
+    private var updateVersion by mutableIntStateOf(0)
+    private var updateStatusText by mutableStateOf("")
+    private var updateSnoozedUntil by mutableLongStateOf(0L)   // observable so 'Later' dismisses the card immediately
+    private val updateFlowLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        expectingReturn = false
+        if (r.resultCode != RESULT_OK) snoozeUpdate()   // declined / failed → quiet for a day
+    }
+    private fun updatePrompt(): ai.genwhy.nobonk.update.UpdatePolicy.Prompt {
+        return ai.genwhy.nobonk.update.UpdatePolicy.promptFor(ai.genwhy.nobonk.update.UpdatePolicy.Context(
+            availability = updateAvailability, availableVersionCode = updateVersion,
+            scanning = viewModel.scanningEnabled, backgroundActive = ai.genwhy.nobonk.safety.SessionState.gate.serviceActive,
+            gateCleared = ai.genwhy.nobonk.safety.SessionState.gate.cameraAllowed(ackVersion) && noticeScreen == ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE,
+            snoozedUntilMs = updateSnoozedUntil, nowMs = System.currentTimeMillis()))
+    }
+    private fun snoozeUpdate() {
+        updateSnoozedUntil = ai.genwhy.nobonk.update.UpdatePolicy.snoozeUntil(System.currentTimeMillis())
+        getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).edit().putLong(PREF_UPDATE_SNOOZE, updateSnoozedUntil).apply()
+        updateStatusText = "Snoozed for a day."
+    }
+    private fun onUpdateNow() {
+        val c = updateCoordinator ?: return
+        if (updatePrompt() == ai.genwhy.nobonk.update.UpdatePolicy.Prompt.NONE) return   // gate / scanning re-checked at click time, not only at render
+        if (updateAvailability == ai.genwhy.nobonk.update.UpdatePolicy.Availability.DOWNLOADED) {
+            if (ai.genwhy.nobonk.update.UpdatePolicy.mayCompleteInstall(viewModel.scanningEnabled, ai.genwhy.nobonk.safety.SessionState.gate.serviceActive)) c.completeUpdate()
+            return
+        }
+        expectingReturn = true   // Play's update sheet is a hand-off, not the user leaving
+        if (!c.startFlexible(this, updateFlowLauncher)) expectingReturn = false
+    }
+    private fun checkForUpdates(manual: Boolean) {
+        val c = updateCoordinator ?: ai.genwhy.nobonk.update.UpdateCoordinator(this) { av, ver ->
+            runOnUiThread {
+                updateAvailability = av; updateVersion = ver
+                updateStatusText = when (av) {
+                    ai.genwhy.nobonk.update.UpdatePolicy.Availability.AVAILABLE_FLEXIBLE -> "Update available on Google Play."
+                    ai.genwhy.nobonk.update.UpdatePolicy.Availability.DOWNLOADED -> "Update downloaded — restart when you are not scanning."
+                    ai.genwhy.nobonk.update.UpdatePolicy.Availability.DOWNLOADING -> "Downloading update…"
+                    ai.genwhy.nobonk.update.UpdatePolicy.Availability.FAILED -> "Update could not be completed. You can retry from Google Play."
+                    ai.genwhy.nobonk.update.UpdatePolicy.Availability.NONE -> "Google Play reports no newer version."
+                    ai.genwhy.nobonk.update.UpdatePolicy.Availability.UNAVAILABLE -> "Couldn't check with Google Play (this install may not be from Play)."
+                    else -> ""
+                }
+            }
+        }.also { updateCoordinator = it }
+        if (manual) updateStatusText = "Checking Google Play…"
+        c.check()
+    }
+    /** Idle moments: gate just cleared, or scanning just stopped — the only times a card can show. */
+    private fun onIdleMoment() { if (ai.genwhy.nobonk.safety.SessionState.gate.cameraAllowed(ackVersion)) checkForUpdates(manual = false) }
     // Incremented on every onResume so CameraPreview knows to rebind.
     // Wrapping CameraPreview in key(cameraRebindKey) forces Compose to fully
     // recreate the AndroidView — re-running the factory lambda which re-calls
@@ -76,6 +129,7 @@ class MainActivity : ComponentActivity() {
         // Safety notice: the current version must be acknowledged before any camera request
         // or camera start (fresh installs and upgrades from first_run_done-only builds alike).
         ackVersion = prefs.getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
+        updateSnoozedUntil = prefs.getLong(PREF_UPDATE_SNOOZE, 0L)
         // Gate decision for THIS launch: config recreation (saved state) and a live, authorized
         // background session keep it cleared; anything else re-prompts (every launch).
         val gate = ai.genwhy.nobonk.safety.SessionState.gate
@@ -112,7 +166,7 @@ class MainActivity : ComponentActivity() {
                     }
                     if (showLicenses && noticeScreen != ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE) {
                         // Full text requested from the reminder — read-only, gate still pending.
-                        LicensesScreen(onBack = { showLicenses = false })
+                        LicensesScreen(onBack = { showLicenses = false })   // read-only over the gate: no update actions here
                     } else if (noticeScreen == ai.genwhy.nobonk.safety.SafetyNotice.Screen.FULL_NOTICE) {
                         // ── Full safety notice + explicit acknowledgment (gates the camera) ──
                         SafetyNoticeScreen(
@@ -123,6 +177,7 @@ class MainActivity : ComponentActivity() {
                                 gate.onAcknowledged()
                                 noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE
                                 if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
+                                onIdleMoment()
                             },
                             onNotNow = { finish() }
                         )
@@ -133,6 +188,7 @@ class MainActivity : ComponentActivity() {
                                 gate.onAcknowledged()
                                 noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE
                                 if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
+                                onIdleMoment()
                             },
                             // Reading never acknowledges: About opens over the pending reminder and Back returns to it.
                             onReadFull = { gate.onReadFull(); showLicenses = true }
@@ -141,7 +197,7 @@ class MainActivity : ComponentActivity() {
                         when {
                             showLicenses -> {
                                 // ── Open-source licenses (AGPL §13) ─────
-                                LicensesScreen(onBack = { showLicenses = false })
+                                LicensesScreen(onBack = { showLicenses = false }, updateStatus = updateStatusText, onCheckUpdates = { checkForUpdates(manual = true) })
                             }
                             showHistory -> {
                                 // ── Analytics dashboard ─────────────────
@@ -167,12 +223,15 @@ class MainActivity : ComponentActivity() {
                                 DetectionScreen(
                                     viewModel         = viewModel,
                                     onStartBackground = { startDetectionService() },
-                                    onStopBackground  = { stopDetectionService() },
+                                    onStopBackground  = { stopDetectionService(); onIdleMoment() },
                                     canDrawOverlays   = canDrawOverlays,
                                     onGrantOverlay    = { requestOverlayPermission() },
                                     onShowHistory     = { showHistory = true },
                                     onShowAbout       = { showLicenses = true },
-                                    cameraRebindKey   = cameraRebindKey
+                                    cameraRebindKey   = cameraRebindKey,
+                                    updatePrompt      = updatePrompt(),
+                                    onUpdateNow       = { onUpdateNow() },
+                                    onUpdateLater     = { snoozeUpdate() }
                                 )
                             }
                         }
@@ -208,6 +267,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        updateCoordinator?.dispose(); updateCoordinator = null   // release the Play install listener
         // A finished activity (Back / Not now / task removed) is a genuine end of launch: re-prompt next time.
         if (isFinishing) ai.genwhy.nobonk.safety.SessionState.gate.onActivityFinished()
     }
@@ -234,6 +294,8 @@ class MainActivity : ComponentActivity() {
             viewModel.stopScanning()
         }
         canDrawOverlays = Settings.canDrawOverlays(this)
+        // Quiet Play update check once the gate is cleared (prompting is separately policy-gated).
+        if (ai.genwhy.nobonk.safety.SessionState.gate.cameraAllowed(ackVersion)) checkForUpdates(manual = false)
         // Increment the key AFTER stopping the service so CameraPreview recreates
         // itself and calls cameraProvider.unbindAll() + bindToLifecycle fresh.
         cameraRebindKey++
@@ -286,5 +348,6 @@ class MainActivity : ComponentActivity() {
         private const val PREF_FIRST_RUN_DONE = "first_run_done"
         private const val STATE_GATE_CLEARED = "state_gate_cleared"
         private const val STATE_GATE_TOKEN = "state_gate_token"
+        private const val PREF_UPDATE_SNOOZE = "update_snooze_until"
     }
 }

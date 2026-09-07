@@ -1,6 +1,5 @@
 package ai.genwhy.nobonk.service
 
-import android.animation.ObjectAnimator
 import android.app.*
 import android.content.Context
 import android.content.Intent
@@ -9,7 +8,6 @@ import android.graphics.PixelFormat
 import android.os.*
 import ai.genwhy.nobonk.util.Dbg
 import android.view.*
-import android.view.animation.LinearInterpolator
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -56,6 +54,8 @@ class DetectionService : LifecycleService() {
 
     // FPS cap + single-flight gate (fixes PERF-C03: no unbounded background inference).
     private val gate = AtomicBoolean(false)
+    /** Engine awaiting release while a frame is in flight; whoever clears it last (frame finally / shutdown) closes it. */
+    private val pendingRelease = java.util.concurrent.atomic.AtomicReference<DetectionEngine?>(null)
     private var lastProcessTime = 0L
     @Volatile private var cadenceAlert = AlertLevel.NONE
     @Volatile private var cadenceHadDetections = false
@@ -66,10 +66,9 @@ class DetectionService : LifecycleService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var windowManager: WindowManager
     private var hudView: View? = null
-    private var scanningView: View? = null
+    private var edge: EdgeIndicator? = null
     /** Small always-available 'Open NoBonk' pill (top-end) shown for the whole background session. */
     private var returnView: View? = null
-    private var knightRiderAnimator: ObjectAnimator? = null
     /** Every async step asks this before proceeding; Stop flips it once, from any phase. */
     private val life = ServiceLifecycle()
     private var startupJob: Job? = null
@@ -142,7 +141,7 @@ class DetectionService : LifecycleService() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        showScanningIndicator()
+        showEdgeIndicator()
         showReturnControl()
 
         startupJob = lifecycleScope.launch(Dispatchers.Default) {
@@ -168,32 +167,11 @@ class DetectionService : LifecycleService() {
         }
     }
 
-    private fun showScanningIndicator() {
-        if (scanningView != null) return
-        val density = resources.displayMetrics.density
-        val heightPx = (8 * density).toInt()
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, heightPx,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP; y = 0 }
-        try {
-            scanningView = LayoutInflater.from(this).inflate(R.layout.layout_scanning_indicator, null)
-            val line = scanningView!!.findViewById<View>(R.id.scanningLine)
-            windowManager.addView(scanningView, params)
-            knightRiderAnimator = ObjectAnimator.ofFloat(line, "alpha", 0.4f, 1.0f).apply {
-                duration = 800
-                repeatCount = ObjectAnimator.INFINITE
-                repeatMode = ObjectAnimator.REVERSE
-                interpolator = LinearInterpolator()
-                start()
-            }
-        } catch (e: Exception) {
-            Dbg.e(TAG, "Failed to show scanning indicator", e)
-        }
+    /** Slim static screen-edge indicator (replaces the wide top scan bar). Colour follows the alert level. */
+    private fun showEdgeIndicator() {
+        if (edge != null) return
+        edge = EdgeIndicator(this, windowManager).also { it.show(AlertLevel.NONE, cameraBlocked = false) }
     }
-
     /** Top inset (status bar + display cutout) in px, so overlay windows never sit under the clock. */
     private fun topInsetPx(): Int = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -292,9 +270,11 @@ class DetectionService : LifecycleService() {
         if (!gate.compareAndSet(false, true)) { imageProxy.close(); return }
         lastProcessTime = now
 
-        lifecycleScope.launch(Dispatchers.Default) {
+        // ATOMIC: the body always runs (and so does `finally`) even if the scope is cancelled first —
+        // otherwise a cancelled launch would leave the single-flight gate held forever.
+        lifecycleScope.launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.ATOMIC) {
             try {
-                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled)
+                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled, cuesAllowed = { life.mayPostAlerts() })
                 val result = eng.process(imageProxy, cfg)   // closes imageProxy, fires haptics+sound
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()
@@ -304,7 +284,7 @@ class DetectionService : LifecycleService() {
                 // A frame that was in flight when Stop arrived must not re-create the HUD or re-post
                 // the notification from a stopped service (this was the visible "Stop didn't work").
                 if (!life.mayPostAlerts()) return@launch
-                mainHandler.post { updateHud(result.hudMessage) }
+                mainHandler.post { updateHud(result.hudMessage); edge?.setLevel(result.highestAlert, result.cameraBlocked) }
                 if (result.highestAlert != AlertLevel.NONE) {
                     val n = result.detections.size
                     updateNotification("${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · $n object${if (n == 1) "" else "s"} in view")
@@ -313,6 +293,7 @@ class DetectionService : LifecycleService() {
                 Dbg.e(TAG, "Frame processing error: ${e.message}", e)
             } finally {
                 gate.set(false)
+                pendingRelease.getAndSet(null)?.let { runCatching { it.close() } }   // deferred release after Stop
             }
         }
     }
@@ -410,10 +391,9 @@ class DetectionService : LifecycleService() {
         try { analysis?.clearAnalyzer() } catch (_: Exception) {}
         analysis = null
         mainHandler.removeCallbacksAndMessages(null)
-        knightRiderAnimator?.cancel(); knightRiderAnimator = null
         hudView?.let { v -> try { windowManager.removeView(v) } catch (_: Exception) {} }; hudView = null
         removeReturnControl()
-        scanningView?.let { v -> try { windowManager.removeView(v) } catch (_: Exception) {} }; scanningView = null
+        edge?.hide(); edge = null
         releaseEngineWhenIdle(eng)
         try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_: Exception) {}
@@ -424,16 +404,15 @@ class DetectionService : LifecycleService() {
 
     /**
      * Never close the ONNX session under an in-flight inference: the frame coroutine holds the
-     * single-flight [gate] while it runs, so wait for it (bounded) on a small daemon thread that
-     * does not depend on the (already cancelled) lifecycle scope, then release.
+     * single-flight [gate] while it runs, so release is deferred to whoever finishes last.
      */
     private fun releaseEngineWhenIdle(eng: DetectionEngine?) {
         eng ?: return
-        Thread({
-            val t0 = System.currentTimeMillis()
-            while (gate.get() && System.currentTimeMillis() - t0 < 3000) Thread.sleep(20)
-            runCatching { eng.close() }
-        }, "nobonk-engine-release").apply { isDaemon = true }.start()
+        // Ownership hand-off, no timeout: park the engine, then if no frame holds the gate, take it
+        // back and close it; if a frame does, its `finally` (ATOMIC start guarantees it runs) closes it.
+        // getAndSet makes exactly one party the closer.
+        pendingRelease.set(eng)
+        if (!gate.get()) pendingRelease.getAndSet(null)?.let { runCatching { it.close() } }
     }
 
     override fun onDestroy() {

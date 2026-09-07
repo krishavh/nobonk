@@ -81,6 +81,7 @@ can be erased at any time (see §7).
   Look up.") to your phone's own text-to-speech engine, which is separate software
   covered by its maker's policy. The phrase contains no personal data, and NoBonk
   itself still has no network access. Voice alerts are off by default.
+- **App updates via Google Play.** NoBonk can ask the Google Play Store whether a newer version exists (an in-app update suggestion you can decline or snooze). That check is performed by the Play Store, which processes your device details and installed version under Google's own policy; NoBonk sends it nothing of its own. Camera frames, alerts, settings and history are never part of it. Builds not installed from Google Play simply see no update suggestion.
 - **No data selling or sharing.** Because nothing leaves the device, there is
   nothing to sell or share.
 

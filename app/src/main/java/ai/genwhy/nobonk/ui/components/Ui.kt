@@ -8,6 +8,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -77,6 +83,23 @@ fun PulseDot(color: Color, size: Int = 8, modifier: Modifier = Modifier) {
 }
 
 /** One-line status banner used for angle / low-light / obstacle notices. */
+/** Dismissible Play-update suggestion (shown only when idle; see UpdatePolicy). */
+@Composable
+fun UpdateCard(restart: Boolean, onPrimary: () -> Unit, onLater: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth().clip(NB.CardShape).background(Color(0xE60B1220)).border(1.dp, NB.Accent.copy(alpha = 0.6f), NB.CardShape).padding(14.dp)
+            .semantics { contentDescription = if (restart) "Update downloaded. Restart NoBonk to finish, or later." else "Update available from Google Play. Update now or later." }
+    ) {
+        Text(if (restart) "Update downloaded" else "Update available", color = NB.Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(if (restart) "Restart NoBonk when you are not scanning to finish installing." else "A newer NoBonk is on Google Play. Nothing is scanning right now, so this is a good moment.", color = NB.Sub, fontSize = 12.sp, lineHeight = 17.sp)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onPrimary, modifier = Modifier.weight(1f).height(40.dp), shape = NB.ChipShape, colors = ButtonDefaults.buttonColors(containerColor = NB.Accent, contentColor = Color(0xFF04140D))) { Text(if (restart) "Restart to update" else "Update", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+            OutlinedButton(onClick = onLater, modifier = Modifier.height(40.dp), shape = NB.ChipShape, colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Sub), border = BorderStroke(1.dp, NB.GlassLine)) { Text("Later", fontSize = 13.sp) }
+        }
+    }
+}
+
 @Composable
 fun NoticeBanner(icon: String, title: String, subtitle: String? = null, color: Color, modifier: Modifier = Modifier, description: String = title) {
     Row(

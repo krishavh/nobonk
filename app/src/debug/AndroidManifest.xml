@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- DEBUG BUILDS ONLY: lets `adb shell am broadcast` trigger the exact ACTION_STOP path the
+             notification's Stop action uses, so Stop can be exercised deterministically on an emulator. -->
+        <receiver android:name=".debug.DebugStopReceiver" android:exported="true">
+            <intent-filter><action android:name="ai.genwhy.nobonk.debug.STOP" /></intent-filter>
+        </receiver>
+    </application>
+</manifest>

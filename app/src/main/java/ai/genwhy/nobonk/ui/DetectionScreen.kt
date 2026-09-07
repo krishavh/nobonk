@@ -68,7 +68,11 @@ fun DetectionScreen(
     onGrantOverlay: () -> Unit,
     onShowHistory: () -> Unit = {},
     onShowAbout: () -> Unit = {},
-    cameraRebindKey: Int = 0
+    cameraRebindKey: Int = 0,
+    /** Play in-app update prompt (NONE = nothing to show). Only rendered while not scanning. */
+    updatePrompt: ai.genwhy.nobonk.update.UpdatePolicy.Prompt = ai.genwhy.nobonk.update.UpdatePolicy.Prompt.NONE,
+    onUpdateNow: () -> Unit = {},
+    onUpdateLater: () -> Unit = {}
 ) {
     val detections = viewModel.detections
     val distanceThreshold = viewModel.distanceThreshold
@@ -120,6 +124,8 @@ fun DetectionScreen(
                         description = "Camera angle warning. $phoneAngleHint")
                 isLowLight -> NoticeBanner("🔅", if (viewModel.isNightBoost) "Low light · night boost on" else "Low light", "Detection is less reliable in the dark", color = NB.Watch)
             }
+            if (!viewModel.scanningEnabled && updatePrompt != ai.genwhy.nobonk.update.UpdatePolicy.Prompt.NONE)
+                ai.genwhy.nobonk.ui.components.UpdateCard(restart = updatePrompt == ai.genwhy.nobonk.update.UpdatePolicy.Prompt.OFFER_RESTART, onPrimary = onUpdateNow, onLater = onUpdateLater)
             if (isWallDetected && !isCameraBlocked)
                 NoticeBanner("🧱", "Possible obstacle", "Surface warning · wall-like surface ahead, object not identified", color = NB.Watch, description = "Possible obstacle. Surface warning: wall-like surface ahead, object not identified.")
         }

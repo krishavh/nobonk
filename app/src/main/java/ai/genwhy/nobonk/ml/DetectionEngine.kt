@@ -24,6 +24,8 @@ import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.model.Detection
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * THE single detection pipeline (fixes audit PERF-U01 / the whole "two diverged
@@ -48,7 +50,10 @@ class DetectionEngine(private val appContext: Context) {
         val includeNonPerson: Boolean,
         val soundEnabled: Boolean = true,
         val hapticsEnabled: Boolean = true,
-        val voiceEnabled: Boolean = false
+        val voiceEnabled: Boolean = false,
+        /** Evaluated immediately before any cue is emitted: the caller's per-frame validity (session
+         *  generation / service lifecycle). A frame whose session ended during inference emits nothing. */
+        val cuesAllowed: () -> Boolean = { true }
     )
 
     data class Result(
@@ -255,13 +260,18 @@ class DetectionEngine(private val appContext: Context) {
     /** Reversible: cues/speech suppressed while the foreground session is stopped (results still computed, caller discards). */
     @Volatile var muted: Boolean = false
 
+    /** Cancel anything currently playing (audio chirp, speech, vibration). Reversible; used by foreground Stop. */
+    fun silence() {
+        audioTrack?.let { t -> runCatching { t.stop() } }
+        tts?.let { t -> runCatching { t.stop() } }
+        vibrator?.let { v -> runCatching { v.cancel() } }
+    }
+
     /** Stop emitting anything immediately (cues, speech, sensors); [close] releases the rest. */
     fun halt() {
         halted = true
         stopSensors()
-        audioTrack?.let { t -> runCatching { t.stop() } }
-        tts?.let { t -> runCatching { t.stop() } }
-        vibrator?.let { v -> runCatching { v.cancel() } }
+        silence()
     }
 
     suspend fun process(imageProxy: ImageProxy, config: Config): Result {
@@ -362,16 +372,19 @@ class DetectionEngine(private val appContext: Context) {
 
         // ── Shared feedback (identical in both modes), driven by the debounced level ──
         val pan = topDet?.let { AlertCue.panFor(it.boundingBox.centerX) }
-        if (halted || muted) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
-        if (displayAlert != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(displayAlert)
-        // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
-        // The cue is panned toward the object so a left-side hazard is heard on the left.
-        if (config.soundEnabled && !suppressSound && displayAlert.ordinal >= AlertLevel.MEDIUM.ordinal) {
-            playAlertCue(displayAlert, pan ?: 0f)
+        // Cues are emitted on the main thread so they serialize with Stop/silence (also main-thread):
+        // the validity checks run INSIDE that block, so no cue can start after a Stop was applied.
+        val label = heldLabel
+        val suppressed = withContext(Dispatchers.Main.immediate) {
+            if (halted || muted || !config.cuesAllowed()) return@withContext true
+            if (displayAlert != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(displayAlert)
+            // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
+            // The cue is panned toward the object so a left-side hazard is heard on the left.
+            if (config.soundEnabled && !suppressSound && displayAlert.ordinal >= AlertLevel.MEDIUM.ordinal) playAlertCue(displayAlert, pan ?: 0f)
+            if (config.voiceEnabled && !suppressSound && displayAlert == AlertLevel.HIGH) speak(VoiceCue.phrase(displayAlert, label, AlertCue.sideFor(pan)))
+            false
         }
-        if (config.voiceEnabled && !suppressSound && displayAlert == AlertLevel.HIGH) {
-            speak(VoiceCue.phrase(displayAlert, heldLabel, AlertCue.sideFor(pan)))
-        }
+        if (suppressed) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
 
         val lookUpLabel = if (displayAlert == AlertLevel.HIGH && !suppressVisual) heldLabel else null
         val hud = buildHud(
