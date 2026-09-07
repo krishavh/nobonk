@@ -1,5 +1,6 @@
 import SwiftUI
 import AppIntents
+import MessageUI
 
 @main
 struct NoBonkApp: App {
@@ -15,6 +16,8 @@ struct NoBonkView: View {
     @StateObject private var camera = CameraModel()
     @StateObject private var browser = BrowserModel()
     @State private var browsing = false
+    @State private var showComposer = false
+    @State private var canCompose = MFMessageComposeViewController.canSendText()
     @State private var gate = SafetyGate(acknowledgedVersion: UserDefaults.standard.integer(forKey: "safetyNoticeVersion"))
     @State private var checked = false
     @State private var showFull = false
@@ -28,7 +31,8 @@ struct NoBonkView: View {
         .tint(mint)
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { camera.stop(); browser.pause() }
-            if phase == .background { gate.leaveForeground(); showFull = false; checked = false }
+            if phase == .background { gate.leaveForeground(); showFull = false; checked = false; camera.engine.releaseIdleResources() }
+            if phase == .active { canCompose = MFMessageComposeViewController.canSendText() }
             syncBrowserVisibility()
         }
         .onAppear {
@@ -37,6 +41,11 @@ struct NoBonkView: View {
         }
         .onChange(of: browsing) { _, _ in syncBrowserVisibility() }
         .onChange(of: gate.screen) { _, _ in syncBrowserVisibility() }
+        .onChange(of: showComposer) { _, _ in syncBrowserVisibility() }
+        .sheet(isPresented: $showComposer) {
+            MessageComposer { showComposer = false }
+                .ignoresSafeArea()
+        }
         .sheet(isPresented: $showFull) {
             NavigationStack {
                 ScrollView { Text(SafetyCopy.full).font(.body).padding(24) }
@@ -46,7 +55,7 @@ struct NoBonkView: View {
         }
     }
     private func syncBrowserVisibility() {
-        if browsing && gate.screen == .scanning && scenePhase == .active { browser.resume() }
+        if browsing && !showComposer && gate.screen == .scanning && scenePhase == .active { browser.resume() }
         else { browser.pause() }
     }
     private var brand: some View {
@@ -108,6 +117,16 @@ struct NoBonkView: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 cameraCard.frame(height: max(150, min(screen.size.height * 0.28, 210))).layoutPriority(1)
                 if camera.audioUnavailable { Text("Sound unavailable · visual and enabled haptic cues remain on").font(.caption2).foregroundStyle(.orange) }
+                HStack(spacing: 8) {
+                    Text("WEB & MESSAGES").font(.system(size: 9, weight: .bold)).tracking(1).foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        guard MFMessageComposeViewController.canSendText() else { canCompose = false; return }
+                        camera.stop(message: "Paused for Messages — tap Start after composing")
+                        browser.pause(); showComposer = true
+                    } label: { Label("Write a message", systemImage: "square.and.pencil").font(.caption.bold()).frame(minHeight: 44) }
+                        .disabled(!canCompose)
+                }
                 BrowserPane(model: browser).frame(maxWidth: .infinity, maxHeight: .infinity)
             }.padding(.horizontal, 12).padding(.top, 4)
             .safeAreaInset(edge: .bottom, spacing: 0) { scanButton }
@@ -244,6 +263,11 @@ struct NoBonkView: View {
                         .position(x: rect.midX, y: rect.midY)
                 }
             }.allowsHitTesting(false).accessibilityHidden(true)
+            if !camera.running && browsing {
+                Image("BrandIcon").resizable().frame(width: 54, height: 54)
+                    .clipShape(RoundedRectangle(cornerRadius: 14)).opacity(0.8)
+                    .accessibilityHidden(true)
+            }
             if !camera.running && !browsing {
                 VStack(spacing: 12) {
                     ZStack {

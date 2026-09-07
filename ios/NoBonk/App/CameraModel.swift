@@ -35,6 +35,7 @@ final class CameraEngine: NSObject {
             firstResultPending = true
             do {
                 if !configured { try configure() }
+                if mode == .visionPeople { fastDetector = nil }
                 if mode == .fastObjects, fastDetector == nil { fastDetector = try FastObjectDetector() }
                 guard generation.accepts(token) else { return }
                 try configureFormat(mode)
@@ -61,6 +62,13 @@ final class CameraEngine: NSObject {
             videoOutput?.setSampleBufferDelegate(nil, queue: nil)
             frameReceiver = nil
             cadence.reset()
+        }
+    }
+    /// Keep a warm model for an in-app Stop/Start, but allow idle memory reclamation.
+    func releaseIdleResources() {
+        queue.async { [self] in
+            guard !session.isRunning else { return }
+            fastDetector = nil
         }
     }
     private func configure() throws {
@@ -221,6 +229,9 @@ final class CameraModel: ObservableObject {
                 else { self.stop(message: status) } // failed start must release the retry latch
             }
         }
+        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.engine.releaseIdleResources() }
+        })
         observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance(), queue: .main) { [weak self] notification in
             guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                   AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }

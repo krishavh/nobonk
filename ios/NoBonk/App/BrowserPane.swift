@@ -141,7 +141,7 @@ struct BrowserPane: View {
                         Image(systemName: "rectangle.split.1x2").font(.largeTitle).foregroundStyle(.mint)
                         Text("A little room for your world.").font(.title3.bold())
                         Text("Open a reading page or an inline video while the camera stays visible above. Set up while standing still, then keep looking up.")
-                        Text("This opens websites inside NoBonk, not other iPhone apps. Some video sites require full screen; scanning pauses if the camera is covered.")
+                        Text("Write a message opens Apple’s composer and pauses scanning. NoBonk cannot read or show your Messages inbox. This pane opens websites inside NoBonk, not other iPhone apps. Some video sites require full screen; scanning pauses if the camera is covered.")
                         Text("Camera frames stay on your phone. Websites connect to the internet and follow their own privacy policies. Browsing data is not saved to disk by this pane.").font(.caption)
                     }.foregroundStyle(.secondary).padding(20).frame(maxWidth: .infinity, alignment: .leading)
                 }
