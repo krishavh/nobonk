@@ -75,7 +75,7 @@ Use the same Google account to [join the tester group](https://groups.google.com
 | MEDIUM | amber bracket + approach ring | double tap | soft double chirp | — |
 | HIGH | red **LOOK UP** with side arrow and edge glow | triple buzz | urgent triple chirp | "Person on your left. Look up." |
 
-Sound and voice are **stereo-panned toward the hazard** (constant-power pan law, 20 % centre dead-zone): with earbuds, left means left. All cues are individually switchable and persist across launches. On a dark scene NoBonk brightens the detector input (bounded "night boost") and tells you it is doing so. Design notes live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the change history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+Alert chirps are **stereo-panned toward the detected object** (constant-power pan law, 20 % centre dead-zone); stereo earbuds make the left/right cue easier to hear. Optional spoken alerts describe the object's direction in words: left, right or ahead. These directions identify the object, not a safe route to follow. Sound, vibration and voice can each be switched off, and those settings persist across launches. On a dark scene NoBonk brightens the detector input (bounded "night boost") and tells you it is doing so. Design notes live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the change history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 ## Privacy by design
 

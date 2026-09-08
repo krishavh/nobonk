@@ -1,171 +1,80 @@
-# NoBonk — Google Play Store Listing Draft (T-REL-ASSETS)
+# NoBonk — prepared Google Play listing
 
-Paste-ready copy plus the exact asset specs the adult account holder needs to
-produce. Wording deliberately avoids absolute safety claims ("prevents
-collisions") in favor of "helps warn," and keeps the "not a certified safety
-device" disclaimer prominent — required both for honesty and to reduce Play
-review risk on a safety-themed app.
-
----
+Copy reviewed against Android **1.0.14 / version code 15**, source `21953b7043265cb73913e9aaa97283ceef1c50e5`. This document records prepared copy and assets. Google Play publication and review status must be checked in Play Console; their presence here does not mean Google has approved them.
 
 ## App identity
 
-| Field | Value |
-|---|---|
-| App name (≤30 chars) | **NoBonk** |
-| Package | `ai.genwhy.nobonk` |
-| Default language | English (United States) |
-| Category | **Tools** |
-| Tags | safety, camera, walking, pedestrian |
-| Contact email | support@genwhy.ai (Haarith, parent and account holder) |
-| Website (optional) | repo or GitHub Pages URL |
-| Privacy policy URL | published `docs/PRIVACY_POLICY.md` (GitHub Pages) |
+- App: **NoBonk**
+- Package: `ai.genwhy.nobonk`
+- Default language: English (United States)
+- Category: Tools
+- Public support: support@genwhy.ai
+- Website: https://nobonk.genwhy.ai/
+- Privacy details: [PRIVACY_POLICY.md](PRIVACY_POLICY.md)
 
----
+## Short description
 
-## Short description (≤80 characters)
+80 characters; Google Play limit: 80.
 
-> **On-device AI warns you before you walk into someone while on your phone.**
+```text
+On-device awareness cues, with background scanning alongside other Android apps.
+```
 
-*(69 characters. Alternatives, all ≤80:)*
-- `Look up! NoBonk's on-device AI warns you before a walking collision.` (67)
-- `Your phone watches the path ahead so a glance down doesn't end in a bonk.` (73)
+## Full description
 
----
+3688 characters; Google Play limit: 4,000.
 
-## Full description (≤4000 characters)
+```text
+An extra nudge to look up—even when another Android app is open.
 
-> **Don't be a smombie.**
->
-> NoBonk taps you on the shoulder before you walk into someone. Using your
-> phone's back camera and an on-device AI vision model, it watches the path
-> ahead while you're looking down at your screen — and warns you with vibration
-> and on-screen alerts when a person, wall, or ground hazard is coming up.
->
-> **Everything runs on your phone. Nothing is ever recorded or sent anywhere.**
->
-> **How it works**
-> • The back camera analyzes the path ahead in real time (up to ~10 fps, slowing
->   down automatically to save battery when the path is clear or you're standing still).
-> • A YOLO26 AI model, running fully on-device via ONNX Runtime, spots
->   people, bikes, cars, pets, walls, and ground hazards. Dim street? NoBonk
->   brightens what the model sees.
-> • When something gets close or is closing in fast, NoBonk escalates a
->   LOW / MEDIUM / HIGH warning — vibration, a short chirp panned toward the
->   hazard (with earbuds, left means left), and an on-screen "LOOK UP — PERSON
->   ON YOUR LEFT" alert — even while you're using another app. An optional
->   spoken warning is there for blind and low-vision walkers.
-> • An optional on-device history shows your sessions, alert counts, and (if you
->   choose) a rough map of where your close calls happen.
->
-> **Privacy first — by design**
-> • No photos or video are ever recorded, stored, or transmitted. Frames are
->   processed in memory and immediately discarded.
-> • No internet permission at all — NoBonk works in airplane mode.
-> • No accounts, no ads, no trackers, no third-party SDKs.
-> • Location is optional, approximate, and off by default; if you turn it on, it
->   stays on your phone. Clear your history anytime.
->
-> **Made by a student**
-> NoBonk was built by Krishav, a 9th-grade student who started it in 8th grade for
-> the 2026 Alameda County Science & Engineering Fair. It's a real, working prototype — and an honest one.
->
-> **⚠️ Important — please read**
-> NoBonk is a student-built assistive prototype, **not a certified safety
-> device**. It can and will miss things, especially in low light or at speed. It
-> is a helper, not a guarantee. **Keep looking up and stay aware of your
-> surroundings — NoBonk is a backup, not a replacement for your own attention.**
->
-> Requires the camera. Works best on recent phones and in good lighting.
+NoBonk uses your phone's rear camera and on-device AI to notice people and selected nearby objects, with visual alerts, sound and vibration. Set it up in the camera view, then choose Run in background to continue a user-started session alongside other apps.
 
-*(~1,750 characters — well within the 4,000 limit.)*
+NoBonk is an experimental awareness helper. It can miss hazards or warn late. Your attention always comes first.
 
----
+SET UP, TRY, THEN SWITCH APPS
+1. Read and acknowledge the safety reminder. Start in a safe, well-lit space while standing still.
+2. Allow camera access, start detection and point the uncovered rear camera toward the scene. Compare the labels with what you can see.
+3. Choose your model, detection mode, sensitivity and cues.
+4. Tap Run in background and enable the requested overlay access. An ongoing notification and screen-edge indicator show the active session; alerts can appear above other apps.
+5. Use Open NoBonk to return to the camera controls. Use Stop in the app or notification to end the session.
 
-## Graphic assets — exact specs
+WAYS TO EXPLORE NOBONK
+• Compare the camera's labels with people, pets or supported objects around you in a safe space.
+• Try a background session while another app is visible, keeping the rear camera pointed toward the scene.
+• Tune the cues you find easiest to notice, then test returning to NoBonk and stopping detection.
+• Share missed detections, confusing controls and device performance with the project to help improve it.
 
-The store icon and feature graphic are rendered from the adaptive-icon vectors and
-published as immutable assets on GitHub release `v1.0-rc-2a4092b`
-(`nobonk-play-icon-512.png`, `nobonk-feature-graphic-1024x500.png`, checksums in
-`STORE-ASSETS-SHA256SUMS.txt`). Phone screenshots come from the Pixel 9a.
+CONTROLS THAT FIT YOUR PHONE
+Fast uses a smaller model; Sharp uses a larger one. Results and speed depend on the phone, lighting and scene. People mode focuses on people. The broader Everything mode covers people, bicycles, cars, motorcycles, buses, trucks, cats and dogs—it does not detect every object. Separate surface checks can display possible-obstacle or ground warnings.
 
-| Asset | Spec | Notes |
+Get visual warnings, with optional vibration, directional stereo sound cues and spoken left/right/ahead alerts. Directions describe where an object appears, not a safe route to follow. Spoken alerts use your phone's text-to-speech engine.
+
+The 0.5 m, 1 m, 2 m and 3.5 m presets adjust alert sensitivity. They are not precise distance boundaries. Displayed distances are approximate camera-based estimates.
+
+CAMERA PROCESSING STAYS ON YOUR PHONE
+Camera frames are processed in memory and are not saved as photos or videos or uploaded by NoBonk. The Android app has no Internet permission, accounts, ads or analytics service.
+
+Foreground object-alert history is encrypted in app-private storage and can be cleared in the app. Background detections are not added to this history. Optional approximate location tagging is off by default. Settings and safety acknowledgments are also stored locally. Google Play updates and the system text-to-speech service operate separately.
+
+WHY KRISHAV BUILT IT
+After seeing students at school bump into each other or walls while looking at their phones, Krishav wondered whether the phone itself could offer a helpful cue. NoBonk grew from that question into a student-built project, supported by family, AI coding tools and real-phone testing.
+
+KNOW ITS LIMITS
+NoBonk is not a certified safety device, navigation aid or replacement for watching your surroundings. No alert does not mean the path is clear. Poor light, camera angle, movement, battery settings and other apps can affect detection or interrupt a session. Do not rely on it for road crossings, driving, cycling or dangerous navigation. Test with plenty of space; never approach a hazard to trigger an alert.
+
+Requires Android 10 or later and a rear camera. Learn more and send feedback at nobonk.genwhy.ai or support@genwhy.ai.
+```
+
+## Additional phone screenshot cards
+
+These are authentic captures from an earlier owner-supplied recording in Blender-rendered presentation frames, not claimed to be captures from version 1.0.14. Their high-level behavior was checked against that release. [Asset notes and provenance](store-assets/README.md).
+
+| Card | Asset | Purpose |
 |---|---|---|
-| **App (store) icon** | **512 × 512 px**, 32-bit **PNG** (with alpha), ≤1 MB | Reuse the adaptive-icon art: dark charcoal→amber background, amber walking pedestrian, red "look-up" burst. Keep key art within the central ~66% (Play applies a mask). No drop shadows baked in. |
-| **Feature graphic** | **1024 × 500 px**, PNG or JPEG (no alpha), ≤1 MB | Shown at the top of the listing. Suggested: the pedestrian mark on the left, wordmark "NoBonk" + tagline "Look up." on the right, same amber-on-charcoal palette. Keep text out of the outer ~5% safe margin. |
-| **Phone screenshots** | **2–8 required**; PNG/JPEG; 16:9 or 9:16; each side **1080–3840 px**; min side ≥1080 | See shot list below. At least 2 are mandatory; 4–6 recommended. |
-| **7" / 10" tablet screenshots** | optional | Only if you promote tablet support; otherwise skip. |
-| **Promo video** (optional) | YouTube URL | A 20–30s clip showing a walk + a live warning also doubles as the FGS-camera review demo. |
+| 03 | [Run in background](store-assets/03-run-in-background.png) | Begin a user-started background session |
+| 04 | [Open NoBonk](store-assets/04-floating-controls.png) | Return from another app to the controls |
+| 05 | [Stay aware](store-assets/05-stay-aware.png) | Show the required acknowledgment and limitations |
 
-### Screenshot shot list (capture on-device, good lighting)
+All three files are 1080 × 1920 RGB PNGs. The original 576 × 1296 app captures are shown in full. No unsupported floating Stop control, synthetic settings screen, precision measurement or collision-prevention promise is added. [Final PNG hashes and frame provenance](store-assets/manifest.json).
 
-1. **Live detection** — camera view with a bounding box on a person and a green
-   HUD ("path clear / person ahead").
-2. **HIGH alert firing** — the full-screen "LOOK UP!" overlay over the camera (or
-   over another app, to show background mode).
-3. **Background mode** — the alert appearing over a different app (e.g. a chat),
-   demonstrating the whole point.
-4. **History / stats** — sessions, alert counts, peak-danger hours.
-5. **Hotspot map** — (only if location is enabled) rough close-call map.
-6. **Settings** — accuracy mode + distance threshold controls.
-
-Add a short caption band to each (same amber-on-charcoal style) so the store
-gallery reads as a set. Keep any "not a safety device" disclaimer legible on at
-least one shot.
-
----
-
-## Content rating (IARC questionnaire)
-
-Complete **Play Console → App content → Content ratings**. Answers for NoBonk:
-
-| Question area | Answer |
-|---|---|
-| Category | **Utility / Productivity / Communication / Other** (Tools app) |
-| Violence | None |
-| Sexuality / nudity | None |
-| Language (profanity) | None |
-| Controlled substances | None |
-| Gambling (real or simulated) | None |
-| Fear / horror | None |
-| User-generated content / social features | None |
-| Does the app share the user's **location** with other users? | **No** (location is on-device only, never shared) |
-| Does the app collect/share personal info? | **No** |
-| In-app purchases | **No** |
-| Digital purchases / ads | **No ads, no purchases** |
-
-Expected outcome: rated suitable for **Everyone / PEGI 3** or similar. Even so,
-set the **target audience to 13+** (below) rather than enrolling in Designed for
-Families.
-
----
-
-## Target audience & content
-
-**Play Console → App content → Target audience and content:**
-
-- **Target age group:** **13–15, 16–17, and 18+** (i.e. **13 and up**).
-- **Do NOT** select any age band under 13, and **do NOT** opt into the
-  **Designed for Families** program. NoBonk is a general-audience Tools app, not a
-  kids' app.
-- Appeals to children? **No** — the store presentation (utility framing, no
-  child-oriented characters/branding) targets teens and adults.
-
----
-
-## Other listing fields
-
-- **Ads:** contains ads? **No.**
-- **In-app purchases:** **No.**
-- **Government app / financial / health:** **No.** (NoBonk is *not* a medical or
-  emergency-safety device — do not tick health/medical categories.)
-- **News app:** No.
-- **COVID-19 / contact-tracing:** No.
-
----
-
-## Author credit (per T-REL-ACCOUNT)
-
-The listing (in the full description) credits **Krishav** as the student author.
-The **developer/account name** shown on Play is the **adult account holder's**
-verified developer name, not the minor's. See `RELEASE_CHECKLIST.md`.
+Use the current approved brand art for the store icon and feature graphic; do not restore the historical pedestrian icon described by earlier listing drafts. The current brand source is included in [the website source archive](../website/README.md).

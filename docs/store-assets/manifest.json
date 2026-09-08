@@ -1,0 +1,73 @@
+{
+  "source_dimensions": [
+    576,
+    1296
+  ],
+  "render_dimensions": [
+    1080,
+    1920
+  ],
+  "renderer": "Blender 5.2.1 Cycles CPU 24 samples",
+  "original_ui": "Full-frame original screenshot texture; no redrawing, cropping, substitutions, or fabricated UI. Screen uses emission material with Standard color transform.",
+  "cards": [
+    {
+      "name": "03-run-in-background",
+      "frame": "frame-015.png",
+      "timestamp_seconds": 15,
+      "dark": true,
+      "label": "BACKGROUND MODE",
+      "title": [
+        "Start it.",
+        "Keep moving."
+      ],
+      "caption": [
+        "Start detection, then choose",
+        "Run in background."
+      ],
+      "index": "01",
+      "file": "03-run-in-background.png",
+      "sha256": "0c1d5f273946bf5b8de45e84a7c3642e9e30dc63ab221583414771c0dc7a7fde"
+    },
+    {
+      "name": "04-floating-controls",
+      "frame": "frame-018.png",
+      "timestamp_seconds": 18,
+      "dark": false,
+      "label": "FLOATING CONTROLS",
+      "title": [
+        "Your session.",
+        "Within reach."
+      ],
+      "caption": [
+        "Tap Open NoBonk to return",
+        "to the controls."
+      ],
+      "index": "02",
+      "file": "04-floating-controls.png",
+      "sha256": "ab61ffba5b4e5c22781b946b0f012630b32283e12aaf76c0d157d11a7d0fa9ef"
+    },
+    {
+      "name": "05-stay-aware",
+      "frame": "frame-003.png",
+      "timestamp_seconds": 3,
+      "dark": true,
+      "label": "STAY AWARE",
+      "title": [
+        "A helpful cue.",
+        "Your attention."
+      ],
+      "caption": [
+        "A reminder to keep looking up.",
+        "NoBonk can miss hazards."
+      ],
+      "index": "03",
+      "file": "05-stay-aware.png",
+      "sha256": "51f6b8ee2c1372c42bd9256b4488297f62e2544a0dc3f6626e39ef4402f5fc80"
+    }
+  ],
+  "limitations": "The supplied recording does not include expanded sound/voice settings. UI preset values visible are source UI, not claimed precise distances. All captions describe demonstrated controls. The 42-second floating Stop panel belongs to an earlier build and is excluded; release 1.0.14 uses the Open NoBonk pill shown at 18 seconds.",
+  "source_sha256": "53e278354b6ae045e3a011624994613b67be8897e5424e6b3f8675090fffdfdf",
+  "source_recording": "Owner-supplied earlier Android recording; recording build number not established. These are not claimed to be captures of version 1.0.14.",
+  "audited_against_source": "21953b7043265cb73913e9aaa97283ceef1c50e5 (Android 1.0.14 / version code 15); high-level controls and reminder checked.",
+  "publication_status": "Prepared listing assets; not evidence of Google Play approval."
+}

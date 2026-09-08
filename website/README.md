@@ -12,9 +12,8 @@ The alert demo follows `AlertPolicy.kt` at app revision `23a5452db093a8547e63ddd
 
 The website does not access your camera. Its approved phone recordings and screenshots demonstrate the app; Blender illustrations are labeled as concepts. Review-only assets, historical patch files and deployment account metadata are excluded from the public source archive. No passwords or signing material are included. Public support uses support@genwhy.ai.
 
-Website source revision: `5bb4957ac9d01cf712ee89c5945d2d18f0f90a54`.
+Website source revision: `b3038c0afe59d960ae18bf973ca02eeaecb33dac`. This archive includes the corrected background-use and audio-direction descriptions; it is a source snapshot, not an indication of Google Play review approval.
 
 ## Brand consistency
 
 Use `public/images/icon-v2/nobonk-crisp-play-512.png` as the approved app icon. The repository README copy at `docs/images/nobonk-icon.png` is byte-identical. Website header and footer use `app/brand.tsx`; the download section, reviewer page and browser icons use that same artwork. Keep functional control symbols and authentic recordings distinct from app branding.
-
