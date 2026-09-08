@@ -29,6 +29,7 @@ import ai.genwhy.nobonk.viewmodel.DetectionViewModel
 
 class MainActivity : ComponentActivity() {
     private val viewModel: DetectionViewModel by viewModels()
+    private var cueChoiceDone by mutableStateOf(false)
     private var hasPermission by mutableStateOf(false)
     private var canDrawOverlays by mutableStateOf(false)
     private var showHistory by mutableStateOf(false)
@@ -126,6 +127,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val prefs = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE)
+        cueChoiceDone = prefs.getBoolean("cue_choice_done", false)
         // Safety notice: the current version must be acknowledged before any camera request
         // or camera start (fresh installs and upgrades from first_run_done-only builds alike).
         ackVersion = prefs.getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
@@ -148,7 +150,7 @@ class MainActivity : ComponentActivity() {
         // prompted after they read the rationale and tap "continue".
         // Permissions are requested only once the gate is cleared for this launch (return to a
         // live session); otherwise they are requested from the OK / accept callbacks below.
-        if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
+        if (cueChoiceDone && gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
         viewModel.initialize(applicationContext)
 
         setContent {
@@ -181,7 +183,7 @@ class MainActivity : ComponentActivity() {
                                 ackVersion = v
                                 gate.onAcknowledged()
                                 noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE
-                                if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
+                                if (cueChoiceDone && gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
                                 onIdleMoment()
                             },
                             onNotNow = { finish() }
@@ -192,12 +194,21 @@ class MainActivity : ComponentActivity() {
                             onContinue = {
                                 gate.onAcknowledged()
                                 noticeScreen = ai.genwhy.nobonk.safety.SafetyNotice.Screen.NONE
-                                if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
+                                if (cueChoiceDone && gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
                                 onIdleMoment()
                             },
                             // Reading never acknowledges: About opens over the pending reminder and Back returns to it.
                             onReadFull = { gate.onReadFull(); showLicenses = true }
                         )
+                    } else if (!cueChoiceDone) {
+                        ai.genwhy.nobonk.ui.AlertChoiceScreen { sound, haptics ->
+                            viewModel.toggleSound(sound)
+                            viewModel.toggleHaptics(haptics)
+                            viewModel.toggleVoice(false)
+                            prefs.edit().putBoolean("cue_choice_done", true).apply()
+                            cueChoiceDone = true
+                            if (gate.permissionRequestAllowed(ackVersion) && !hasPermission) requestCorePermissions()
+                        }
                     } else if (!hasPermission) {
                         ai.genwhy.nobonk.ui.CameraPermissionScreen(
                             onRetry = { requestCorePermissions() },

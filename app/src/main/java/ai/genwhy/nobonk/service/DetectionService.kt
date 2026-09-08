@@ -200,7 +200,7 @@ class DetectionService : LifecycleService() {
         }
     }
 
-    /** Slim static screen-edge indicator (replaces the wide top scan bar). Colour follows the alert level. */
+    /** Moving red screen-edge trail. Hazard text and the return control remain separate. */
     private fun showEdgeIndicator() {
         if (edge != null) return
         edge = EdgeIndicator(this, windowManager).also { it.show(AlertLevel.NONE, cameraBlocked = false) }
@@ -229,15 +229,15 @@ class DetectionService : LifecycleService() {
         val pill = android.widget.TextView(this).apply {
             text = "Open NoBonk"
             contentDescription = "Open NoBonk controls"
-            setTextColor(android.graphics.Color.parseColor("#FF04140D"))
+            setTextColor(android.graphics.Color.parseColor("#FFF8FAFC"))
             textSize = 14f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             minHeight = (48 * d).toInt(); minWidth = (48 * d).toInt()   // accessible touch target
             setPadding((16 * d).toInt(), 0, (16 * d).toInt(), 0)
             background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = 24 * d; setColor(android.graphics.Color.parseColor("#FF2EE6A6"))
-                setStroke((2 * d).toInt(), android.graphics.Color.parseColor("#FF0B1220"))
+                cornerRadius = 24 * d; setColor(android.graphics.Color.parseColor("#FF111827"))
+                setStroke((1 * d).toInt().coerceAtLeast(1), android.graphics.Color.parseColor("#FFFF3B30"))
             }
             elevation = 6 * d
             isClickable = true; isFocusable = true

@@ -2,6 +2,11 @@ package ai.genwhy.nobonk.service
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.os.Build
 import android.view.Gravity
 import android.view.View
@@ -10,18 +15,19 @@ import android.view.WindowManager
 import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.util.Dbg
 
-/**
- * Four thin, non-touchable overlay strips along the screen edges (inside the status-bar /
- * cutout and gesture-bar insets). Each strip is its own tiny window, so no touch can ever
- * pass through an app-owned overlay, and nothing of the underlying app is covered beyond
- * a 3 dp border. Colour follows [EdgeIndicatorPolicy]; there is no animation. Window alpha stays
- * under Android's maximum obscuring opacity so touches are never blocked. Another app in front may
- * rotate the display during a background session, so the service calls [relayout] on configuration
- * changes; the current level/blocked state is preserved across the re-layout.
- */
+/** A moving red trail drawn in four narrow, non-touchable edge windows. */
 class EdgeIndicator(private val context: Context, private val wm: WindowManager) {
     private val strips = ArrayList<View>(4)
-    private var color = 0
+    private val handler = Handler(Looper.getMainLooper())
+    private val frame = object : Runnable {
+        override fun run() {
+            val awake = context.getSystemService(android.os.PowerManager::class.java).isInteractive
+            if (awake) strips.forEach { it.invalidate() }
+            if (strips.isNotEmpty() && !blocked && android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                handler.postDelayed(this, if (awake) 50L else 1000L)
+            }
+        }
+    }
     private var level = AlertLevel.NONE
     private var blocked = false
 
@@ -31,7 +37,6 @@ class EdgeIndicator(private val context: Context, private val wm: WindowManager)
         val d = context.resources.displayMetrics.density
         val t = (EdgeIndicatorPolicy.THICKNESS_DP * d).toInt().coerceAtLeast(2)
         val (top, bottom) = insets()
-        color = EdgeIndicatorPolicy.colorFor(level, cameraBlocked)
         fun params(w: Int, h: Int, gravity: Int, x: Int, y: Int) = WindowManager.LayoutParams(
             w, h, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
@@ -52,10 +57,42 @@ class EdgeIndicator(private val context: Context, private val wm: WindowManager)
             params(t, sideH, Gravity.START or Gravity.TOP, 0, top + t),
             params(t, sideH, Gravity.END or Gravity.TOP, 0, top + t)
         )
-        for (p in specs) {
-            val v = View(context).apply { setBackgroundColor(color); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+        val screenW = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) wm.currentWindowMetrics.bounds.width() else context.resources.displayMetrics.widthPixels
+        val perimeter = 2f * (screenW + sideH)
+        for ((index, p) in specs.withIndex()) {
+            val v = object : View(context) {
+                private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                override fun onDraw(canvas: Canvas) {
+                    super.onDraw(canvas)
+                    if (blocked) { canvas.drawColor(EdgeIndicatorPolicy.BLOCKED); return }
+                    // Clockwise: top → right → bottom → left, with a fading tail.
+                    val length = if (index < 2) width.toFloat() else height.toFloat()
+                    val start = when (index) { 0 -> 0f; 3 -> screenW.toFloat(); 1 -> screenW + sideH.toFloat(); else -> 2f * screenW + sideH }
+                    val head = if (android.animation.ValueAnimator.areAnimatorsEnabled()) (SystemClock.uptimeMillis() % 6000L) / 6000f * perimeter else perimeter * 0.12f
+                    val tail = perimeter * 0.18f
+                    val step = (4 * d).coerceAtLeast(2f)
+                    var pos = 0f
+                    while (pos < length) {
+                        val behind = (head - (start + pos) + perimeter) % perimeter
+                        if (behind <= tail) {
+                            paint.color = EdgeIndicatorPolicy.HIGH
+                            paint.alpha = (255 * (1f - behind / tail)).toInt()
+                            val end = (pos + step).coerceAtMost(length)
+                            when (index) {
+                                0 -> canvas.drawRect(pos, 0f, end, height.toFloat(), paint)
+                                3 -> canvas.drawRect(0f, pos, width.toFloat(), end, paint)
+                                1 -> canvas.drawRect(length - end, 0f, length - pos, height.toFloat(), paint)
+                                else -> canvas.drawRect(0f, length - end, width.toFloat(), length - pos, paint)
+                            }
+                        }
+                        pos += step
+                    }
+                }
+            }.apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
             try { wm.addView(v, p); strips += v } catch (e: Exception) { Dbg.e("EdgeIndicator", "addView failed", e) }
         }
+        handler.removeCallbacks(frame)
+        if (!blocked && strips.isNotEmpty()) handler.post(frame)
     }
 
     /** Display rotated / insets changed while another app is in front: rebuild geometry, keep state. */
@@ -63,13 +100,13 @@ class EdgeIndicator(private val context: Context, private val wm: WindowManager)
 
     fun setLevel(level: AlertLevel, cameraBlocked: Boolean) {
         this.level = level; this.blocked = cameraBlocked
-        val c = EdgeIndicatorPolicy.colorFor(level, cameraBlocked)
-        if (!EdgeIndicatorPolicy.shouldRedraw(color, c)) return
-        color = c
-        for (v in strips) v.setBackgroundColor(c)
+        handler.removeCallbacks(frame)
+        strips.forEach { it.invalidate() }
+        if (!blocked && strips.isNotEmpty()) handler.post(frame)
     }
 
     fun hide() {
+        handler.removeCallbacks(frame)
         for (v in strips) try { wm.removeView(v) } catch (_: Exception) {}
         strips.clear()
     }
