@@ -116,7 +116,9 @@ struct NoBonkView: View {
     }
     private var browseLayout: some View {
         GeometryReader { screen in
-            let constrained = dynamicTypeSize.isAccessibilitySize || screen.size.height < 430
+            // Short phones need the same scrollable arrangement as a keyboard:
+            // otherwise site chrome can consume nearly the entire video viewport.
+            let constrained = dynamicTypeSize.isAccessibilitySize || screen.size.height < 700
             let previewHeight = constrained
                 ? max(64, min(screen.size.height * 0.22, 140))
                 : max(150, min(screen.size.height * 0.28, 210))
@@ -165,8 +167,10 @@ struct NoBonkView: View {
                                 }
                                 composeButton
                             }
+                            // 328pt reserves roughly 240pt for the actual page
+                            // after the native 44pt address/navigation controls.
                             BrowserPane(model: browser)
-                                .frame(minHeight: constrained ? max(280, content.size.height) : max(80, content.size.height - 54 - (camera.audioUnavailable ? 30 : 0)),
+                                .frame(minHeight: constrained ? max(328, content.size.height) : max(80, content.size.height - 54 - (camera.audioUnavailable ? 30 : 0)),
                                        maxHeight: constrained ? nil : max(80, content.size.height - 54 - (camera.audioUnavailable ? 30 : 0)))
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }
