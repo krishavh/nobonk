@@ -2,16 +2,16 @@
 
 The prior runtime (e4c3933) loaded the user-supplied public YouTube video
 `https://www.youtube.com/watch?v=uj7l9rwRWSQ` inside NoBonk on an iPhone SE
-(3rd generation) simulator, iOS17. It redirected to the mobile watch page.
+(3rd generation) simulator, iOS 17. It redirected to the mobile watch page.
 
 At normal text size, the small website viewport clipped the portrait player
 into a thin strip. In the existing accessible layout, the taller website pane
-allowed manual inline playback: the visible playhead advanced from0:22 to1:08
-of1:57 while NoBonk's paused preview and Start remained reachable. Close and
+allowed manual inline playback: the visible playhead advanced from 0:22 to 1:08
+of 1:57 while NoBonk's paused preview and Start remained reachable. Close and
 reopen worked. No login or native YouTube app was used.
 
-This correction automatically uses the compact arrangement below700pt of
-available height and reserves at least328pt for BrowserPane (roughly240pt for
+This correction automatically uses the compact arrangement below 700 pt of
+available height and reserves at least 328 pt for BrowserPane (roughly 240 pt for
 the page after native address/navigation bars). Preview and Start/Stop remain
 pinned outside scrolling content.
 
