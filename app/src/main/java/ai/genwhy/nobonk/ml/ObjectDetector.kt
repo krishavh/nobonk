@@ -29,7 +29,8 @@ class ObjectDetector(
     context: Context,
     modelName: String = "yolo26s_416.onnx",
     requestedInputSize: Int = 416,
-    val skipNms: Boolean = false
+    val skipNms: Boolean = false,
+    checkActive: () -> Unit = {}
 ) {
     private val ortEnvironment = OrtEnvironment.getEnvironment()
     private val preparedModel: PreparedModel
@@ -71,7 +72,9 @@ class ObjectDetector(
     }
 
     init {
+        checkActive()
         val modelBytes = context.assets.open(modelName).use { it.readBytes() }
+        checkActive()
 
         // Cache a verified measured choice, not a hardware assumption. Invalidate after
         // model/app/runtime/OS changes; a failed cached warm-up triggers benchmarking.
@@ -99,13 +102,14 @@ class ObjectDetector(
                     }
                     val session = ortEnvironment.createSession(modelBytes, options)
                     try {
+                        checkActive()
                         val size = readInputSize(session, modelName, requestedInputSize)
                         val input = java.nio.ByteBuffer.allocateDirect(4 * 3 * size * size)
                             .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
                         PreparedModel(session, size, input, OrtFloatRunner(ortEnvironment, session, input,
                             longArrayOf(1, 3, size.toLong(), size.toLong())))
-                    } catch (failure: Exception) {
-                        session.close()
+                    } catch (failure: Throwable) {
+                        runCatching { session.close() }
                         throw failure
                     }
                 }
@@ -115,15 +119,23 @@ class ObjectDetector(
                 val t0 = System.nanoTime()
                 it.infer()
                 (System.nanoTime() - t0) / 1e6
-            }
+            },
+            checkActive = checkActive
         )
+        try {
+            checkActive()
+            pixels = IntArray(choice.resource.size * choice.resource.size)
+            checkActive()
+        } catch (failure: Throwable) {
+            runCatching { choice.resource.close() }
+            throw failure
+        }
         preparedModel = choice.resource
         activeExecutionProvider = choice.name
         inputSize = preparedModel.size
         if (!choice.cached) prefs.edit().putString(key, choice.name).putLong("$key.time", now).apply()
         Dbg.i(TAG, "Execution provider: ${choice.name} (${if (choice.cached) "cached + verified" else "measured"}) for $modelName")
 
-        pixels = IntArray(inputSize * inputSize)
         floatBuffer = preparedModel.input
         inference = preparedModel.runner
 

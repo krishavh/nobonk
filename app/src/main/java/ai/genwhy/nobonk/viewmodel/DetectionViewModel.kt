@@ -28,6 +28,9 @@ import ai.genwhy.nobonk.model.Detection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicLong
@@ -110,6 +113,14 @@ class DetectionViewModel : ViewModel() {
     }
     fun stopScanning() {
         session.stop()
+        if (isInitializing) {
+            // Invalidate before cancelling: an old job's finally must not clear a new
+            // Start's loading state. A ready model remains reusable after ordinary Stop.
+            modelGeneration.incrementAndGet()
+            modelJob?.cancel(); modelJob = null
+            isInitializing = false
+            modelReady = false
+        }
         engine?.muted = true
         engine?.silence()   // cancel a chirp / speech / vibration already playing
         engine?.stopSensors()   // no accelerometer/gravity sampling while stopped
@@ -132,7 +143,7 @@ class DetectionViewModel : ViewModel() {
         ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = false   // explicit new session: obsolete stop memory cleared
         session.start(); scanningEnabled = true
         engine?.muted = !session.mayScan
-        if (session.mayScan) engine?.startSensors()
+        if (session.mayScan && modelReady && !isInitializing) engine?.startSensors()
         if (locationTaggingEnabled) appContext?.let { enableLocationTagging(it) }
         if (!modelReady && !isInitializing) appContext?.let { requestModel(it, accuracyMode) }
     }
@@ -313,12 +324,20 @@ class DetectionViewModel : ViewModel() {
         modelJob = viewModelScope.launch {
             try {
                 withContext(Dispatchers.Default) {
+                    val startupContext = currentCoroutineContext()
+                    val checkStartup = {
+                        startupContext.ensureActive()
+                        if (cleared.get() || request != modelGeneration.get()) {
+                            throw CancellationException("Model startup no longer owned")
+                        }
+                    }
                     engineMutex.withLock {
-                        if (cleared.get() || request != modelGeneration.get()) return@withLock
+                        checkStartup()
                         val eng = engine ?: DetectionEngine(context.applicationContext).also { engine = it }
-                        eng.loadModel(mode.modelFile, mode.inputPx, mode.skipNms)
+                        eng.loadModel(mode.modelFile, mode.inputPx, mode.skipNms, checkStartup)
+                        checkStartup()
                         cameraInfo?.let { eng.attachCamera(it) }
-                        eng.warmUp()
+                        eng.warmUp(checkStartup)
                     }
                 }
                 if (cleared.get() || request != modelGeneration.get()) return@launch
