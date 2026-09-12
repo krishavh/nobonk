@@ -16,7 +16,7 @@ Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision Pe
 | Cues | Visual indication, optional sound and haptics, with Earlier/Balanced/Closer sensitivity. These use apparent image size, not metres. |
 | Quick access | Siri/App Shortcuts plus supported Action button, Control Center and Lock Screen controls open setup. Acknowledgment and explicit Start still apply. |
 
-**0.2.6 (build 8)** is the latest signed development preview. Installed and launched on HRD on September 12, 2026. This is a development installation, not a public App Store or TestFlight release. The Android closed-test link does not install the iPhone app.
+**0.2.6 (build 9)** is the latest signed development preview. Build 8 installed and launched on HRD during September 12 testing; build 9 contains the final compact-keyboard refinement. Installation and lock-state results are recorded in the local delivery handoff. This is a development installation, not a public App Store or TestFlight release. The Android closed-test link does not install the iPhone app.
 
 This update adds a parent-owned, in-memory message draft, explicit paused handoffs to Messages or the share sheet, and Instagram-web/YouTube browser shortcuts. Native Instagram and WhatsApp cannot run inside this pane; Instagram website sign-in/messaging remains unverified. NoBonk hides its own content when inactive, but the system composer/share sheet is managed by iOS; comprehensive snapshot prevention is not claimed.
 

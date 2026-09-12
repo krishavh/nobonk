@@ -16,7 +16,7 @@ final class DraftLayoutTests: XCTestCase {
     }
 
     func testCompactDraftKeepsAnEditableLineWithinAShortPane() async throws {
-        try await assertDraftFits(size: CGSize(width: 320, height: 220), type: .large)
+        try await assertDraftFits(size: CGSize(width: 320, height: 145), type: .large)
     }
 
     func testAccessibilityDraftFitsNarrowPaneWithoutClippingTheEditor() async throws {

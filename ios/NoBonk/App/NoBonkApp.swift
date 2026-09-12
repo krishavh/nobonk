@@ -348,7 +348,7 @@ struct NoBonkView: View {
                 .buttonStyle(PrimaryButton(isStop: camera.running || camera.starting, compact: compact))
                 .accessibilityLabel(camera.running || camera.starting ? "Stop scanning" : (camera.denied ? "Open camera settings" : "Start scanning"))
                 .accessibilityIdentifier("scan.control")
-                .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 8)
+                .padding(.horizontal, 20).padding(.top, compact ? 4 : 10).padding(.bottom, compact ? 4 : 8)
                 .background(night.opacity(0.98))
         }
     }

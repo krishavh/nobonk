@@ -15,7 +15,7 @@ struct DraftScanPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 6 : 12) {
-            HStack(spacing: 8) {
+            if !compact { HStack(spacing: 8) {
                 Label("Your draft", systemImage: "square.and.pencil").font(.headline)
                 Spacer()
                 Button { editing = false; onHelp(); showHelp = true } label: {
@@ -25,7 +25,7 @@ struct DraftScanPane: View {
                     Button("Done") { editing = false }.frame(minWidth: 44, minHeight: 44)
                         .accessibilityIdentifier("draft.dismissKeyboard")
                 }
-            }
+            } }
             if !compact {
                 Text("Write here with your camera in view. Pause to send when you’re ready.")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -45,9 +45,33 @@ struct DraftScanPane: View {
                 }
             }.background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.1)))
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) { handoffButtons }
-                VStack(alignment: .leading, spacing: 4) { handoffButtons }
+            if compact {
+                HStack(spacing: 8) {
+                    Button { editing = false; onHelp(); showHelp = true } label: {
+                        Image(systemName: "info.circle").frame(width: 44, height: 44)
+                    }.accessibilityLabel("How drafting and sending work")
+                    Spacer(minLength: 0)
+                    Button { editing = false; onShare() } label: {
+                        ViewThatFits(in: .horizontal) {
+                            Label("Pause & share", systemImage: "square.and.arrow.up")
+                                .font(.subheadline.weight(.semibold)).fixedSize()
+                            HStack(spacing: 8) {
+                                Image(systemName: "pause.fill")
+                                Image(systemName: "square.and.arrow.up")
+                            }
+                        }.frame(minWidth: 44, minHeight: 44)
+                    }.disabled(!hasText).accessibilityLabel("Pause scanning and share draft")
+                        .accessibilityIdentifier("draft.share")
+                    if editing {
+                        Button("Done") { editing = false }.frame(minWidth: 44, minHeight: 44)
+                            .accessibilityIdentifier("draft.dismissKeyboard")
+                    }
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { handoffButtons }
+                    VStack(alignment: .leading, spacing: 4) { handoffButtons }
+                }
             }
             if !compact {
                 HStack {
