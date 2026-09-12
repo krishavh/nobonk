@@ -121,7 +121,7 @@ object LowLight {
      * @param meanBrightness     average luma over the sampled grid, 0‥255
      * @param blocked            the [isBlocked] verdict for this frame (never both at once)
      * @param lowLightThreshold  mean luma below which the scene counts as "dim";
-     *                           default 60f
+     *                            default 60f
      * @return `true` when the frame is dim enough to warn about but not blocked
      */
     fun isLowLight(
