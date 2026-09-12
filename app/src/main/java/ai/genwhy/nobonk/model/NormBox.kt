@@ -76,6 +76,7 @@ data class NormBox(
         // Cheap early exit: an empty box (zero or clamped-negative extent,
         // or NaN edges) can never contribute a positive-area intersection.
         if (isEmpty || other.isEmpty) return 0f
+        
         // Intersection rectangle: max of the left/top edges, min of the
         // right/bottom edges. Using `>=` here treats edge-touching boxes
         // (zero-area overlap) as disjoint.
@@ -83,10 +84,14 @@ data class NormBox(
         val interTop = maxOf(top, other.top)
         val interRight = minOf(right, other.right)
         val interBottom = minOf(bottom, other.bottom)
+        
         if (interLeft >= interRight || interTop >= interBottom) return 0f
+        
         val inter = (interRight - interLeft) * (interBottom - interTop)
+        
         // Union = sum of areas minus the double-counted intersection.
         val union = area + other.area - inter
+        
         // Union can only be ≤ 0 when both boxes are degenerate (zero area);
         // the strict `> 0f` check also makes NaN inputs fall through to 0f.
         return if (union > 0f) inter / union else 0f
