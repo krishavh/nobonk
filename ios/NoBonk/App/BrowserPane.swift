@@ -72,6 +72,11 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         message = nil; hasPage = true; requestedLocation = url
         loadPage(webView, URLRequest(url: url))
     }
+    func open(address: String) {
+        self.address = address
+        editingAddress = false
+        open()
+    }
     func pause(completion: (() -> Void)? = nil) {
         playbackSuspended = true
         guard let webView else { completion?(); return }
@@ -111,6 +116,7 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         refresh()
     }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard self.webView === webView else { decisionHandler(.cancel); return }
         guard let url = action.request.url else { decisionHandler(.cancel); return }
         if url.absoluteString == "about:blank", !hasPage { decisionHandler(.allow); return }
         guard BrowserDestination.allows(url) else {
@@ -120,10 +126,12 @@ final class BrowserModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         decisionHandler(.allow)
     }
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        guard self.webView === webView, hasPage else { decisionHandler(.cancel); return }
         guard response.canShowMIMEType else { message = "Downloads are not supported in this preview."; decisionHandler(.cancel); return }
         decisionHandler(.allow)
     }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        guard self.webView === webView, hasPage else { return nil }
         if action.targetFrame == nil, let url = action.request.url, BrowserDestination.allows(url) {
             webView.load(action.request)
         }
@@ -187,16 +195,50 @@ struct BrowserPane: View {
                 }.padding(.horizontal, 6).background(.white.opacity(0.04))
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Image(systemName: "rectangle.split.1x2").font(.largeTitle).foregroundStyle(.mint)
-                        Text("A little room for your world.").font(.title3.bold())
-                        Text("Open a reading page or an inline video while the camera stays visible above. Set up while standing still, then keep looking up.")
-                        Text("Write a message opens Apple’s composer and pauses scanning. NoBonk cannot read or show your Messages inbox. This pane opens websites inside NoBonk, not other iPhone apps. Some video sites require full screen; scanning pauses if the camera is covered.")
-                        Text("Camera frames stay on your phone. Websites connect to the internet and follow their own privacy policies. Browsing data is not saved to disk by this pane.").font(.caption)
-                    }.foregroundStyle(.secondary).padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Browse, with the scan in view.")
+                            .font(.headline).foregroundStyle(.primary)
+                        Text("Choose a website or enter an address above. Set up while standing still; keep looking up.")
+                            .font(.subheadline)
+                        VStack(spacing: 8) {
+                            websiteButton("Instagram web", subtitle: "Open the website", symbol: "camera", address: "https://www.instagram.com/", identifier: "browse.instagram")
+                            websiteButton("YouTube", subtitle: "Try an inline video", symbol: "play.rectangle", address: "https://www.youtube.com/", identifier: "browse.youtube")
+                        }
+                        Text("Website features and sign-in depend on the service. Native apps cannot appear here. Use Draft & scan to write for Messages or WhatsApp; switching apps pauses scanning.")
+                            .font(.caption)
+                        Text("Full-screen video also pauses scanning. Websites use the internet and their own privacy policies. Closing a page clears this pane’s temporary browsing session.")
+                            .font(.caption)
+                    }.foregroundStyle(.secondary).padding(16).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }.background(Color(white: 0.07), in: RoundedRectangle(cornerRadius: 18))
             .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func websiteButton(_ title: String, subtitle: String, symbol: String, address: String, identifier: String) -> some View {
+        Button {
+            editingAddress = false
+            model.open(address: address)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.title3).foregroundStyle(.mint).frame(width: 28)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.up.right").font(.caption.weight(.semibold)).accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open \(title) inside NoBonk")
+        .accessibilityHint("Scanning can continue while the camera stays visible. The website may require sign-in.")
+        .accessibilityIdentifier(identifier)
     }
 }

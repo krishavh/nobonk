@@ -25,7 +25,7 @@ final class CameraEngine: NSObject {
     private var firstResultPending = false
     private var startedAt = 0.0
     private let diagnostics = Logger(subsystem: "ai.genwhy.nobonk", category: "CameraAccess")
-    var onBoxes: ((UInt64, [PersonBox], Double, Double, Double) -> Void)?
+    var onBoxes: ((UInt64, [PersonBox], Double, Double, Double, Double) -> Void)?
     var onState: ((UInt64, Bool, String) -> Void)?
     var onTiming: ((UInt64, DetectorTiming) -> Void)?
     func start(token: UInt64, mode: DetectorMode) {
@@ -146,7 +146,7 @@ final class CameraEngine: NSObject {
                 }
                 #endif
                 onBoxes?(token, boxes, aspect, cadence.averageDuration,
-                         cadence.interval(pressure: pressure, lowPower: lowPower))
+                         cadence.interval(pressure: pressure, lowPower: lowPower), now)
             }
         } catch { onState?(token, false, "Detection interrupted. Tap Start to retry."); session.stopRunning() }
     }
@@ -185,6 +185,11 @@ final class CameraModel: ObservableObject {
     @Published var previewAspect = 9.0 / 16
     @Published var analysisMilliseconds = 0
     @Published var analysisRate = 0
+    @Published private(set) var lastAnalyzedFrameReceipt: Double?
+    func scanFeedback(at now: Double = ProcessInfo.processInfo.systemUptime) -> ScanFeedback {
+        ScanFeedback.make(running: running, starting: starting, receivedAt: lastAnalyzedFrameReceipt,
+                          now: now, boxes: boxes, pausedMessage: status)
+    }
     @Published var alertUntil = Date.distantPast
     @Published var alertText = "Person ahead — look up"
     private var wanted = false
@@ -194,14 +199,21 @@ final class CameraModel: ObservableObject {
     private var policy = DetectionPolicy()
     private var observers: [NSObjectProtocol] = []
     init() {
-        engine.onBoxes = { [weak self] token, boxes, aspect, duration, interval in
+        engine.onBoxes = { [weak self] token, boxes, aspect, duration, interval, receivedAt in
             Task { @MainActor in
                 guard let self, self.engine.generation.accepts(token), self.wanted, self.running, UIApplication.shared.applicationState == .active else { return }
-                self.boxes = boxes
-                self.previewAspect = aspect
+                let now = ProcessInfo.processInfo.systemUptime
+                if !ScanFeedback.isFresh(receivedAt: self.lastAnalyzedFrameReceipt, now: now) { self.policy.reset() }
+                self.lastAnalyzedFrameReceipt = receivedAt
                 self.analysisMilliseconds = Int((duration * 1000).rounded())
                 self.analysisRate = Int((1 / interval).rounded())
-                let cue = self.policy.evaluate(boxes, time: ProcessInfo.processInfo.systemUptime, sensitivity: self.sensitivity)
+                guard ScanFeedback.isFresh(receivedAt: receivedAt, now: now) else {
+                    self.boxes = []; self.policy.reset(); self.alertUntil = .distantPast
+                    return
+                }
+                self.boxes = boxes
+                self.previewAspect = aspect
+                let cue = self.policy.evaluate(boxes, time: now, sensitivity: self.sensitivity)
                 if cue != .none {
                     self.alertText = cue == .personAhead ? "Person ahead — look up" : "Object in view — look up"
                     self.alertUntil = Date().addingTimeInterval(2)
@@ -284,6 +296,7 @@ final class CameraModel: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = false
         cueRun = UUID()
         wanted = false; starting = false; running = false; boxes = []; policy.reset(); alertUntil = .distantPast
+        lastAnalyzedFrameReceipt = nil
         audio.stop()
         audioUnavailable = false
         analysisMilliseconds = 0; analysisRate = 0

@@ -66,6 +66,27 @@ final class BrowserIntegrationTests: XCTestCase {
         XCTAssertFalse(model.loading)
         XCTAssertFalse(model.hasPage)
     }
+    func testPresetNavigationKeepsTheSecurePrivateBrowserPolicy() throws {
+        XCTAssertNil(model.webView)
+        model.editingAddress = true
+        model.address = "https://unfinished-draft.invalid/"
+        model.open(address: "https://www.instagram.com/")
+        let first = try XCTUnwrap(model.webView)
+        XCTAssertFalse(model.editingAddress)
+        XCTAssertFalse(first.configuration.websiteDataStore.isPersistent)
+        XCTAssertEqual(requestedURLs.map(\.absoluteString), ["https://www.instagram.com/"])
+        // A new entry point must not permit native-app or insecure URLs.
+        for address in ["whatsapp://send", "http://www.instagram.com/"] {
+            model.open(address: address)
+            XCTAssertNotNil(model.message)
+            XCTAssertTrue(model.webView === first)
+            XCTAssertEqual(requestedURLs.count, 1)
+        }
+        model.open(address: "https://www.youtube.com/")
+        XCTAssertNil(model.message)
+        XCTAssertTrue(model.webView === first)
+        XCTAssertEqual(requestedURLs.map(\.absoluteString), ["https://www.instagram.com/", "https://www.youtube.com/"])
+    }
     func testCloseReleasesBrowserAndOldCallbacksCannotAffectANewPage() async throws {
         try await load()
         let old = try XCTUnwrap(model.webView)
@@ -200,8 +221,20 @@ final class BrowserIntegrationTests: XCTestCase {
         XCTAssertEqual(marker, "local fixture")
     }
     func testSuspensionBlocksScriptRestartUntilVisibleResume() async throws {
-        let media = AlertTone.wav().base64EncodedString()
-        try await load("<audio id='media' loop muted preload='auto' src='data:audio/wav;base64,\(media)'></audio><p id='marker'>local fixture</p>")
+        // A long, non-looping fixture avoids a 200ms cue wrapping its clock
+        // during WebKit's asynchronously reported suspension transition.
+        let short = AlertTone.wav()
+        var wave = Data(short.prefix(44))
+        let pcm = short.dropFirst(44)
+        for _ in 0..<40 { wave.append(contentsOf: pcm) }
+        func setSize(_ value: UInt32, at offset: Int) {
+            var little = value.littleEndian
+            withUnsafeBytes(of: &little) { wave.replaceSubrange(offset..<(offset + 4), with: $0) }
+        }
+        setSize(UInt32(wave.count - 8), at: 4)
+        setSize(UInt32(wave.count - 44), at: 40)
+        let media = wave.base64EncodedString()
+        try await load("<audio id='media' muted preload='auto' src='data:audio/wav;base64,\(media)'></audio><p id='marker'>local fixture</p>")
         model.resume()
         // evaluateJavaScript executes this explicit test gesture; no autoplay
         // policy is weakened or configuration/delegate replaced for the test.
@@ -228,7 +261,17 @@ final class BrowserIntegrationTests: XCTestCase {
         try await eventually("media paused by production pause") {
             (try await self.webView.evaluateJavaScript("document.getElementById('media').paused")) as? Bool == true
         }
-        let pausedTime = try await webView.evaluateJavaScript("document.getElementById('media').currentTime") as! Double
+        // Completion applies the playback policy, but media currentTime can
+        // still publish the final audio-render position on a subsequent tick.
+        var priorTime = -1.0
+        var stableSamples = 0
+        try await eventually("paused media timeline settles") {
+            let time = try await self.webView.evaluateJavaScript("document.getElementById('media').currentTime") as! Double
+            stableSamples = abs(time - priorTime) < 0.001 ? stableSamples + 1 : 0
+            priorTime = time
+            return stableSamples >= 3
+        }
+        let pausedTime = priorTime
         _ = try await webView.evaluateJavaScript("window.restart='pending'; document.getElementById('media').play().then(()=>window.restart='playing').catch(e=>window.restart=e.name); void 0")
         try await Task.sleep(for: .milliseconds(350))
         let after = try await webView.evaluateJavaScript("document.getElementById('media').currentTime") as! Double

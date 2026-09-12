@@ -11,12 +11,26 @@ struct NoBonkApp: App {
 private let night = Color(red: 0.035, green: 0.055, blue: 0.09)
 private let mint = Color(red: 0.2, green: 0.85, blue: 0.65)
 
+private enum ScanWorkspace: String, CaseIterable {
+    case setup = "Set up"
+    case browse = "Browse"
+    case draft = "Draft"
+}
+
+private struct DraftHandoff: Identifiable {
+    let id = UUID()
+    let text: String
+    let messages: Bool
+}
+
 struct NoBonkView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var camera = CameraModel()
     @StateObject private var browser = BrowserModel()
-    @State private var browsing = false
-    @State private var showComposer = false
+    @State private var workspace = ScanWorkspace.setup
+    private var browsing: Bool { workspace != .setup }
+    @State private var handoff: DraftHandoff?
+    @State private var draft = ""
     @State private var canCompose = MFMessageComposeViewController.canSendText()
     @State private var gate = SafetyGate(acknowledgedVersion: UserDefaults.standard.integer(forKey: "safetyNoticeVersion"))
     @State private var checked = false
@@ -29,6 +43,19 @@ struct NoBonkView: View {
             night.ignoresSafeArea()
             if gate.screen == .scanning { scanning } else { notice }
         }
+        .overlay {
+            if scenePhase != .active {
+                ZStack {
+                    night.ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        Image("BrandIcon").resizable().frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                        Text("NoBonk is paused").font(.headline)
+                        Text("Return to continue.").foregroundStyle(.secondary)
+                    }
+                }.accessibilityElement(children: .combine)
+            }
+        }
         .tint(mint)
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { camera.stop(); browser.pause() }
@@ -40,17 +67,20 @@ struct NoBonkView: View {
             browser.onCameraCovered = { camera.stop(message: "Camera covered — tap Start when the view is visible") }
             syncBrowserVisibility()
         }
-        .onChange(of: browsing) { _, _ in syncBrowserVisibility() }
+        .onChange(of: workspace) { _, _ in syncBrowserVisibility() }
         .onChange(of: browser.hasPage) { _, hasPage in
             // Close suspends the discarded page. Reopening must reapply the
             // actual foreground/acknowledgment gate, not unconditionally play.
             if hasPage { syncBrowserVisibility() }
         }
         .onChange(of: gate.screen) { _, _ in syncBrowserVisibility() }
-        .onChange(of: showComposer) { _, _ in syncBrowserVisibility() }
-        .sheet(isPresented: $showComposer) {
-            MessageComposer { showComposer = false }
-                .ignoresSafeArea()
+        .onChange(of: handoff?.id) { _, _ in syncBrowserVisibility() }
+        .sheet(item: $handoff) { payload in
+            if payload.messages {
+                MessageComposer(body: payload.text) { handoff = nil }.ignoresSafeArea()
+            } else {
+                MessageShareSheet(text: payload.text).presentationDetents([.medium, .large])
+            }
         }
         .sheet(isPresented: $showFull) {
             NavigationStack {
@@ -61,7 +91,7 @@ struct NoBonkView: View {
         }
     }
     private func syncBrowserVisibility() {
-        if browsing && !showComposer && gate.screen == .scanning && scenePhase == .active { browser.resume() }
+        if workspace == .browse && handoff == nil && gate.screen == .scanning && scenePhase == .active { browser.resume() }
         else { browser.pause() }
     }
     private var brand: some View {
@@ -107,11 +137,14 @@ struct NoBonkView: View {
     }
     private var scanning: some View {
         VStack(spacing: 0) {
-            Picker("NoBonk mode", selection: $browsing) {
-                Text("Set up").tag(false)
-                Text("Browse & scan").tag(true)
+            Picker("NoBonk mode", selection: $workspace) {
+                ForEach(ScanWorkspace.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 6)
-            if browsing { browseLayout } else { setup }
+            switch workspace {
+            case .setup: setup
+            case .browse: browseLayout
+            case .draft: draftLayout
+            }
         }
     }
     private var browseLayout: some View {
@@ -133,7 +166,7 @@ struct NoBonkView: View {
                     // Keep an urgent visual cue pinned even while the full,
                     // scalable explanation has scrolled with website content.
                     TimelineView(.periodic(from: .now, by: 0.5)) { tick in
-                        if tick.date < camera.alertUntil {
+                        if camera.scanFeedback().recent && tick.date < camera.alertUntil {
                             Label("Look up", systemImage: "exclamationmark.triangle.fill")
                                 .font(.headline.bold()).foregroundStyle(.orange)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -146,10 +179,12 @@ struct NoBonkView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             if constrained {
                                 browseReminder
-                                Text(camera.status).font(.caption.weight(.medium))
-                                    .fixedSize(horizontal: false, vertical: true)
+                                TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                                    Text(camera.scanFeedback().detail).font(.caption.weight(.medium))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                                 TimelineView(.periodic(from: .now, by: 0.5)) { tick in
-                                    if tick.date < camera.alertUntil {
+                                    if camera.scanFeedback().recent && tick.date < camera.alertUntil {
                                         Label(camera.alertText, systemImage: "exclamationmark.triangle.fill")
                                             .font(.subheadline.bold()).foregroundStyle(.orange)
                                             .fixedSize(horizontal: false, vertical: true)
@@ -159,13 +194,6 @@ struct NoBonkView: View {
                             if camera.audioUnavailable {
                                 Text("Sound unavailable · visual and enabled haptic cues remain on")
                                     .font(.caption2).foregroundStyle(.orange)
-                            }
-                            HStack(spacing: 8) {
-                                if !constrained {
-                                    Text("WEB & MESSAGES").font(.system(size: 9, weight: .bold)).tracking(1).foregroundStyle(.secondary)
-                                    Spacer()
-                                }
-                                composeButton
                             }
                             // 328pt reserves roughly 240pt for the actual page
                             // after the native 44pt address/navigation controls.
@@ -189,16 +217,38 @@ struct NoBonkView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
-    private var composeButton: some View {
-        Button {
-            guard MFMessageComposeViewController.canSendText() else { canCompose = false; return }
-            camera.stop(message: "Paused for Messages — tap Start after composing")
-            browser.pause(); showComposer = true
-        } label: {
-            Label("Write a message", systemImage: "square.and.pencil")
-                .font(.caption.bold()).frame(minHeight: 44)
-                .fixedSize(horizontal: false, vertical: true)
-        }.disabled(!canCompose)
+    private func prepareHandoff(messages: Bool) {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if messages && !MFMessageComposeViewController.canSendText() { canCompose = false; return }
+        camera.stop(message: "Paused to send — return here and tap Start")
+        browser.pause()
+        handoff = DraftHandoff(text: text, messages: messages)
+    }
+
+    private var draftLayout: some View {
+        GeometryReader { screen in
+            let compact = screen.size.height < 650 || dynamicTypeSize.isAccessibilitySize
+            VStack(spacing: 8) {
+                if !compact { browseReminder }
+                cameraCardContent(showOverlayText: !compact)
+                    .frame(height: max(70, min(screen.size.height * 0.25, 180)))
+                    .accessibilityIdentifier("draft.pinnedPreview")
+                if compact {
+                    TimelineView(.periodic(from: .now, by: 0.5)) { tick in
+                        Text(camera.scanFeedback().recent && tick.date < camera.alertUntil ? "Look up · \(camera.alertText)" : camera.scanFeedback().detail)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(camera.scanFeedback().recent && tick.date < camera.alertUntil ? Color.orange : Color.secondary)
+                            .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                DraftScanPane(text: $draft, canMessage: canCompose, compact: compact,
+                              onMessages: { prepareHandoff(messages: true) },
+                              onShare: { prepareHandoff(messages: false) },
+                              onHelp: { camera.stop(message: "Paused for help — tap Start when ready"); browser.pause() })
+            }.padding(.horizontal, 12).padding(.top, 4)
+                .safeAreaInset(edge: .bottom, spacing: 0) { scanControl(compact: compact) }
+        }
     }
     private var setup: some View {
         GeometryReader { screen in
@@ -256,7 +306,7 @@ struct NoBonkView: View {
                                 Text("Recent analysis: \(camera.analysisMilliseconds) ms · target up to \(camera.analysisRate) frames/s")
                                     .monospacedDigit().foregroundStyle(mint)
                             }
-                            Text("Browse & scan keeps a website below the visible camera. Camera frames stay local; websites connect to the internet. Scanning pauses when you switch apps or a video covers the camera. Reopen NoBonk and tap Start when you are ready.")
+                            Text("Browse & scan opens a website below the visible camera. Draft & scan lets you write here while scanning, then send using Messages or the share sheet. Sending, switching apps or full-screen video pauses scanning. Return to NoBonk and tap Start when you are ready. Camera frames stay local; websites connect to the internet.")
                         }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
                     } label: {
                         Label("On this iPhone", systemImage: "iphone.gen3.radiowaves.left.and.right")
@@ -277,6 +327,7 @@ struct NoBonkView: View {
     }
     private var scanButton: some View { scanControl(compact: dynamicTypeSize.isAccessibilitySize) }
     private func scanControl(compact: Bool) -> some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
                 Button {
                     if camera.running || camera.starting { camera.stop() }
                     else if camera.denied, let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -289,7 +340,7 @@ struct NoBonkView: View {
                              : (camera.running || camera.starting ? "Stop scanning" : (camera.denied ? "Open camera settings" : "Start scanning")))
                         if !compact {
                             Spacer()
-                            Text(camera.running ? "LIVE" : (camera.starting ? "STARTING" : (camera.denied ? "ACCESS OFF" : "READY")))
+                            Text(camera.running ? (camera.scanFeedback().recent ? "RECENT" : "WAITING") : (camera.starting ? "STARTING" : (camera.denied ? "ACCESS OFF" : "READY")))
                                 .font(.caption2.bold()).tracking(1.5)
                         }
                     }
@@ -299,6 +350,7 @@ struct NoBonkView: View {
                 .accessibilityIdentifier("scan.control")
                 .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 8)
                 .background(night.opacity(0.98))
+        }
     }
     private var quickAccessGuide: some View {
         DisclosureGroup {
@@ -327,11 +379,13 @@ struct NoBonkView: View {
 
     private var cameraCard: some View { cameraCardContent(showOverlayText: true) }
     private func cameraCardContent(showOverlayText: Bool) -> some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+        let feedback = camera.scanFeedback()
         ZStack {
             Color.black
             CameraPreview(session: camera.engine.session)
             GeometryReader { geometry in
-                ForEach(camera.boxes) { box in
+                ForEach(feedback.recent ? camera.boxes : []) { box in
                     let rect = PreviewGeometry.rect(for: box, width: geometry.size.width,
                                                     height: geometry.size.height, imageAspect: camera.previewAspect)
                     RoundedRectangle(cornerRadius: 10).stroke(mint, lineWidth: 2)
@@ -359,8 +413,8 @@ struct NoBonkView: View {
             }
             VStack {
                 HStack(spacing: 8) {
-                    Circle().fill(camera.running ? mint : .gray).frame(width: 6, height: 6)
-                    Text(camera.running ? "LIVE VIEW" : "CAMERA PAUSED").font(.system(size: 10, weight: .bold)).tracking(1.5)
+                    Circle().fill(feedback.recent ? mint : .gray).frame(width: 6, height: 6)
+                    Text(feedback.badge).font(.system(size: 10, weight: .bold)).tracking(1.5)
                     Spacer()
                     if !browsing { Button {
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { expandedCamera.toggle() }
@@ -372,13 +426,13 @@ struct NoBonkView: View {
                 }.padding(.leading, 16).padding(.trailing, 6).padding(.top, 4)
                 Spacer()
                 if showOverlayText {
-                    Text(camera.status).font(.caption.weight(.medium)).multilineTextAlignment(.center)
+                    Text(camera.scanFeedback().detail).font(.caption.weight(.medium)).multilineTextAlignment(.center)
                         .padding(.horizontal, 14).padding(.vertical, 9)
                         .background(.black.opacity(0.72), in: Capsule()).padding(12)
                 }
             }
             TimelineView(.periodic(from: .now, by: 0.5)) { tick in
-                if showOverlayText && tick.date < camera.alertUntil {
+                if feedback.recent && showOverlayText && tick.date < camera.alertUntil {
                     VStack {
                         Label(camera.alertText, systemImage: "exclamationmark.triangle.fill")
                             .font(.subheadline.bold()).foregroundStyle(.black).padding(12)
@@ -390,6 +444,7 @@ struct NoBonkView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 26))
         .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.12), lineWidth: 1))
+        }
     }
 
 }
