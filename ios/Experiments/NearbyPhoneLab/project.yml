@@ -1,0 +1,68 @@
+name: NearbyPhoneLab
+options:
+  deploymentTarget:
+    iOS: "18.4"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.1.0"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  NearbyPhoneLab:
+    type: application
+    platform: iOS
+    sources: [App, Core, Shared]
+    dependencies:
+      - target: NearbyPhoneLabActivity
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.genwhy.nobonk.nearbyphonelab
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Nearby Phone Lab
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes: [nearby-interaction]
+        NSSupportsLiveActivities: true
+        NSNearbyInteractionUsageDescription: This experiment measures distance to one phone that you explicitly pair with. Both phones share relative position only during this session.
+        NSLocalNetworkUsageDescription: Find and pair with your testing partner's nearby phone to exchange temporary ranging tokens. No server is used.
+        NSBonjourServices: [_nobonk-peer._tcp]
+        CFBundleURLTypes:
+          - CFBundleURLName: ai.genwhy.nobonk.nearbyphonelab
+            CFBundleURLSchemes: [nobonknearbylab]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+  NearbyPhoneLabActivity:
+    type: app-extension
+    platform: iOS
+    sources: [Widget, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.genwhy.nobonk.nearbyphonelab.activity
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Nearby Phone Lab
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+schemes:
+  NearbyPhoneLab:
+    build:
+      targets:
+        NearbyPhoneLab: all

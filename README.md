@@ -140,7 +140,7 @@ From the command line:
 - **Debug build / install:** `./gradlew assembleDebug` (a helper script, `build_and_install.sh`, builds and installs to a connected device).
 - **Signed release bundle (for Play):** `./gradlew bundleRelease` produces `app/build/outputs/bundle/release/app-release.aab`. Signing reads keystore credentials from `~/.gradle/gradle.properties` or the `NOBONK_*` environment variables — **no secrets are committed**. See [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md) for keystore generation and the full Play submission steps, and [`docs/PLAY_16KB_CHECK.md`](docs/PLAY_16KB_CHECK.md) for the required 16 KB native-library check (`scripts/check_16kb_alignment.sh`).
 
-**Android requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Background scanning is Android's primary mode. The [iPhone development preview](https://github.com/krishavh/nobonk/pull/2) supports foreground People/Fast Objects and Browse & scan; native message composition pauses its camera. It has no background scanning or public App Store/TestFlight release yet. See the [current iPhone status](https://nobonk.genwhy.ai/#iphone).
+**Android requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Background scanning is Android's primary mode. The [iPhone development preview](ios/README.md) supports foreground People/Fast Objects and Browse & scan; native message composition pauses its camera. It has no background scanning or public App Store/TestFlight release yet. See the [current iPhone status](https://nobonk.genwhy.ai/#iphone).
 
 ## Known limitations
 

@@ -1,0 +1,29 @@
+# Hosted WebKit regression tests
+
+`BrowserIntegrationTests` exercises a real WKWebView/content process and the production `BrowserModel` using only local HTML and a generated PCM/WAV data URI. No remote media, website account, downloaded fixture or server is needed. The HTML has a restrictive content-security policy allowing inline test scripts and `data:` media only. Tests enter `https://nobonk.invalid/fixture/` through the production valid-user `open()` path. An injected document-loader substitutes `loadHTMLString` for the final network request; the origin is never requested from the network. WebKit creation, configuration, navigation delegates, permissions, KVO and playback APIs remain the production implementation.
+
+The tests cover **no WKWebView allocation** at initialization, invalid addresses, or unused pause/resume/close actions. The first valid open creates one configured view; subsequent opens reuse it. First-creation media tests exercise desired playback state recorded before WebKit exists: a hidden/paused pane blocks the generated media clock until a visible resume, while a prior resume permits explicit first-page playback. No page or web view is created automatically just because the pane's visibility changes.
+
+The existing regressions still exercise actual JavaScript navigation cancellation for a custom app scheme and insecure HTTP, a custom-scheme popup that returns no window, and suspension after real media playback has begun. The media test proves the clock advances first, demonstrates that ordinary WebKit pause can be restarted by script as a positive control, then uses production `pause()` and checks that script playback cannot restart until `resume()` and an explicit play action. An additional same-origin history test drives actual WebKit URL/KVO changes while the address field is being edited and verifies that the draft is preserved. It does not relax the production autoplay configuration or replace navigation policy with a fake.
+
+The camera/microphone case only counts as permission coverage if the local page is a secure nonopaque origin and real WebKit reaches its permission delegate. A small observing delegate forwards the decision to the production implementation unchanged and records that decision. Missing simulator capture hardware, an unsupported local secure context, or a pre-delegate WebKit refusal produces a **skip**, not a false permission-policy pass. It never grants capture permission; a real website/physical-device check remains necessary if this case skips.
+
+Example on an independently created simulator (never replace an already-running test owner's device):
+
+```sh
+xcodegen generate --spec ios/project.yml
+xcodebuild -project ios/NoBonk.xcodeproj -scheme NoBonk \
+  -configuration Debug -destination 'platform=iOS Simulator,id=YOUR_DEDICATED_SIMULATOR' \
+  -derivedDataPath /tmp/nobonk-webkit-tests \
+  -resultBundlePath /tmp/nobonk-webkit-tests.xcresult \
+  -parallel-testing-enabled NO \
+  -only-testing:NoBonkQuickAccessTests/BrowserIntegrationTests \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+No Fast model needs copying for these browser tests. The app's default explicit Start/safety gates leave camera scanning off in the hosted test. These tests do not establish compatibility with particular video sites, DRM, actual audio routes, fullscreen behavior or every privacy behavior of WebKit's network process.
+
+September 7 lazy-allocation validation: all **nine tests passed with zero skips** on a dedicated iPhone 16 / iOS 26.5 simulator. This included first-creation playback gates, an observed real WebKit permission callback forwarded to production denial, the ordinary-pause positive control, persistent suspension and real URL/KVO behavior. Generic iOS Release compilation passed with no new warnings from BrowserPane. An initial run had one local-document startup timeout and ran out of disk space while writing its result bundle; after freeing disposable build caches, the full suite passed without relaxing its timeouts or policies. No physical phone or pre-existing simulator was used; the dedicated test device is shut down. These tests establish lazy object creation and behavior, not a measured memory saving or an explanation for another process exiting.
+
+
+September 11 preview 0.2.5: 13 hosted WebKit tests passed on the isolated iOS 17 simulator, with no skips. Added close/reopen ownership, late old-page callbacks, error recovery, initial failed-load retry, and playback on a new page after closing a visible page. The persistent-suspension test now waits for WebKit's completion callback before measuring the paused media clock; the positive-control restart and hidden-page script attempt remain covered. Closing a document preserves pane visibility; hiding the pane still suspends playback.
