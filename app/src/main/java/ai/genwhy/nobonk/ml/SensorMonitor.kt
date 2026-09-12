@@ -144,7 +144,12 @@ class SensorMonitor(context: Context) : SensorEventListener {
         val values = event?.values?.takeIf { it.size >= AXIS_COUNT } ?: return
         if (event.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
             val x = values[0]; val y = values[1]; val z = values[2]
-            motion.push(sqrt(x * x + y * y + z * z), System.currentTimeMillis())
+            // Guard against NaN/Inf in accelerometer components before feeding
+            // them into the motion gate; a non-finite magnitude would poison
+            // the cadence estimate.
+            if (x.isFinite() && y.isFinite() && z.isFinite()) {
+                motion.push(sqrt(x * x + y * y + z * z), System.currentTimeMillis())
+            }
             if (gravitySensor?.type != Sensor.TYPE_ACCELEROMETER) return   // pitch comes from the gravity sensor
         }
 
