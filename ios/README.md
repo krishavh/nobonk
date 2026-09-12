@@ -15,7 +15,9 @@ Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision Pe
 | Cues | Visual indication, optional sound and haptics, with Earlier/Balanced/Closer sensitivity. These use apparent image size, not metres. |
 | Quick access | Siri/App Shortcuts plus supported Action button, Control Center and Lock Screen controls open setup. Acknowledgment and explicit Start still apply. |
 
-**0.2.4 (build 6)** is the latest signed development preview, with a larger Browse viewport on smaller phones. It awaits installation. Version 0.2.3 was installed and launched on a registered iPhone 16 Plus on September 7, 2026; HRD received 0.2.1 earlier and needs reconnection for the update. This is a development installation, not a public App Store or TestFlight release. The Android closed-test link does not install the iPhone app.
+**0.2.5 (build 7)** is the latest signed development preview. It was installed on HRD on September 11, 2026; iOS blocked the subsequent launch because the phone was locked, so physical launch and camera behavior remain unverified. Krishav's last recorded installation is 0.2.3. This is a development installation, not a public App Store or TestFlight release. The Android closed-test link does not install the iPhone app.
+
+The 0.2.5 Browse update releases the closed web view and its history/observers, ignores late callbacks from an old page, clears obsolete errors when navigation restarts, and retries the submitted address if the initial load failed. Closing a visible page no longer leaves the next page's media suspended. Thirteen hosted WebKit tests and 34 core tests passed; signing and installation were verified separately. These checks do not establish real-phone detection accuracy or battery savings.
 
 ## Start deliberately; stop predictably
 

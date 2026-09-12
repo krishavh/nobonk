@@ -66,6 +66,52 @@ final class BrowserIntegrationTests: XCTestCase {
         XCTAssertFalse(model.loading)
         XCTAssertFalse(model.hasPage)
     }
+    func testCloseReleasesBrowserAndOldCallbacksCannotAffectANewPage() async throws {
+        try await load()
+        let old = try XCTUnwrap(model.webView)
+        var interruptions = 0
+        model.onCameraCovered = { interruptions += 1 }
+        model.close()
+        XCTAssertNil(model.webView)
+        XCTAssertNil(old.navigationDelegate)
+        XCTAssertNil(old.uiDelegate)
+        XCTAssertFalse(model.hasPage)
+        XCTAssertFalse(model.loading)
+        XCTAssertFalse(model.canGoBack)
+        XCTAssertFalse(model.canGoForward)
+        try await load("<p id='marker'>new page</p>")
+        XCTAssertFalse(model.webView === old)
+        model.webViewWebContentProcessDidTerminate(old)
+        model.webView(old, didFailProvisionalNavigation: nil, withError: URLError(.notConnectedToInternet))
+        XCTAssertEqual(interruptions, 0)
+        XCTAssertNil(model.message)
+        let marker = try await webView.evaluateJavaScript("document.getElementById('marker').textContent") as? String
+        XCTAssertEqual(marker, "new page")
+    }
+    func testSuccessfulNavigationClearsThePreviousFailure() async throws {
+        try await load()
+        model.webView(webView, didFailProvisionalNavigation: nil, withError: URLError(.notConnectedToInternet))
+        XCTAssertNotNil(model.message)
+        // Real navigation from the existing document must dismiss the obsolete error.
+        _ = webView.loadHTMLString("<p id='recovered'>recovered</p>", baseURL: URL(string: "https://nobonk.invalid/recovered/"))
+        try await eventually("new document loaded") {
+            (try? await self.webView.evaluateJavaScript("document.getElementById('recovered').textContent")) as? String == "recovered"
+        }
+        XCTAssertNil(model.message)
+    }
+    func testReloadRetriesAnInitialFailureUsingTheSubmittedAddress() {
+        var requests: [URL] = []
+        let browser = BrowserModel(loadPage: { _, request in if let url = request.url { requests.append(url) } })
+        browser.address = "https://nobonk.invalid/first"
+        browser.open()
+        let view = try! XCTUnwrap(browser.webView)
+        browser.webView(view, didFailProvisionalNavigation: nil, withError: URLError(.notConnectedToInternet))
+        browser.address = "https://unfinished-draft.invalid/"
+        browser.reload()
+        XCTAssertEqual(requests.map(\.absoluteString), ["https://nobonk.invalid/first", "https://nobonk.invalid/first"])
+        XCTAssertNil(browser.message)
+        browser.close()
+    }
     func testInvalidNavigationAndUnusedVisibilityActionsNeverCreateWebKit() async throws {
         model.resume(); model.pause(); model.close(); model.resume()
         for address in ["", "http://nobonk.invalid/", "custom://fixture", "https://user:secret@nobonk.invalid/", "not a website"] {
@@ -84,7 +130,7 @@ final class BrowserIntegrationTests: XCTestCase {
         XCTAssertTrue(model.webView === existing, "Later navigation must reuse the configured view and observers")
     }
     func testPauseAndCloseBeforeCreationBlockFirstPagePlaybackUntilResume() async throws {
-        model.resume(); model.pause(); model.resume(); model.close()
+        model.resume(); model.pause(); model.close()
         XCTAssertNil(model.webView)
         let media = AlertTone.wav().base64EncodedString()
         try await load("<audio id='media' loop muted preload='auto' src='data:audio/wav;base64,\(media)'></audio>")
@@ -97,6 +143,17 @@ final class BrowserIntegrationTests: XCTestCase {
         model.resume()
         _ = try await webView.evaluateJavaScript("window.resumeResult='pending'; document.getElementById('media').play().then(()=>window.resumeResult='playing').catch(e=>window.resumeResult=e.name); void 0")
         try await eventually("first created page plays only after visible resume") {
+            (try await self.webView.evaluateJavaScript("document.getElementById('media').currentTime")) as? Double ?? 0 > 0.02
+        }
+    }
+    func testClosingAVisiblePageDoesNotMuteTheNextPage() async throws {
+        model.resume()
+        try await load()
+        model.close()
+        let media = AlertTone.wav().base64EncodedString()
+        try await load("<audio id='media' loop muted preload='auto' src='data:audio/wav;base64,\(media)'></audio>")
+        _ = try await webView.evaluateJavaScript("document.getElementById('media').play().catch(()=>{}); void 0")
+        try await eventually("new visible page can play after the old page closes") {
             (try await self.webView.evaluateJavaScript("document.getElementById('media').currentTime")) as? Double ?? 0 > 0.02
         }
     }
@@ -165,7 +222,9 @@ final class BrowserIntegrationTests: XCTestCase {
         try await eventually("positive control restarts after ordinary pause") {
             (try await self.webView.evaluateJavaScript("window.control")) as? String == "playing"
         }
-        model.pause()
+        await withCheckedContinuation { continuation in
+            model.pause { continuation.resume() }
+        }
         try await eventually("media paused by production pause") {
             (try await self.webView.evaluateJavaScript("document.getElementById('media').paused")) as? Bool == true
         }
