@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import kotlin.math.sqrt
 
 /**
  * Monitors phone orientation via the gravity sensor and exposes the camera
@@ -143,7 +144,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
         val values = event?.values?.takeIf { it.size >= AXIS_COUNT } ?: return
         if (event.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
             val x = values[0]; val y = values[1]; val z = values[2]
-            motion.push(kotlin.math.sqrt(x * x + y * y + z * z), System.currentTimeMillis())
+            motion.push(sqrt(x * x + y * y + z * z), System.currentTimeMillis())
             if (gravitySensor?.type != Sensor.TYPE_ACCELEROMETER) return   // pitch comes from the gravity sensor
         }
 
