@@ -27,6 +27,9 @@ object LowLight {
     /** Default mean-luma threshold below which a frame counts as "dim" (banner). */
     private const val DEFAULT_LOW_LIGHT_THRESHOLD = 60f
 
+    /** Gain applied above which we consider night boost "on" (for the banner). */
+    const val BOOST_ACTIVE_GAIN = 1.05f
+
     /**
      * Decides whether the camera lens is physically blocked (pocket, hand, case).
      *
@@ -71,6 +74,36 @@ object LowLight {
     }
 
     /**
+     * Night boost: a linear RGB gain applied to the detector's input when the scene is
+     * dark, pulling a mean brightness of ~20-60 toward ~90 where the detector was trained.
+     * Capped at 2.5× (beyond that we mostly amplify sensor noise) and 1.0 in normal light.
+     * The previous frame's mean brightness is used, so the boost trails the scene by one
+     * frame — fine for walking.
+     *
+     * Non-finite or non-positive [meanBrightness] yields `1f` (no boost), treating a
+     * glitchy or invalid reading as "normal light" rather than amplifying noise.
+     *
+     * @param meanBrightness     average luma over the sampled grid, 0‥255
+     * @param target             target mean brightness the gain aims to reach; default 90f
+     * @param lowLightThreshold  mean luma below which the boost is active; default 60f
+     * @param maxGain            upper bound on the gain to avoid amplifying sensor noise;
+     *                           default 2.5f
+     * @return the multiplicative gain to apply, clamped to [1f, maxGain]
+     */
+    fun gainFor(
+        meanBrightness: Float,
+        target: Float = 90f,
+        lowLightThreshold: Float = DEFAULT_LOW_LIGHT_THRESHOLD,
+        maxGain: Float = 2.5f
+    ): Float {
+        if (!meanBrightness.isFinite() || meanBrightness <= 0f) return 1f
+        if (meanBrightness >= lowLightThreshold) return 1f
+        // target / meanBrightness > 1 because meanBrightness < lowLightThreshold <= target
+        // in typical usage; coerceIn guards against pathological threshold configs.
+        return (target / meanBrightness).coerceIn(1f, maxGain)
+    }
+
+    /**
      * Dim-but-not-blocked scene → detection still runs but recall/accuracy degrade
      * (Round-2 reliability indicators). Drives the "low light — reduced reliability"
      * banner so the app is honest in exactly the dusk/night cases a distracted walker
@@ -91,22 +124,6 @@ object LowLight {
      *                           default 60f
      * @return `true` when the frame is dim enough to warn about but not blocked
      */
-    /** Gain applied above which we consider night boost "on" (for the banner). */
-    const val BOOST_ACTIVE_GAIN = 1.05f
-
-    /**
-     * Night boost: a linear RGB gain applied to the detector's input when the scene is
-     * dark, pulling a mean brightness of ~20-60 toward ~90 where the detector was trained.
-     * Capped at 2.5× (beyond that we mostly amplify sensor noise) and 1.0 in normal light.
-     * The previous frame's mean brightness is used, so the boost trails the scene by one
-     * frame — fine for walking.
-     */
-    fun gainFor(meanBrightness: Float, target: Float = 90f, lowLightThreshold: Float = DEFAULT_LOW_LIGHT_THRESHOLD, maxGain: Float = 2.5f): Float {
-        if (!meanBrightness.isFinite() || meanBrightness <= 0f) return 1f
-        if (meanBrightness >= lowLightThreshold) return 1f
-        return (target / meanBrightness).coerceIn(1f, maxGain)
-    }
-
     fun isLowLight(
         meanBrightness: Float,
         blocked: Boolean,
