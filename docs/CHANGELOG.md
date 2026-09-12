@@ -1,3 +1,13 @@
+# 1.0.15 (versionCode 16) — September 11, 2026
+
+- Add the requested red perimeter scanning trail and an explicit first-run choice of sound, haptics, or both. The choice screen explains that visual warnings remain enabled and spoken alerts are opt-in.
+- Show the moving trail only after a recent camera result. Waiting, covered-camera, and missing-result states use a static indicator and specific notification text. Results older than five seconds cannot produce new cues; stale hazard overlays are replaced with a paused message.
+- Avoid restarting the edge animation on every unchanged detection result. Respect disabled animations and recheck slowly while the screen is off. Reuse NoBonk's monochrome brand icon in the service notification.
+- Validation: 168 JVM tests, debug/release builds and lint passed; model payload hashes and 16 KB native-library alignment passed. In the isolated Android emulator, turning off camera access changed the active service to “Scanning paused · no recent camera results”; the notification Stop action path removed the service and notification.
+- Physical-phone accuracy, battery use and timing are not established by these checks. Google Play availability depends on review; a source update is not proof of publication.
+
+---
+
 # 1.0.13 (versionCode 14) — September 7, 2026
 
 - Reuse native input/output tensor storage through model warmup and scanning, removing the large copied output array on each frame. Verify provider selection and both Fast/Sharp models through the same inference path.

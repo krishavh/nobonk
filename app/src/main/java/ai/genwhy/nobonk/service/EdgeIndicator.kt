@@ -23,8 +23,10 @@ class EdgeIndicator(private val context: Context, private val wm: WindowManager)
         override fun run() {
             val awake = context.getSystemService(android.os.PowerManager::class.java).isInteractive
             if (awake) strips.forEach { it.invalidate() }
-            if (strips.isNotEmpty() && !blocked && android.animation.ValueAnimator.areAnimatorsEnabled()) {
-                handler.postDelayed(this, if (awake) 50L else 1000L)
+            if (strips.isNotEmpty() && !blocked) {
+                // Recheck infrequently with the screen off or animation disabled, so changing
+                // the system preference can resume the trail without another hazard arriving.
+                handler.postDelayed(this, if (awake && android.animation.ValueAnimator.areAnimatorsEnabled()) 50L else 1000L)
             }
         }
     }
@@ -99,6 +101,7 @@ class EdgeIndicator(private val context: Context, private val wm: WindowManager)
     fun relayout() { if (strips.isEmpty()) return; hide(); show(level, blocked) }
 
     fun setLevel(level: AlertLevel, cameraBlocked: Boolean) {
+        if (this.level == level && blocked == cameraBlocked) return
         this.level = level; this.blocked = cameraBlocked
         handler.removeCallbacks(frame)
         strips.forEach { it.invalidate() }

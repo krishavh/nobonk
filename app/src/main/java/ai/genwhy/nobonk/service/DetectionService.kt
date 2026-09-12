@@ -80,6 +80,15 @@ class DetectionService : LifecycleService() {
     private var startupJob: Job? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysis: ImageAnalysis? = null
+    private val scanStatus = BackgroundScanStatus()
+    private var latestResult: DetectionEngine.Result? = null
+    private val statusWatchdog = object : Runnable {
+        override fun run() {
+            if (!life.mayPostAlerts()) return
+            renderBackgroundStatus()
+            mainHandler.postDelayed(this, 1_000L)
+        }
+    }
 
     companion object {
         private const val CHANNEL_ID = "DetectionServiceChannel"
@@ -203,7 +212,7 @@ class DetectionService : LifecycleService() {
     /** Moving red screen-edge trail. Hazard text and the return control remain separate. */
     private fun showEdgeIndicator() {
         if (edge != null) return
-        edge = EdgeIndicator(this, windowManager).also { it.show(AlertLevel.NONE, cameraBlocked = false) }
+        edge = EdgeIndicator(this, windowManager).also { it.show(AlertLevel.NONE, cameraBlocked = true) }
     }
     /** Top inset (status bar + display cutout) in px, so overlay windows never sit under the clock. */
     private fun topInsetPx(): Int = try {
@@ -287,7 +296,8 @@ class DetectionService : LifecycleService() {
                 val cam = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis)
                 engine?.attachCamera(cam.cameraInfo)
                 life.onCameraBound()
-                updateNotification("Watching your path · tap to open")
+                scanStatus.cameraBound(SystemClock.elapsedRealtime())
+                mainHandler.post(statusWatchdog)
             } catch (e: Exception) {
                 Dbg.e(TAG, "Camera binding failed", e)
                 ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background camera unavailable. Check camera access, then try again."
@@ -309,7 +319,8 @@ class DetectionService : LifecycleService() {
         // otherwise a cancelled launch would leave the single-flight gate held forever.
         lifecycleScope.launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.ATOMIC) {
             try {
-                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled, cuesAllowed = { life.mayPostAlerts() })
+                val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled,
+                    cuesAllowed = { life.mayPostAlerts() && BackgroundScanStatus.isFresh(now, SystemClock.elapsedRealtime()) })
                 val result = eng.process(imageProxy, cfg)   // closes imageProxy, fires haptics+sound
                 cadenceAlert = result.highestAlert
                 cadenceHadDetections = result.detections.isNotEmpty()
@@ -323,11 +334,9 @@ class DetectionService : LifecycleService() {
                 // Stop that lands first removes this post or makes the check fail; nothing is re-posted.
                 mainHandler.post {
                     if (!life.mayPostAlerts()) return@post
-                    updateHud(result.hudMessage); edge?.setLevel(result.highestAlert, result.cameraBlocked)
-                    if (result.highestAlert != AlertLevel.NONE) {
-                        val n = result.detections.size
-                        updateNotification("${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · $n object${if (n == 1) "" else "s"} in view")
-                    } else updateNotification(if (result.cameraBlocked) "Camera blocked · tap to open" else "Watching your path · tap to open")
+                    scanStatus.frameCompleted(now, result.cameraBlocked)
+                    latestResult = result
+                    renderBackgroundStatus()
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
@@ -346,8 +355,41 @@ class DetectionService : LifecycleService() {
         }
     }
 
+    /** Main-thread publication; a stale result can never keep the scanning trail or hazard alive. */
+    private fun renderBackgroundStatus() {
+        if (!life.mayPostAlerts()) return
+        val state = scanStatus.state(SystemClock.elapsedRealtime())
+        val result = latestResult
+        edge?.setLevel(result?.highestAlert ?: AlertLevel.NONE, state != BackgroundScanStatus.State.SCANNING)
+        when (state) {
+            BackgroundScanStatus.State.WAITING -> {
+                updateHud(null)
+                updateNotification("Waiting for camera results · tap to open")
+            }
+            BackgroundScanStatus.State.STALE -> {
+                updateHud("SCANNING PAUSED — no recent camera results. Open NoBonk to check.")
+                updateNotification("Scanning paused · no recent camera results")
+            }
+            BackgroundScanStatus.State.COVERED -> {
+                updateHud("CAMERA COVERED — uncover the rear camera")
+                updateNotification("Camera covered · tap to open")
+            }
+            BackgroundScanStatus.State.SCANNING -> {
+                updateHud(result?.hudMessage)
+                updateNotification(when {
+                    result == null -> "Waiting for camera results · tap to open"
+                    result.angleQuality == ai.genwhy.nobonk.ml.SensorMonitor.AngleQuality.BAD -> "Point the camera forward · tap to open"
+                    result.highestAlert != AlertLevel.NONE -> "${result.highestAlert.name.lowercase().replaceFirstChar { it.uppercase() }} alert · tap to open"
+                    result.lowLight -> "Low light · detection is less reliable"
+                    else -> "Scanning · keep looking up"
+                })
+            }
+        }
+    }
+
     private fun updateHud(message: String?) {
         if (message != null && !life.mayPostAlerts()) return
+        if (message == hudMessage && (message == null || hudView != null)) return
         hudMessage = message
         if (message != null) {
             if (hudView == null) {
@@ -394,9 +436,9 @@ class DetectionService : LifecycleService() {
         val stopIntent = Intent(this, DetectionService::class.java).apply { action = ACTION_STOP }
         val stopPending = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("NoBonk is watching")
+            .setContentTitle("NoBonk")
             .setContentText(content)
-            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .setSmallIcon(R.mipmap.ic_launcher_monochrome)
             .setContentIntent(pendingIntent)
             .addAction(0, "Stop", stopPending)
             .setOngoing(true)
@@ -433,6 +475,7 @@ class DetectionService : LifecycleService() {
         batteryMonitor.close()
         startupJob?.cancel(); startupJob = null
         val eng = engine; engine = null
+        latestResult = null
         eng?.halt()   // no further cues/speech/vibration/sensors, even for a frame already in flight
         try { analysis?.let { cameraProvider?.unbind(it) } } catch (_: Exception) {}   // only OUR use case — never a foreground preview
         try { analysis?.clearAnalyzer() } catch (_: Exception) {}
