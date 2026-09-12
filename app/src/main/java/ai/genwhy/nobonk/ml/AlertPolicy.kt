@@ -117,9 +117,12 @@ object AlertPolicy {
      *        [MIN_PRESET_M] (0.25) and thus yields the maximum sensitivity
      *        ([MAX_SENSITIVITY], 1.7) — the "warn me as early as possible" extreme.
      */
-    fun sensitivity(thresholdMeters: Float): Float =
-        (REFERENCE_THRESHOLD_M / thresholdMeters.saneMeters().coerceIn(MIN_PRESET_M, MAX_PRESET_M))
-            .coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY)
+    fun sensitivity(thresholdMeters: Float): Float {
+        val safe = thresholdMeters.saneMeters().coerceIn(MIN_PRESET_M, MAX_PRESET_M)
+        // safe is guaranteed finite and >= MIN_PRESET_M > 0, so division cannot yield
+        // NaN or Infinity; the outer clamp is a belt-and-suspenders guard.
+        return (REFERENCE_THRESHOLD_M / safe).coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY)
+    }
 
     /**
      * Compute the alert level for one detection.
