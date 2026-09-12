@@ -14,7 +14,7 @@ private let mint = Color(red: 0.2, green: 0.85, blue: 0.65)
 private enum ScanWorkspace: String, CaseIterable {
     case setup = "Set up"
     case browse = "Browse"
-    case draft = "Draft"
+    case draft = "Read / write"
 }
 
 private struct DraftHandoff: Identifiable {
@@ -306,7 +306,7 @@ struct NoBonkView: View {
                                 Text("Recent analysis: \(camera.analysisMilliseconds) ms · target up to \(camera.analysisRate) frames/s")
                                     .monospacedDigit().foregroundStyle(mint)
                             }
-                            Text("Browse & scan opens a website below the visible camera. Draft & scan lets you write here while scanning, then send using Messages or the share sheet. Sending, switching apps or full-screen video pauses scanning. Return to NoBonk and tap Start when you are ready. Camera frames stay local; websites connect to the internet.")
+                            Text("Browse & scan opens a website below the visible camera. Read / write lets you read text you choose to paste or write here while scanning, then send using Messages or the share sheet. Sending, switching apps or full-screen video pauses scanning. Return to NoBonk and tap Start when you are ready. Camera frames stay local; websites connect to the internet.")
                         }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
                     } label: {
                         Label("On this iPhone", systemImage: "iphone.gen3.radiowaves.left.and.right")

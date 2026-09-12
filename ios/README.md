@@ -1,4 +1,4 @@
-# NoBonk for iPhone — Browse & scan and Draft & scan preview
+# NoBonk for iPhone — Browse & scan and Read / write preview
 
 Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision People is the default; an optional, checksum-pinned ONNX Fast Objects model adds eight selected classes through the free official ONNX Runtime SDK. No cloud inference, paid SDK, account, subscription or inference network client. It reuses NoBonk's corrected Blender icon and credits Krishav.
 
@@ -9,7 +9,7 @@ Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision Pe
 | Browse & scan | A compact live camera panel above a secure website inside NoBonk; Start/Stop stays visible. |
 | Reading and web video | User-opened HTTPS pages and compatible inline media. Full-screen media or leaving the app stops scanning. Particular sites, sign-ins and DRM need testing. |
 | Web chat | Compatible chat websites can be opened in the browsing pane. Service support varies; this does not embed other native apps. |
-| Draft & scan | Write in a local editor below the visible camera. The draft stays when switching modes or canceling a handoff; NoBonk does not save or sync it. |
+| Read / write | Read text you explicitly paste or write below the visible camera. Read mode uses a scrollable, selectable view without the keyboard. Paste appends to existing text. Content stays in session memory; NoBonk does not save, sync or fetch messages. |
 | Messages / WhatsApp handoff | **Pause & share** opens Apple’s share sheet with the draft; available destinations depend on installed apps. A configured phone also offers a direct Messages composer in the larger layout. You choose the recipient and confirm sending. Scanning pauses until you return and tap Start. No native inbox access. |
 | People | Apple Vision detects people locally. |
 | Fast Objects | Optional verified graph detects people, bicycles, cars, motorcycles, buses, trucks, cats and dogs locally. |
@@ -94,3 +94,9 @@ A real YouTube page played inline in the taller accessible layout on the SE simu
 Finish physical lifecycle and sustained-performance investigation, compare real detection/alert quality across phones, and validate accessibility, audio and web-media behavior. A separate Messages camera-panel experiment asks whether useful scanning can coexist with a visible Messages conversation; compact extensions replace the keyboard, so simultaneous typing is not promised. It is not included in this app.
 
 Prepare the remaining privacy, licensing and distribution review before public TestFlight/App Store availability. Existing development signing is used; no new paid service or membership was purchased.
+
+## Selected-text update — September 12, 2026
+
+Version 0.2.7 adds Write / Read switching inside the Read / write workspace. Copy chosen text in another app, return to NoBonk, choose Read and tap Paste; then deliberately Start scanning. Existing text is retained and new pasted paragraphs append. Clear removes it from NoBonk’s session. This is not a live inbox or automatic message reader. Returning to another app pauses scanning. No text is sent to Qwen; Qwen assisted development using source code only.
+
+A separate [Messages Camera Lab](Experiments/MessagesCameraLab/README.md) is installed on HRD for an owner-run test. Host installation works; changing camera frames inside a Messages conversation are not yet verified. It is not part of the main preview.

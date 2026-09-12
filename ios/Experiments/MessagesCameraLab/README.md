@@ -71,6 +71,13 @@ continued or stopped at a particular time.
 
 ## Build and unit validation
 
+On 2026-09-12, all 14 unit tests passed again. A signed Release build passed
+strict code-signature verification and was installed and launched on the paired
+HRD iPhone. This confirms the host installation only: the owner still needs to
+open the extension in Messages and observe changing frame/scan counters while
+reading a chosen conversation. No conversation content was accessed during
+installation, and camera operation in the Messages extension remains unverified.
+
 Validation on 2026-09-07: **14 unit tests passed**; unsigned generic-device Release
 and generic-simulator Debug builds passed using the installed iOS 26.5 SDK. An
 independent read-only review of lifecycle, native ownership, privacy and visible

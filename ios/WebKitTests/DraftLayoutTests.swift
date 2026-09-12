@@ -27,6 +27,32 @@ final class DraftLayoutTests: XCTestCase {
         try await assertDraftFits(size: CGSize(width: 351, height: 420), type: .accessibility5)
     }
 
+    func testReadModeFitsShortPaneWithoutAnEditableKeyboardSurface() async throws {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else {
+            throw XCTSkip("Hosted layout test needs a window scene")
+        }
+        let content = DraftScanPane(
+            text: .constant("A selected message for reading beside the camera."),
+            canMessage: true, compact: true,
+            onMessages: { XCTFail("Reading must never send") },
+            onShare: { XCTFail("Reading must never share automatically") },
+            onHelp: {}, initialMode: .read
+        )
+        let controller = UIHostingController(rootView: content)
+        controller.safeAreaRegions = []
+        let window = UIWindow(windowScene: scene)
+        self.window = window
+        window.frame = CGRect(x: 0, y: 0, width: 320, height: 145)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        controller.view.frame = window.bounds
+        controller.view.layoutIfNeeded()
+        let minimum = controller.sizeThatFits(in: CGSize(width: 320, height: 1))
+        XCTAssertLessThanOrEqual(minimum.height, 146)
+        XCTAssertFalse(descendants(of: controller.view).compactMap { $0 as? UITextView }.contains { $0.isEditable },
+                       "Read mode must not mount an editable keyboard surface")
+    }
+
     private func assertDraftFits(size: CGSize, type: DynamicTypeSize, file: StaticString = #filePath, line: UInt = #line) async throws {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else {
             throw XCTSkip("Hosted layout test needs a window scene")
