@@ -98,14 +98,14 @@ object LowLight {
     ): Float {
         if (!meanBrightness.isFinite() || meanBrightness <= 0f) return 1f
         if (meanBrightness >= lowLightThreshold) return 1f
-        
+
         // Guard against division by zero or negative/zero targets which would result
         // in Infinity or NaN, ensuring we return a safe default gain.
         if (!target.isFinite() || target <= 0f) return 1f
-        
+
         // Guard against invalid maxGain which would result in NaN from coerceIn.
         if (!maxGain.isFinite() || maxGain < 1f) return 1f
-        
+
         // target / meanBrightness > 1 because meanBrightness < lowLightThreshold <= target
         // in typical usage; coerceIn guards against pathological threshold configs.
         val rawGain = target / meanBrightness
