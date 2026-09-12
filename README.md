@@ -41,7 +41,7 @@ Current Android distance estimates are approximate, and hazards may be missed. N
 2. **Choose Run in background on Android.** Allow the requested notification and overlay permissions, then switch apps. Keep the rear camera uncovered and pointed toward the scene.
 3. **Receive alerts above other apps.** Use **Open NoBonk** to return to the settings. The app and notification include Stop controls; reliable shutdown is an active testing priority.
 
-The foreground view is the Android setup and testing space; background operation is its primary intended use. The separate **iPhone development preview** supports foreground People and Fast Objects detection, plus Browse & scan. Opening native message composition pauses the camera. It does not scan in the background, and there is no public App Store or TestFlight release yet. Follow [iPhone development](https://github.com/krishavh/nobonk/pull/2) or see the [iPhone preview details](https://nobonk.genwhy.ai/#iphone).
+The foreground view is the Android setup and testing space; background operation is its primary intended use. The separate **iPhone development preview** supports foreground People and Fast Objects detection, plus Browse & scan and a local Draft & scan editor. Draft beside the visible camera, then explicitly pause to share through Messages or an available app such as WhatsApp. It does not scan in the background, and there is no public App Store or TestFlight release yet. Follow [iPhone development](https://github.com/krishavh/nobonk/pull/2) or see the [iPhone preview details](https://nobonk.genwhy.ai/#iphone).
 
 ## Real Android screenshots
 
@@ -140,7 +140,7 @@ From the command line:
 - **Debug build / install:** `./gradlew assembleDebug` (a helper script, `build_and_install.sh`, builds and installs to a connected device).
 - **Signed release bundle (for Play):** `./gradlew bundleRelease` produces `app/build/outputs/bundle/release/app-release.aab`. Signing reads keystore credentials from `~/.gradle/gradle.properties` or the `NOBONK_*` environment variables — **no secrets are committed**. See [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md) for keystore generation and the full Play submission steps, and [`docs/PLAY_16KB_CHECK.md`](docs/PLAY_16KB_CHECK.md) for the required 16 KB native-library check (`scripts/check_16kb_alignment.sh`).
 
-**Android requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Background scanning is Android's primary mode. The [iPhone development preview](https://github.com/krishavh/nobonk/pull/2) supports foreground People/Fast Objects and Browse & scan; native message composition pauses its camera. It has no background scanning or public App Store/TestFlight release yet. See the [current iPhone status](https://nobonk.genwhy.ai/#iphone).
+**Android requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Background scanning is Android's primary mode. The [iPhone development preview](https://github.com/krishavh/nobonk/pull/2) supports foreground People/Fast Objects, Browse & scan and Draft & scan. Sending through Messages or the share sheet pauses its camera. It has no background scanning or public App Store/TestFlight release yet. See the [current iPhone status](https://nobonk.genwhy.ai/#iphone).
 
 ## Known limitations
 
