@@ -31,9 +31,12 @@ obstacle; recognition still depends on the scene and device.
 Run locally with an Android emulator:
 
 ```sh
-./gradlew :app:testDebugUnitTest :app:connectedDebugAndroidTest \
+./gradlew -Pbundle :app:testDebugUnitTest :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=ai.genwhy.nobonk.ui.DetectionOverlayRegressionTest
 ```
+
+`-Pbundle` disables the default ARM-only sideload splits so Intel CI emulators
+receive a compatible APK too; the same rendering assertions run on ARM and Intel.
 
 The new bottle and chair tests were also run with the old eight-class selection
 temporarily restored: both failed. They pass with the corrected decoder.

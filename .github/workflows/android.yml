@@ -30,7 +30,8 @@ jobs:
           api-level: 35
           arch: x86_64
           disable-animations: true
-          script: ./gradlew --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.genwhy.nobonk.ui.DetectionOverlayRegressionTest
+          # Default sideload splits are ARM-only. Disable splits for the x86_64 CI emulator.
+          script: ./gradlew --no-daemon -Pbundle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.genwhy.nobonk.ui.DetectionOverlayRegressionTest
       - name: Save regression test results
         if: always()
         uses: actions/upload-artifact@v4
