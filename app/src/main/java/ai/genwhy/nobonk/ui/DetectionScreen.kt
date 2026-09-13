@@ -15,6 +15,8 @@ import androidx.camera.view.PreviewView
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -74,8 +76,14 @@ fun DetectionScreen(
     /** Play in-app update prompt (NONE = nothing to show). Only rendered while not scanning. */
     updatePrompt: ai.genwhy.nobonk.update.UpdatePolicy.Prompt = ai.genwhy.nobonk.update.UpdatePolicy.Prompt.NONE,
     onUpdateNow: () -> Unit = {},
-    onUpdateLater: () -> Unit = {}
+    onUpdateLater: () -> Unit = {},
+    walkingEnabled: Boolean = false,
+    walkingSupported: Boolean = false,
+    walkingStatus: String = "",
+    onWalkingChange: (Boolean) -> Unit = {},
+    onArmWalking: () -> Unit = {}
 ) {
+    var showWalkingSetup by remember { mutableStateOf(false) }
     val detections = viewModel.detections
     val distanceThreshold = viewModel.distanceThreshold
     val isInitializing = viewModel.isInitializing
@@ -170,6 +178,8 @@ fun DetectionScreen(
             onAccuracyChange = { viewModel.setAccuracyMode(it, context) },
             onShowHistory = onShowHistory,
             onShowAbout = onShowAbout,
+            onWalkingSetup = { showWalkingSetup = true },
+            walkingEnabled = walkingEnabled,
             heuristicObstacle = isWallDetected || isGroundHazard,
             pausedReason = when {
                 !viewModel.scanningEnabled -> "Stopped — tap Start scanning"
@@ -185,6 +195,29 @@ fun DetectionScreen(
             CameraBlockedOverlay()
         } else if (viewModel.frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
             LookUpOverlay(className = viewModel.lookUpLabel ?: "person", bearingPan = viewModel.bearingPan)
+        }
+        if (showWalkingSetup) {
+            AlertDialog(
+                onDismissRequest = { showWalkingSetup = false },
+                title = { Text("Walking mode · Experimental") },
+                text = {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Optional and off by default. Arm a session here, then NoBonk can start background scanning after about 20 seconds of sustained walking.")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Enable walking mode", modifier = Modifier.weight(1f))
+                            Switch(checked = walkingEnabled, enabled = walkingSupported,
+                                onCheckedChange = onWalkingChange,
+                                modifier = Modifier.semantics { contentDescription = "Enable walking-triggered background scanning" })
+                        }
+                        Text(if (walkingSupported) "Motion access is used only on your phone. The camera stays off while waiting. Its Android privacy indicator appears when scanning begins. A notification shows Waiting and Stop; waiting expires after 30 minutes. Keep the screen on for the most reliable walking detection."
+                            else "This phone has no supported step detector. You can still start background scanning manually.")
+                        Text("Open NoBonk or press Stop to end the session. After stopping or restarting your phone, arm it again. Keep the camera uncovered and keep watching your surroundings.")
+                        if (walkingStatus.isNotEmpty()) Text(walkingStatus)
+                    }
+                },
+                confirmButton = { TextButton(onClick = onArmWalking, enabled = walkingEnabled && walkingSupported) { Text("Arm walking mode") } },
+                dismissButton = { TextButton(onClick = { showWalkingSetup = false }) { Text("Done") } }
+            )
         }
         // Warming overlay only while a scan session actually wants the model: after a foreground Stop
         // the stopped dock must be visible immediately while the cancelled load unwinds.
@@ -313,6 +346,8 @@ private fun ControlDock(
     onTestAlert: () -> Unit = {},
     onShowHistory: () -> Unit,
     onShowAbout: () -> Unit = {},
+    onWalkingSetup: () -> Unit = {},
+    walkingEnabled: Boolean = false,
     /** When non-null the pipeline is not watching (blocked / starting / off-angle); shown instead of a detection summary. */
     pausedReason: String? = null,
     /** Camera heuristics (wall / ground) flag something even though the model recognised no object. */
@@ -410,6 +445,9 @@ private fun ControlDock(
                     .semantics { contentDescription = if (expanded) "Hide settings" else "Show settings" },
                 contentAlignment = Alignment.Center
             ) { Text(if (expanded) "▾" else "⚙", color = NB.Sub, fontSize = 18.sp) }
+        }
+        TextButton(onClick = onWalkingSetup, modifier = Modifier.fillMaxWidth()) {
+            Text(if (walkingEnabled) "Walking mode: on · arm a session" else "Set up walking mode · Experimental", fontSize = 12.sp, color = NB.Accent)
         }
         // Maker credit — sits beneath the History / settings controls, outside their tap targets.
         Spacer(Modifier.height(8.dp))

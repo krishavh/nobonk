@@ -32,6 +32,15 @@ class MainActivity : ComponentActivity() {
     private var cueChoiceDone by mutableStateOf(false)
     private var hasPermission by mutableStateOf(false)
     private var canDrawOverlays by mutableStateOf(false)
+    private var walkingEnabled by mutableStateOf(false)
+    private var walkingStatus by mutableStateOf("")
+    private var walkingArmGeneration = 0L
+    private var walkingArmPending = false
+    private val motionPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        expectingReturn = false
+        setWalkingPreference(granted)
+        walkingStatus = if (granted) "Ready. Tap Arm walking mode when you want to wait for walking." else "Motion permission was not granted. Manual background scanning is still available."
+    }
     private var showHistory by mutableStateOf(false)
     private var showLicenses by mutableStateOf(false)
     // Safety-notice gate: persisted acknowledged version + which screen to show now.
@@ -128,6 +137,7 @@ class MainActivity : ComponentActivity() {
 
         val prefs = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE)
         cueChoiceDone = prefs.getBoolean("cue_choice_done", false)
+        walkingEnabled = prefs.getBoolean("walking_mode_enabled", false) && ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this) && ai.genwhy.nobonk.motion.WalkingMonitor.supported(this)
         // Safety notice: the current version must be acknowledged before any camera request
         // or camera start (fresh installs and upgrades from first_run_done-only builds alike).
         ackVersion = prefs.getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
@@ -256,7 +266,12 @@ class MainActivity : ComponentActivity() {
                                     cameraRebindKey   = cameraRebindKey,
                                     updatePrompt      = updatePrompt(),
                                     onUpdateNow       = { onUpdateNow() },
-                                    onUpdateLater     = { snoozeUpdate() }
+                                    onUpdateLater     = { snoozeUpdate() },
+                                    walkingEnabled = walkingEnabled,
+                                    walkingSupported = ai.genwhy.nobonk.motion.WalkingMonitor.supported(this),
+                                    walkingStatus = walkingStatus,
+                                    onWalkingChange = { setWalkingMode(it) },
+                                    onArmWalking = { armWalkingMode() }
                                 )
                             }
                         }
@@ -314,7 +329,13 @@ class MainActivity : ComponentActivity() {
         if (!hasPermission) viewModel.stopScanning()
         // Take the camera back from the background service (hand-off, not a user Stop). Only when a
         // service is actually active — never create a service just to stop it.
+        if (ai.genwhy.nobonk.safety.SessionState.walkingSession) {
+            // Returning is an explicit handoff to setup, not permission to turn on the preview.
+            viewModel.stopScanning()
+            walkingStatus = "Walking session ended. Arm it again when you are ready, or start scanning manually."
+        }
         if (ai.genwhy.nobonk.safety.SessionState.gate.serviceActive) stopDetectionService(DetectionService.STOP_REASON_HANDOFF)
+        if (!ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) setWalkingPreference(false)
         // If the user pressed Stop (notification or app) since we last looked, do not resume scanning.
         if (ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser) {
             ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = false
@@ -341,12 +362,68 @@ class MainActivity : ComponentActivity() {
         overlayPermissionLauncher.launch(intent)
     }
 
-    private fun startDetectionService() {
+    private fun setWalkingPreference(enabled: Boolean) {
+        walkingEnabled = enabled
+        getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).edit().putBoolean("walking_mode_enabled", enabled).apply()
+    }
+
+    private fun setWalkingMode(enabled: Boolean) {
+        walkingStatus = ""
+        if (!enabled) {
+            setWalkingPreference(false)
+            if (walkingArmPending || ai.genwhy.nobonk.safety.SessionState.walkingSession) stopDetectionService()
+            return
+        }
+        if (!ai.genwhy.nobonk.motion.WalkingMonitor.supported(this)) {
+            walkingStatus = "This phone has no supported step detector. Use manual background scanning."
+            return
+        }
+        if (ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) setWalkingPreference(true)
+        else { expectingReturn = true; motionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION) }
+    }
+
+    private fun armWalkingMode() {
+        if (walkingArmPending) return
+        if (!walkingEnabled || !ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) {
+            walkingStatus = "Enable walking mode and allow motion access first."
+            return
+        }
+        val channel = getSystemService(android.app.NotificationManager::class.java).getNotificationChannel(DetectionService.CHANNEL_ID)
+        if (!androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled() ||
+            channel?.importance == android.app.NotificationManager.IMPORTANCE_NONE) {
+            walkingStatus = "Allow NoBonk notifications in Android settings first so you can see Waiting and Stop."
+            return
+        }
+        if (!canDrawOverlays) { requestOverlayPermission(); return }
+        viewModel.stopScanning() // releases foreground camera and cancels any pending warmup
+        startDetectionService(waitForWalking = true)
+    }
+
+    private fun startDetectionService(waitForWalking: Boolean = false) {
         if (!ai.genwhy.nobonk.safety.SessionState.gate.cameraAllowed(ackVersion)) return   // never start detection past a pending gate
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            viewModel.reportCameraError("Allow camera access before starting a background session.")
+            return
+        }
         expectingReturn = true   // we are about to move the task back for an authorized session
+        val armGeneration = if (waitForWalking) ++walkingArmGeneration else walkingArmGeneration
+        walkingArmPending = waitForWalking
         val mode = viewModel.accuracyMode
         val intent = Intent(this, DetectionService::class.java).apply {
             action = DetectionService.ACTION_START
+            putExtra(DetectionService.EXTRA_WAIT_FOR_WALKING, waitForWalking)
+            if (waitForWalking) putExtra(DetectionService.EXTRA_ARM_RESULT,
+                object : android.os.ResultReceiver(android.os.Handler(android.os.Looper.getMainLooper())) {
+                    override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                        if (armGeneration != walkingArmGeneration) return // a Stop or later session superseded this acknowledgement
+                        walkingArmPending = false
+                        // Stay visible until Android has accepted the camera foreground-service type.
+                        if (resultCode == 1 && walkingEnabled && ai.genwhy.nobonk.safety.SessionState.walkingSession && !isDestroyed && !isFinishing &&
+                            lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                            moveTaskToBack(true)
+                        } else stopDetectionService(DetectionService.STOP_REASON_USER)
+                    }
+                })
             // Hand the user's config to the background pipeline so it matches foreground.
             putExtra(DetectionService.EXTRA_THRESHOLD, viewModel.distanceThreshold)
             putExtra(DetectionService.EXTRA_INCLUDE_NONPERSON, viewModel.isObjectDetectionEnabled)
@@ -359,14 +436,17 @@ class MainActivity : ComponentActivity() {
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
-            moveTaskToBack(true)
+            if (!waitForWalking) moveTaskToBack(true)
         } catch (e: Exception) {
+            walkingArmPending = false
             expectingReturn = false
             viewModel.reportCameraError("Background scanning could not start. Check camera access and try again.")
         }
     }
 
     private fun stopDetectionService(reason: String = DetectionService.STOP_REASON_USER) {
+        walkingArmGeneration++
+        walkingArmPending = false
         val intent = Intent(this, DetectionService::class.java).apply {
             action = DetectionService.ACTION_STOP
             putExtra(DetectionService.EXTRA_STOP_REASON, reason)

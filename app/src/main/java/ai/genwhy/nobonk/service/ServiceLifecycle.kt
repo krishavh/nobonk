@@ -12,7 +12,7 @@ package ai.genwhy.nobonk.service
  * and a check-then-write must not let BINDING_CAMERA overwrite STOPPED.
  */
 class ServiceLifecycle {
-    enum class Phase { IDLE, LOADING_MODEL, BINDING_CAMERA, RUNNING, STOPPED }
+    enum class Phase { IDLE, WAITING_FOR_WALKING, LOADING_MODEL, BINDING_CAMERA, RUNNING, STOPPED }
     enum class StopReason { USER, HANDOFF }
 
     var phase: Phase = Phase.IDLE
@@ -23,10 +23,16 @@ class ServiceLifecycle {
     val isStopped: Boolean get() = synchronized(this) { phase == Phase.STOPPED }
 
     /** True exactly once per instance. Duplicate starts must not allocate another native engine. */
-    @Synchronized fun onStartRequested(): Boolean {
+    @Synchronized fun onStartRequested(waitForWalking: Boolean = false): Boolean {
         if (phase != Phase.IDLE) return false
-        phase = Phase.LOADING_MODEL
+        phase = if (waitForWalking) Phase.WAITING_FOR_WALKING else Phase.LOADING_MODEL
         startedBeforeStop = true
+        return true
+    }
+    /** Only a fresh walking qualification can advance an armed session; Stop always wins. */
+    @Synchronized fun onWalkingConfirmed(): Boolean {
+        if (phase != Phase.WAITING_FOR_WALKING) return false
+        phase = Phase.LOADING_MODEL
         return true
     }
     /** Model finished loading. False = a Stop arrived meanwhile: release the engine, do NOT bind the camera. */

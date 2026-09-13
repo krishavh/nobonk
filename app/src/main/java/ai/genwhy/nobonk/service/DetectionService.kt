@@ -78,6 +78,18 @@ class DetectionService : LifecycleService() {
     /** Every async step asks this before proceeding; Stop flips it once, from any phase. */
     private val life = ServiceLifecycle()
     private var startupJob: Job? = null
+    private var walkingMode = false
+    private var walkingDeadlineMs = 0L
+    private var walkingMonitor: ai.genwhy.nobonk.motion.WalkingMonitor? = null
+    private val walkingTimeout = object : Runnable {
+        override fun run() {
+            if (life.isStopped || walkingMonitor == null) return
+            if (SystemClock.elapsedRealtime() >= walkingDeadlineMs) {
+                ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode timed out after 30 minutes. Open setup to arm another session."
+                shutdown(ServiceLifecycle.StopReason.USER)
+            } else mainHandler.postDelayed(this, minOf(15_000L, walkingDeadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(1L))
+        }
+    }
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysis: ImageAnalysis? = null
     private val scanStatus = BackgroundScanStatus()
@@ -91,12 +103,15 @@ class DetectionService : LifecycleService() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "DetectionServiceChannel"
+        const val CHANNEL_ID = "DetectionServiceChannel"
         private const val NOTIFICATION_ID = 1
         private const val TAG = "DetectionService"
 
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
+        const val EXTRA_WAIT_FOR_WALKING = "extra_wait_for_walking"
+        const val EXTRA_ARM_RESULT = "extra_arm_result"
+        private const val WALKING_WAIT_MS = 30 * 60 * 1_000L
         const val EXTRA_THRESHOLD = "extra_threshold"
         const val EXTRA_INCLUDE_NONPERSON = "extra_include_nonperson"
         const val EXTRA_MODEL = "extra_model"
@@ -127,11 +142,15 @@ class DetectionService : LifecycleService() {
                 return START_NOT_STICKY
             }
             else -> {
-                if (!life.onStartRequested()) {
+                // Never restore camera authorization after process death, reboot or an unknown intent.
+                if (intent?.action != ACTION_START) { stopSelf(); return START_NOT_STICKY }
+                val requestedWalking = intent.getBooleanExtra(EXTRA_WAIT_FOR_WALKING, false)
+                if (!life.onStartRequested(waitForWalking = requestedWalking)) {
                     if (life.isStopped) { stopSelf(); return START_NOT_STICKY }
-                    return START_STICKY // already loading/running; keep its single engine and settings
+                    return START_NOT_STICKY // duplicate start: keep the existing session and settings
                 }
-                intent?.let {
+                walkingMode = requestedWalking
+                intent.let {
                     distanceThreshold = it.getFloatExtra(EXTRA_THRESHOLD, distanceThreshold)
                     includeNonPerson = it.getBooleanExtra(EXTRA_INCLUDE_NONPERSON, includeNonPerson)
                     modelFile = it.getStringExtra(EXTRA_MODEL) ?: modelFile
@@ -144,12 +163,21 @@ class DetectionService : LifecycleService() {
                 // Defensive: never run detection for an install that has not acknowledged the
                 // current safety notice (the UI gate is the first line, this is the second).
                 val ack = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
-                val explicit = intent != null   // null = sticky restart after a process kill
-                if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack, explicitStart = explicit)) { Dbg.w(TAG, "start refused: safety gate not cleared (explicit=$explicit)"); stopSelf(); return START_NOT_STICKY }
+                val explicit = true   // only an explicit ACTION_START reaches this point
+                if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack, explicitStart = explicit)) { Dbg.w(TAG, "start refused: safety gate not cleared (explicit=$explicit)"); reportArmResult(intent, 0); stopSelf(); return START_NOT_STICKY }
+                if (walkingMode && (!ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this) ||
+                        !ai.genwhy.nobonk.motion.WalkingMonitor.supported(this))) {
+                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode needs motion permission and a supported step sensor. Start background scanning manually instead."
+                    reportArmResult(intent, 0)
+                    shutdown(ServiceLifecycle.StopReason.USER)
+                    return START_NOT_STICKY
+                }
                 try {
                     startForegroundService()
                     ai.genwhy.nobonk.safety.SessionState.gate.onServiceStarted()
+                    reportArmResult(intent, 1)
                 } catch (e: Exception) {
+                    reportArmResult(intent, 0)
                     ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background camera could not start. Check camera access and try again."
                     android.widget.Toast.makeText(this, "NoBonk could not start. Open the app to retry.", android.widget.Toast.LENGTH_LONG).show()
                     shutdown(ServiceLifecycle.StopReason.HANDOFF)
@@ -157,19 +185,57 @@ class DetectionService : LifecycleService() {
                 }
             }
         }
-        return if (life.sticky()) START_STICKY else START_NOT_STICKY
+        return START_NOT_STICKY
+    }
+
+    @Suppress("DEPRECATION")
+    private fun reportArmResult(intent: Intent, code: Int) {
+        intent.getParcelableExtra<ResultReceiver>(EXTRA_ARM_RESULT)?.send(code, Bundle.EMPTY)
     }
 
     private fun startForegroundService() {
-        val notification = createNotification("Preparing camera · tap to open")
+        val notification = createNotification(if (walkingMode) "Waiting for walking · camera off · Stop to disarm" else "Preparing camera · tap to open")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        showEdgeIndicator()
         showReturnControl()
+        if (walkingMode) {
+            ai.genwhy.nobonk.safety.SessionState.walkingSession = true
+            walkingDeadlineMs = SystemClock.elapsedRealtime() + WALKING_WAIT_MS
+            walkingMonitor = ai.genwhy.nobonk.motion.WalkingMonitor(this) {
+                if (life.isStopped) return@WalkingMonitor
+                if (SystemClock.elapsedRealtime() >= walkingDeadlineMs) {
+                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode timed out. Arm a new session when ready."
+                    shutdown(ServiceLifecycle.StopReason.USER)
+                    return@WalkingMonitor
+                }
+                val cameraGranted = ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!cameraGranted || !ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) {
+                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode stopped because camera or motion access changed."
+                    shutdown(ServiceLifecycle.StopReason.USER)
+                } else if (life.onWalkingConfirmed()) {
+                    stopWalkingMonitor()
+                    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification("Walking detected · preparing camera"))
+                    beginDetection()
+                }
+            }
+            if (walkingMonitor?.start() != true) {
+                throw IllegalStateException("Step sensor could not start")
+            }
+            mainHandler.postDelayed(walkingTimeout, 15_000L)
+        } else beginDetection()
+    }
 
+    private fun stopWalkingMonitor() {
+        walkingMonitor?.close(); walkingMonitor = null
+        mainHandler.removeCallbacks(walkingTimeout)
+    }
+
+    private fun beginDetection() {
+        if (life.isStopped) return
+        showEdgeIndicator()
         startupJob = lifecycleScope.launch(Dispatchers.Default) {
             var pendingEngine: DetectionEngine? = null
             val eng = try {
@@ -472,6 +538,8 @@ class DetectionService : LifecycleService() {
         val first = !life.isStopped
         life.stop(reason)
         if (!first) return
+        stopWalkingMonitor()
+        ai.genwhy.nobonk.safety.SessionState.walkingSession = false
         batteryMonitor.close()
         startupJob?.cancel(); startupJob = null
         val eng = engine; engine = null
