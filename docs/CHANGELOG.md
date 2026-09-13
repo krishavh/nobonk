@@ -1,3 +1,12 @@
+# 1.0.17 (versionCode 18) — September 13, 2026
+
+- Fix Everything mode discarding 72 supported YOLO classes before they reached the setup-screen overlay. Chairs, bottles, plants and other supported objects retain their actual labels and boxes. Model files, confidence thresholds and alert sensitivity are unchanged.
+- Add actual-model-output replay and all-class regression tests, plus Android pixel tests for neutral, green, amber and red brackets and clearing stale boxes. The old filter fails the new bottle/chair tests.
+- Validation: 205 Android unit tests, five Android 16 emulator pixel tests, release build, release lint, pinned-model checks and 16KB native-library alignment passed locally. CI also runs the visual tests before producing its release artifact; its Intel emulator uses an APK containing a compatible ABI.
+- Submitted to the existing Google Play closed-test track. Availability depends on Google's review. Physical-phone camera recall remains to be checked; see [regression coverage and acceptance steps](DETECTION_REGRESSION.md).
+
+---
+
 # 1.0.15 (versionCode 16) — September 11, 2026
 
 - Add the requested red perimeter scanning trail and an explicit first-run choice of sound, haptics, or both. The choice screen explains that visual warnings remain enabled and spoken alerts are opt-in.

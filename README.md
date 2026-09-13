@@ -114,7 +114,7 @@ Install the exact shipped assets from the checksum-verified release bundle:
 python3 scripts/install_verified_models.py
 ```
 
-The exported graph outputs `[1, 84, 3549]` (cx, cy, w, h + 80 class scores per candidate); `ml/Nms.kt` keeps the eight classes NoBonk cares about and suppresses duplicates. Provenance, the AGPL §13 obligations, and why YOLO26 over the alternatives we evaluated (RF-DETR, D-FINE, YOLOX) are in [`docs/MODEL.md`](docs/MODEL.md) and [`docs/MODEL_CHOICE.md`](docs/MODEL_CHOICE.md).
+The exported graph outputs `[1, 84, 3549]` (cx, cy, w, h + 80 class scores per candidate). Everything mode retains all 80 supported classes, including chairs, bottles and potted plants; People mode filters to people. `ml/Nms.kt` suppresses overlapping duplicate detections within each class. This does not guarantee recognition of every object. [Detection regression coverage](docs/DETECTION_REGRESSION.md) checks model labels and the actual colored boxes drawn on Android. Provenance, the AGPL §13 obligations, and why YOLO26 over the alternatives we evaluated (RF-DETR, D-FINE, YOLOX) are in [`docs/MODEL.md`](docs/MODEL.md) and [`docs/MODEL_CHOICE.md`](docs/MODEL_CHOICE.md).
 
 ## Try it on your phone (sideload)
 
