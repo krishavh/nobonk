@@ -45,7 +45,7 @@ WAYS TO EXPLORE NOBONK
 • Share missed detections, confusing controls and device performance with the project to help improve it.
 
 CONTROLS THAT FIT YOUR PHONE
-Fast uses a smaller model; Sharp uses a larger one. Results and speed depend on the phone, lighting and scene. People mode focuses on people. The broader Everything mode covers people, bicycles, cars, motorcycles, buses, trucks, cats and dogs—it does not detect every object. Separate surface checks can display possible-obstacle or ground warnings.
+Fast uses a smaller model; Sharp uses a larger one. Results and speed depend on the phone, lighting and scene. People mode focuses on people. The broader Everything mode includes all 80 object classes learned by the model, including people, chairs, bottles, potted plants, vehicles and animals. It cannot recognize every object or guarantee a detection. Separate surface checks can display possible-obstacle or ground warnings.
 
 Get visual warnings, with optional vibration, directional stereo sound cues and spoken left/right/ahead alerts. Directions describe where an object appears, not a safe route to follow. Spoken alerts use your phone's text-to-speech engine.
 

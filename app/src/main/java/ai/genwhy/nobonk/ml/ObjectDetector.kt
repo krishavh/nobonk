@@ -67,7 +67,7 @@ class ObjectDetector(
     companion object {
         private const val TAG = "ObjectDetector"
 
-        /** COCO id → display name. Only the classes we care about for a walker are named. */
+        /** COCO id → display name. All 80 classes in the shipped model are named. */
         fun classNameFor(classId: Int): String = CocoRawHeadDecoder.classNameFor(classId)
     }
 

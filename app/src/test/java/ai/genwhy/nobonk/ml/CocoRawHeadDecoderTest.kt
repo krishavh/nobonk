@@ -3,6 +3,7 @@ package ai.genwhy.nobonk.ml
 import java.util.Properties
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.FloatBuffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,14 +44,58 @@ class CocoRawHeadDecoderTest {
         return actual
     }
 
-    @Test fun rawModelClassesSelectOnlyTheIntendedPeopleVehiclesAndAnimals() {
+    @Test fun everythingRetainsAll80ClassesFromTheShippedModel() {
         val output = tensor()
         classNames.forEach { (index, name) -> candidate(output, index, name, 0.9f) }
         val decoded = decode(output)
-        assertEquals(setOf("person", "bicycle", "car", "motorcycle", "bus", "truck", "cat", "dog"),
-            decoded.map { it.className }.toSet())
-        assertEquals(8, decoded.size)
-        decoded.forEach { assertEquals("Label must match the model, including cat vs horse", classNames[it.classId], it.className) }
+        assertEquals(classNames.values.toSet(), decoded.map { it.className }.toSet())
+        assertEquals(80, decoded.size)
+        decoded.forEach { assertEquals(classNames[it.classId], it.className) }
+    }
+
+    @Test fun actualSharpRecordingCandidateReachesOverlayInputAsBottle() {
+        val capture = Properties().apply {
+            CocoRawHeadDecoderTest::class.java.getResourceAsStream("/sharp-bottle-regression.properties")!!.use { load(it) }
+        }
+        val values = capture.getProperty("channels").split(",").map { it.toFloat() }.toFloatArray()
+        val transform = Letterbox.compute(capture.getProperty("frame.width").toInt(), capture.getProperty("frame.height").toInt(), 416)
+        val found = CocoRawHeadDecoder.decode(FloatBuffer.wrap(values), true, 80, 1, transform, 0.4f).single()
+        assertEquals(39, found.classId)
+        assertEquals("bottle", found.className)
+        assertTrue(found.confidence >= 0.57f)
+        assertTrue(found.boundingBox.width > 0f && found.boundingBox.height > 0f)
+        // At the recording's 1 m sensitivity this stationary bottle is below the alert
+        // threshold. It must still reach the renderer and have a neutral-colored box.
+        assertEquals(ai.genwhy.nobonk.model.AlertLevel.NONE,
+            AlertPolicy.levelFor(found.boundingBox, found.className, 1f, false))
+    }
+
+    @Test fun bottlePlantAndChairInUserReportAreNeverSilentlyFiltered() {
+        val output = tensor()
+        listOf("bottle", "potted plant", "chair").forEachIndexed { index, name -> candidate(output, index, name, 0.9f) }
+        assertEquals(setOf("bottle", "potted plant", "chair"), decode(output).map { it.className }.toSet())
+    }
+
+    @Test fun chairSurvivesBothRawLayoutsAndCompetingLowerPersonScore() {
+        val output = tensor()
+        candidate(output, 0, "chair", 0.93f)
+        candidate(output, 0, "person", 0.50f)
+        val transposed = arrayOf(Array(output[0][0].size) { index -> FloatArray(output[0].size) { channel -> output[0][channel][index] } })
+        for (found in listOf(decode(output).single(), decode(transposed, false).single())) {
+            assertEquals(classId("chair"), found.classId)
+            assertEquals("chair", found.className)
+            assertEquals(0.93f, found.confidence, 0f)
+        }
+    }
+
+    @Test fun chairRemainsVisibleWhenItOverlapsAPerson() {
+        val output = tensor()
+        candidate(output, 0, "chair", 0.93f)
+        candidate(output, 1, "chair", 0.80f)
+        candidate(output, 2, "person", 0.90f)
+        val kept = Nms.apply(decode(output), 0.45f)
+        assertEquals(setOf("chair", "person"), kept.map { it.className }.toSet())
+        assertEquals(2, kept.size)
     }
 
     @Test fun catsAndDogsSurviveClassAwareNmsWhileDuplicateCatsCollapse() {
@@ -70,18 +115,18 @@ class CocoRawHeadDecoderTest {
     @Test fun aHorseIsNotDecodedAsACat() {
         val output = tensor()
         candidate(output, 0, "horse", 0.99f)
-        assertTrue(decode(output).isEmpty())
-        assertEquals("object", CocoRawHeadDecoder.classNameFor(classId("horse")))
+        assertEquals("horse", decode(output).single().className)
+        assertEquals("horse", CocoRawHeadDecoder.classNameFor(classId("horse")))
     }
 
-    @Test fun excludedHorseScoreDoesNotStealAnEligibleDogCandidate() {
+    @Test fun highestClassScoreWinsWithoutRelabelingHorseAsDog() {
         val output = tensor()
         candidate(output, 0, "horse", 0.99f)
         candidate(output, 0, "dog", 0.72f)
         val found = decode(output).single()
-        assertEquals(classId("dog"), found.classId)
-        assertEquals("dog", found.className)
-        assertEquals(0.72f, found.confidence, 0f)
+        assertEquals(classId("horse"), found.classId)
+        assertEquals("horse", found.className)
+        assertEquals(0.99f, found.confidence, 0f)
     }
 
     @Test fun confidenceBoundaryAndLetterboxMappingRemainUnchanged() {

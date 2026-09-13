@@ -231,7 +231,7 @@ fun DetectionScreen(
 /* ───────────────────────── overlay ───────────────────────── */
 
 @Composable
-private fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel) {
+internal fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLevel) {
     val t = rememberInfiniteTransition(label = "bracket")
     val breathe by t.animateFloat(0f, 1f, infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b")
     val density = androidx.compose.ui.platform.LocalDensity.current

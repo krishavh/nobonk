@@ -27,8 +27,8 @@ android {
         applicationId = "ai.genwhy.nobonk"
         minSdk = 29        // Android 10+ (floor 26 for the SYSTEM_ALERT_WINDOW overlay; 29 ≈ 95%+ device reach)
         targetSdk = 36     // Android 16 — required for new-app submissions (Play API-36 cutoff)
-        versionCode = 17
-        versionName = "1.0.16"
+        versionCode = 18
+        versionName = "1.0.17"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables {
@@ -144,6 +144,11 @@ dependencies {
 
     // Unit tests (pure-Kotlin safety-core tests under src/test)
     testImplementation(libs.junit)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // Android 16 removed InputManager.getInstance; older transitive Espresso crashes before assertions.
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)
 }
