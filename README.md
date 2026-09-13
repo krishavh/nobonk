@@ -37,6 +37,8 @@ Current Android distance estimates are approximate, and hazards may be missed. N
 
 ## Set up in the foreground. Use it in the background.
 
+**Android 1.0.18:** People is the default, including on the first launch after this update. People mode excludes object and surface warnings. Choose Everything explicitly to include objects such as chairs and experimental wall/ground warnings. Person alerts require consecutive matching detections; boxes remain visible while confirmation is pending. Detection can still miss or misidentify hazards.
+
 1. **Open NoBonk to set up and test.** Acknowledge the safety reminder, allow the camera, check what your phone detects, and adjust sensitivity and sound, vibration or voice cues in a safe space.
 2. **Choose Run in background on Android.** Allow the requested notification and overlay permissions, then switch apps. Keep the rear camera uncovered and pointed toward the scene.
 3. **Receive alerts above other apps.** Use **Open NoBonk** to return to the settings. The app and notification include Stop controls; reliable shutdown is an active testing priority.

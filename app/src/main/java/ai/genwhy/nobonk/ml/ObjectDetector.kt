@@ -45,8 +45,8 @@ class ObjectDetector(
 
     /**
      * The execution provider actually verified to run inference (via a warm-up pass):
-     * "NNAPI" (device NPU/GPU/DSP), "XNNPACK" (optimized CPU) or "CPU" (plain).
-     * This is set only after a real inference succeeded, so it never over-claims.
+     * "NNAPI" (Android accelerator API, possibly with partial ORT CPU fallback),
+     * "XNNPACK" (optimized CPU) or "CPU" (plain). NNAPI does not prove NPU use.
      */
     var activeExecutionProvider: String = "CPU"
         private set
@@ -80,7 +80,7 @@ class ObjectDetector(
         // model/app/runtime/OS changes; a failed cached warm-up triggers benchmarking.
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         val modelHash = digest.digest(modelBytes).joinToString("") { "%02x".format(it) }
-        val identity = "$modelHash|${android.os.Build.FINGERPRINT}|${ortEnvironment.version}|${ai.genwhy.nobonk.BuildConfig.VERSION_CODE}|ep-v2"
+        val identity = "$modelHash|${android.os.Build.FINGERPRINT}|${ortEnvironment.version}|${ai.genwhy.nobonk.BuildConfig.VERSION_CODE}|ep-v3"
         val key = digest.digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
         val prefs = context.getSharedPreferences("nobonk_execution", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()

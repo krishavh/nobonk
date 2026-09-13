@@ -93,6 +93,11 @@ class DetectionViewModel : ViewModel() {
     var fps by mutableFloatStateOf(0f)
         private set
     private var lastResultAt = 0L
+    private var lastCapturedAt = 0L
+    var alertsReady by mutableStateOf(false)
+        private set
+    fun hasFreshResults(nowMs: Long): Boolean = lastCapturedAt > 0 &&
+        ai.genwhy.nobonk.service.BackgroundScanStatus.isFresh(lastCapturedAt, nowMs)
     private var fpsEma = 0f
 
     /** Foreground scanning on/off. Off after the user presses Stop (in-app or notification) until Start. */
@@ -134,6 +139,8 @@ class DetectionViewModel : ViewModel() {
         isWallDetected = false; isGroundHazardDetected = false
         isCameraBlocked = false; isLowLight = false; isNightBoost = false
         phoneAngleHint = ""; phoneAngleQuality = SensorMonitor.AngleQuality.OK
+        lastCapturedAt = 0L
+        alertsReady = false
         fps = 0f; inferMs = 0; lastResultAt = 0L; fpsEma = 0f
         cadenceAlert = AlertLevel.NONE; cadenceHadDetections = false; cadenceBlocked = false
     }
@@ -157,9 +164,10 @@ class DetectionViewModel : ViewModel() {
     var initializationStatus by mutableStateOf("Starting system...")
         private set
 
-    // Round-2: vehicles/bikes/obstacles ON by default (marketing promises them; TTC
-    // gating now makes them safe to surface without sidewalk spam).
-    var isObjectDetectionEnabled by mutableStateOf(true)
+    // A new preference key makes People the default once for existing testers too.
+    // An explicit Everything choice made from this version onward remains saved.
+    var isObjectDetectionEnabled by mutableStateOf(ai.genwhy.nobonk.ml.DetectionScope.DEFAULT_INCLUDE_NON_PERSON)
+        private set
     var accuracyMode by mutableStateOf(AccuracyMode.Y26N)
 
     var batteryLevel by mutableIntStateOf(100)
@@ -254,7 +262,7 @@ class DetectionViewModel : ViewModel() {
         private const val PREFS = "nobonk_prefs"
         private const val P_THRESHOLD = "threshold_m"
         private const val P_MODE = "accuracy_mode"
-        private const val P_EVERYTHING = "detect_everything"
+        private const val P_EVERYTHING = ai.genwhy.nobonk.ml.DetectionScope.PREF_EVERYTHING
         private const val P_SOUND = "sound"
         private const val P_HAPTICS = "haptics"
         private const val P_VOICE = "voice"
@@ -273,7 +281,16 @@ class DetectionViewModel : ViewModel() {
     }
 
     fun setThreshold(meters: Float) { distanceThreshold = meters; prefs()?.edit()?.putFloat(P_THRESHOLD, meters)?.apply() }
-    fun setDetectEverything(on: Boolean) { isObjectDetectionEnabled = on; prefs()?.edit()?.putBoolean(P_EVERYTHING, on)?.apply() }
+    fun setDetectEverything(on: Boolean) {
+        if (on == isObjectDetectionEnabled) return
+        isObjectDetectionEnabled = on
+        // Publish the new setting before its generation. Main-thread cue publication
+        // cannot interleave this callback; an admitted old-generation frame is discarded.
+        session.invalidateResults()
+        engine?.silence()
+        clearScanResult()
+        prefs()?.edit()?.putBoolean(P_EVERYTHING, on)?.apply()
+    }
     fun toggleSound(on: Boolean) { soundEnabled = on; prefs()?.edit()?.putBoolean(P_SOUND, on)?.apply() }
     /** Play the HIGH cue set once so the user knows what an alert feels like. */
     fun testAlert() {
@@ -497,7 +514,7 @@ class DetectionViewModel : ViewModel() {
             var handedToEngine = false
             try {
                 // Cues are validated per frame inside the engine (Stop+Start cannot unmute a stale inference).
-                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled, cuesAllowed = { session.isCurrent(gen) }, sessionToken = gen)
+                val cfg = DetectionEngine.Config(distanceThreshold, isObjectDetectionEnabled, soundEnabled, hapticsEnabled, voiceEnabled, cuesAllowed = { session.isCurrent(gen) && ai.genwhy.nobonk.service.BackgroundScanStatus.isFresh(now, android.os.SystemClock.elapsedRealtime()) }, sessionToken = gen)
                 val result = engineMutex.withLock {
                     if (cleared.get() || !session.isCurrent(gen) || isInitializing) {
                         return@launch
@@ -520,6 +537,8 @@ class DetectionViewModel : ViewModel() {
                     detections = result.detections
                     frameAlert = result.highestAlert
                     lookUpLabel = result.lookUpLabel
+                    lastCapturedAt = now
+                    alertsReady = result.alertsReady
                     isCameraBlocked = result.cameraBlocked
                     isWallDetected = result.wallDetected
                     isGroundHazardDetected = result.groundHazard

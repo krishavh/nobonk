@@ -46,9 +46,8 @@ class DetectionService : LifecycleService() {
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     private var distanceThreshold = 2.0f
-    // Round-2: vehicles/bikes/obstacles ON by default (the marketing promises them, and
-    // TTC gating now makes them safe to surface). The intent extra still overrides.
-    private var includeNonPerson = true
+    // People by default; the foreground setup passes the user’s explicit selection.
+    private var includeNonPerson = ai.genwhy.nobonk.ml.DetectionScope.DEFAULT_INCLUDE_NON_PERSON
     private var modelFile = "yolo26n_416.onnx"
     private var inputPx = 416
     private var skipNms = false
@@ -241,10 +240,12 @@ class DetectionService : LifecycleService() {
             val eng = try {
                 DetectionEngine(this@DetectionService).also { candidate ->
                     pendingEngine = candidate
-                    candidate.loadModel(modelFile, inputPx, skipNms) {
+                    val checkStartup = {
                         coroutineContext.ensureActive()
                         if (life.isStopped) throw CancellationException("Background startup stopped")
                     }
+                    candidate.loadModel(modelFile, inputPx, skipNms, checkStartup)
+                    candidate.warmUp(checkStartup)
                 }
             } catch (e: Exception) {
                 // The local engine has not been adopted and has no sensors/camera yet.
@@ -400,7 +401,7 @@ class DetectionService : LifecycleService() {
                 // Stop that lands first removes this post or makes the check fail; nothing is re-posted.
                 mainHandler.post {
                     if (!life.mayPostAlerts()) return@post
-                    scanStatus.frameCompleted(now, result.cameraBlocked)
+                    scanStatus.frameCompleted(now, result.cameraBlocked, result.alertsReady)
                     latestResult = result
                     renderBackgroundStatus()
                 }
@@ -430,7 +431,7 @@ class DetectionService : LifecycleService() {
         when (state) {
             BackgroundScanStatus.State.WAITING -> {
                 updateHud(null)
-                updateNotification("Waiting for camera results · tap to open")
+                updateNotification(if (result != null) "Preparing alerts · keep camera facing ahead" else "Waiting for camera results · tap to open")
             }
             BackgroundScanStatus.State.STALE -> {
                 updateHud("SCANNING PAUSED — no recent camera results. Open NoBonk to check.")

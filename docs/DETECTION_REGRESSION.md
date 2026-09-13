@@ -52,3 +52,30 @@ frame, People-only filtering, Stop/Start and returning from background mode.
 The automated pixel tests use controlled detections; they do not measure real
 camera recall. The recording replay confirms the Sharp model recognized a bottle,
 not that every object or either model always succeeds on a live phone.
+
+
+## People-mode isolation and readiness (1.0.18)
+
+`PeopleModeInstrumentedTest` feeds real RGBA frames through the shipped Fast model
+and `DetectionEngine`. A uniform-gray positive control must trigger the actual
+wall heuristic in Everything mode, then produce no wall/ground HUD in People
+mode. Scope changes and new session tokens reset readiness; covered frames remain
+unready, and all input frames close. This test runs in CI with the pixel tests.
+
+`StartupCancellationInstrumentedTest` also verifies that a warmed model without
+camera results is not advertised as ready, scope changes clear public hazards,
+and changing scope cannot restart a stopped session. Run separately from heavy
+release optimization to avoid resource-contention timeouts on local emulators:
+
+```sh
+./gradlew -Pbundle connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=ai.genwhy.nobonk.ml.StartupCancellationInstrumentedTest
+```
+
+Pure tests cover all-class People filtering, scope-generation invalidation,
+consecutive person confirmation, disjoint/duplicate/missing observations,
+1.2-second inference intervals, readiness timestamps/blocked frames, background
+status and verified provider selection/fallback. They do not establish outdoor
+precision or recall. Field follow-up: start in People, walk safely past chairs,
+shadows and walls, confirm no object/surface warnings, then verify nearby people
+still produce cues. Everything deliberately retains broader object warnings.

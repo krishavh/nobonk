@@ -24,14 +24,14 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Detection box rendering regression tests
+      - name: Detection and People-mode regression tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           disable-animations: true
           # Default sideload splits are ARM-only. Disable splits for the x86_64 CI emulator.
-          script: ./gradlew --no-daemon -Pbundle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.genwhy.nobonk.ui.DetectionOverlayRegressionTest
+          script: ./gradlew --no-daemon -Pbundle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.genwhy.nobonk.ui.DetectionOverlayRegressionTest,ai.genwhy.nobonk.ml.PeopleModeInstrumentedTest
       - name: Save regression test results
         if: always()
         uses: actions/upload-artifact@v4

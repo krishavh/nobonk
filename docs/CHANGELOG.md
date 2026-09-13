@@ -1,3 +1,14 @@
+# Changelog
+
+## 1.0.18 (versionCode 19)
+
+- People is now the default. The update resets the previous default once; subsequent explicit Everything choices remain saved.
+- People mode excludes nonperson YOLO detections and all experimental wall/ground warnings in foreground and background. Switching scope clears in-flight results, lingering warnings and cues without restarting a stopped scan.
+- Person hazards require spatially matching detections in consecutive frames. Unconfirmed detections retain neutral visible boxes. Physical cues require a current confirmed hazard rather than a lingering display level.
+- Both scan paths warm the complete detector pipeline three times. Alerts wait for three fresh camera results spanning at least 600 ms. Covered cameras, stale frames and Stop do not appear as active scanning.
+- Select the fastest verified provider by measured median latency, without the former 15% XNNPACK bias; exact ties retain XNNPACK. NNAPI still has safe CPU fallback and is not advertised as confirmed NPU execution.
+- Regression coverage includes actual ONNX/frame ingestion for People-vs-wall isolation, colored-box rendering, startup cancellation, scope changes, slow-phone confirmation, readiness and provider fallback.
+
 # 1.0.17 (versionCode 18) — September 13, 2026
 
 - Fix Everything mode discarding 72 supported YOLO classes before they reached the setup-screen overlay. Chairs, bottles, plants and other supported objects retain their actual labels and boxes. Model files, confidence thresholds and alert sensitivity are unchanged.

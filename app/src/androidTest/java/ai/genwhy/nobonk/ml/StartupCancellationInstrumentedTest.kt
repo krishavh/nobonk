@@ -47,6 +47,19 @@ class StartupCancellationInstrumentedTest {
                 assertTrue("Start owns a new initialization", model.isInitializing)
             }
             awaitReady(model, model.accuracyMode.label)
+            instrumentation.runOnMainSync {
+                assertFalse("Model warmup without camera frames is not live", model.alertsReady)
+                model.setDetectEverything(true)
+                model.setDetectEverything(false)
+                assertFalse(model.isObjectDetectionEnabled)
+                assertTrue(model.scanningEnabled)
+                assertTrue(model.detections.isEmpty()); assertNull(model.lookUpLabel)
+                assertFalse(model.isWallDetected); assertFalse(model.isGroundHazardDetected)
+                model.stopScanning(); model.setDetectEverything(true); model.setDetectEverything(false)
+                assertFalse("Changing scope cannot restart a stopped scan", model.scanningEnabled)
+                model.startScanning()
+            }
+
 
             val prefs = instrumentation.targetContext.getSharedPreferences("nobonk_execution", 0)
             val completedCache = prefs.all.toMap()

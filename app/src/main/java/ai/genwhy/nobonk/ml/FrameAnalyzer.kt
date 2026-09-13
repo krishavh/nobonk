@@ -73,6 +73,11 @@ class FrameAnalyzer {
 
     // ── Analysis entry point ────────────────────────────────────
 
+    fun reset() {
+        wallConsecutiveFrames = 0; groundConsecutiveFrames = 0
+        isWallDetected = false; isGroundHazardDetected = false; lastWallScore = 999f
+    }
+
     fun analyze(bitmap: Bitmap) {
         val rawWall = checkWall(bitmap)
 

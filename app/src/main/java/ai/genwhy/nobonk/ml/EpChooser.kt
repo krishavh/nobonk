@@ -1,25 +1,14 @@
 package ai.genwhy.nobonk.ml
 
-/**
- * Picks the execution provider from *measured* latency rather than a fixed preference list.
- *
- * NNAPI "working" only means the graph runs; on many phones (Tensor especially) YOLO ops
- * fall back to NNAPI's CPU reference path and end up slower than XNNPACK. So we time each
- * candidate that builds and keep the fastest. XNNPACK gets a small bias because it is the
- * most predictable path (no driver variance, no thermal-throttled accelerator surprises).
+/** Choose from verified providers by measured median latency, retaining XNNPACK on exact ties.
+ * NNAPI can use a device accelerator and partial ORT CPU fallback; its name does not prove NPU use.
  */
 object EpChooser {
     const val PREFERRED = "XNNPACK"
-    /** Any other provider (NNAPI or plain CPU) must beat XNNPACK by this factor to be chosen over it. */
-    const val REQUIRED_SPEEDUP = 1.15f
-
-    /** @param medianMs per-EP median inference latency; @return the winning EP name, or null if empty. */
-    fun pick(medianMs: Map<String, Double>): String? {
-        if (medianMs.isEmpty()) return null
-        val best = medianMs.minByOrNull { it.value }!!
-        val preferred = medianMs[PREFERRED] ?: return best.key
-        return if (best.key != PREFERRED && best.value * REQUIRED_SPEEDUP < preferred) best.key else PREFERRED
-    }
+    fun pick(medianMs: Map<String, Double>): String? = medianMs.entries
+        .filter { it.value.isFinite() && it.value > 0 }
+        .minWithOrNull(compareBy<Map.Entry<String, Double>> { it.value }
+            .thenBy { if (it.key == PREFERRED) 0 else 1 }.thenBy { it.key })?.key
 
     fun median(samples: List<Double>): Double {
         if (samples.isEmpty()) return Double.MAX_VALUE

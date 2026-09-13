@@ -8,7 +8,7 @@ class EpChooserTest {
     @Test fun emptyIsNull() { assertNull(EpChooser.pick(emptyMap())) }
     @Test fun xnnpackWinsTies() {
         assertEquals("XNNPACK", EpChooser.pick(mapOf("NNAPI" to 40.0, "XNNPACK" to 40.0)))
-        assertEquals("XNNPACK", EpChooser.pick(mapOf("NNAPI" to 36.0, "XNNPACK" to 40.0)))   // only 10 % faster
+        assertEquals("NNAPI", EpChooser.pick(mapOf("NNAPI" to 36.0, "XNNPACK" to 40.0)))   // no hidden 15% CPU bias
     }
     @Test fun clearlyFasterAcceleratorWins() {
         assertEquals("NNAPI", EpChooser.pick(mapOf("NNAPI" to 20.0, "XNNPACK" to 40.0)))
@@ -25,5 +25,9 @@ class EpChooserTest {
     @Test fun medianIsRobust() {
         assertEquals(40.0, EpChooser.median(listOf(40.0, 900.0, 39.0)), 1e-9)
         assertEquals(45.0, EpChooser.median(listOf(40.0, 50.0)), 1e-9)
+    }
+    @Test fun invalidMeasurementsCannotWin() {
+        assertEquals("NNAPI", EpChooser.pick(mapOf("XNNPACK" to Double.NaN, "NNAPI" to 15.0, "CPU" to 0.0)))
+        assertNull(EpChooser.pick(mapOf("CPU" to Double.POSITIVE_INFINITY)))
     }
 }

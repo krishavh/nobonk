@@ -84,16 +84,25 @@ fun DetectionScreen(
     onArmWalking: () -> Unit = {}
 ) {
     var showWalkingSetup by remember { mutableStateOf(false) }
-    val detections = viewModel.detections
+    var frameClock by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(viewModel) {
+        while (true) {
+            frameClock = android.os.SystemClock.elapsedRealtime()
+            kotlinx.coroutines.delay(500)
+        }
+    }
+    val fresh = viewModel.hasFreshResults(maxOf(frameClock, android.os.SystemClock.elapsedRealtime()))
+    val detections = if (fresh) viewModel.detections else emptyList()
+    val frameAlert = if (fresh) viewModel.frameAlert else AlertLevel.NONE
     val distanceThreshold = viewModel.distanceThreshold
     val isInitializing = viewModel.isInitializing
     val initializationStatus = viewModel.initializationStatus
     val isObjectDetectionEnabled = viewModel.isObjectDetectionEnabled
     val batteryLevel = viewModel.batteryLevel
-    val isCameraBlocked = viewModel.isCameraBlocked
+    val isCameraBlocked = fresh && viewModel.isCameraBlocked
     val accuracyMode = viewModel.accuracyMode
-    val isWallDetected = viewModel.isWallDetected
-    val isGroundHazard = viewModel.isGroundHazardDetected
+    val isWallDetected = fresh && viewModel.isWallDetected
+    val isGroundHazard = fresh && viewModel.isGroundHazardDetected
     val phoneAngleHint = viewModel.phoneAngleHint
     val phoneAngleQuality = viewModel.phoneAngleQuality
     val isLowLight = viewModel.isLowLight
@@ -117,7 +126,7 @@ fun DetectionScreen(
             }
         }
 
-        DetectionOverlay(detections = detections, frameAlert = viewModel.frameAlert)
+        DetectionOverlay(detections = detections, frameAlert = frameAlert)
 
         if (!isInitializing || !viewModel.scanningEnabled) {
             TopStatusBar(
@@ -125,7 +134,7 @@ fun DetectionScreen(
                 batteryLevel = batteryLevel,
                 executionProvider = executionProvider,
                 mode = accuracyMode,
-                live = viewModel.scanningEnabled && batteryLevel >= ai.genwhy.nobonk.ml.BatteryLevel.MIN_SCAN_PERCENT && !isCameraBlocked && viewModel.cameraError == null,
+                live = viewModel.alertsReady && fresh && !isInitializing && viewModel.scanningEnabled && batteryLevel >= ai.genwhy.nobonk.ml.BatteryLevel.MIN_SCAN_PERCENT && !isCameraBlocked && viewModel.cameraError == null,
                 stats = if (viewModel.fps > 0f) String.format(Locale.US, "%.0f fps · %d ms", viewModel.fps, viewModel.inferMs) else null
             )
         }
@@ -144,6 +153,9 @@ fun DetectionScreen(
                         description = "Camera angle warning. $phoneAngleHint")
                 isLowLight -> NoticeBanner("🔅", if (viewModel.isNightBoost) "Low light · night boost on" else "Low light", "Detection is less reliable in the dark", color = NB.Watch)
             }
+            if (viewModel.scanningEnabled && !isInitializing && !isCameraBlocked && viewModel.cameraError == null &&
+                phoneAngleQuality != SensorMonitor.AngleQuality.BAD && batteryLevel >= 10 && (!viewModel.alertsReady || !fresh))
+                NoticeBanner("…", "Preparing alerts", "Waiting for fresh camera frames. Keep looking up.", color = NB.Watch)
             if (!viewModel.scanningEnabled && updatePrompt != ai.genwhy.nobonk.update.UpdatePolicy.Prompt.NONE)
                 ai.genwhy.nobonk.ui.components.UpdateCard(restart = updatePrompt == ai.genwhy.nobonk.update.UpdatePolicy.Prompt.OFFER_RESTART, onPrimary = onUpdateNow, onLater = onUpdateLater)
             if (isWallDetected && !isCameraBlocked)
@@ -187,13 +199,14 @@ fun DetectionScreen(
                 isCameraBlocked -> "Camera blocked"
                 phoneAngleQuality == SensorMonitor.AngleQuality.BAD -> "Point phone forward"
                 batteryLevel < 10 -> "Paused — battery too low"
+                !viewModel.alertsReady || !fresh -> "Preparing alerts…"
                 else -> null
             }
         )
 
         if (isCameraBlocked) {
             CameraBlockedOverlay()
-        } else if (viewModel.frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
+        } else if (frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
             LookUpOverlay(className = viewModel.lookUpLabel ?: "person", bearingPan = viewModel.bearingPan)
         }
         if (showWalkingSetup) {
@@ -399,6 +412,9 @@ private fun ControlDock(
                 }
             }
             Spacer(Modifier.height(10.dp))
+            Text(if (isObjectDetectionEnabled) "People + objects · experimental surface warnings"
+                else "People only · object and surface alerts are off", color = NB.Sub, fontSize = 11.sp)
+            Spacer(Modifier.height(8.dp))
             SectionLabel("Cues")
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

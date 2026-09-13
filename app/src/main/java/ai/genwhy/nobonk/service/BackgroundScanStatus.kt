@@ -7,25 +7,28 @@ class BackgroundScanStatus {
     private var boundAt: Long? = null
     private var frameAt: Long? = null
     private var covered = false
+    private var ready = false
 
     fun cameraBound(nowMs: Long) {
         boundAt = nowMs
         frameAt = null
         covered = false
+        ready = false
     }
 
     /** Use the time analysis started, not completion: slow results must not appear fresh. */
-    fun frameCompleted(capturedAtMs: Long, cameraCovered: Boolean) {
+    fun frameCompleted(capturedAtMs: Long, cameraCovered: Boolean, alertsReady: Boolean = true) {
         if (boundAt == null || capturedAtMs < (frameAt ?: Long.MIN_VALUE)) return
         frameAt = capturedAtMs
         covered = cameraCovered
+        ready = alertsReady
     }
 
     fun state(nowMs: Long): State {
         val started = boundAt ?: return State.WAITING
         val last = frameAt ?: return if (isFresh(started, nowMs)) State.WAITING else State.STALE
         if (!isFresh(last, nowMs)) return State.STALE
-        return if (covered) State.COVERED else State.SCANNING
+        return if (covered) State.COVERED else if (!ready) State.WAITING else State.SCANNING
     }
 
     companion object {

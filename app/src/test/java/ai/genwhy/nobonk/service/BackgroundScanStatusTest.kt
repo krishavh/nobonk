@@ -63,4 +63,15 @@ class BackgroundScanStatusTest {
         assertFalse(life.mayPostAlerts() && BackgroundScanStatus.isFresh(1_000, 1_100))
         assertFalse(BackgroundScanStatus.isFresh(1_200, 1_100))
     }
+    @Test fun freshWarmupFramesAreNotAdvertisedAsScanning() {
+        val s = BackgroundScanStatus(); s.cameraBound(1000)
+        s.frameCompleted(1100, false, false)
+        assertEquals(BackgroundScanStatus.State.WAITING, s.state(1200))
+        s.frameCompleted(1800, false, true)
+        assertEquals(BackgroundScanStatus.State.SCANNING, s.state(1900))
+        s.frameCompleted(2000, true, false)
+        assertEquals(BackgroundScanStatus.State.COVERED, s.state(2100))
+        s.frameCompleted(2200, false, false)
+        assertEquals(BackgroundScanStatus.State.WAITING, s.state(2300))
+    }
 }

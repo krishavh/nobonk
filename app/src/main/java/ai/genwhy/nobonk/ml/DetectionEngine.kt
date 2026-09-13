@@ -78,11 +78,16 @@ class DetectionEngine(private val appContext: Context) {
         /** Detector wall time for this frame in ms (letterbox + inference + NMS). */
         val inferMs: Long = 0L,
         /** How long the phone has been held still (0 = moving/unknown); cadence input. */
-        val stationaryMs: Long = 0L
+        val stationaryMs: Long = 0L,
+        /** Fresh camera frames have passed startup readiness; not a guarantee of accuracy. */
+        val alertsReady: Boolean = false
     )
 
     private val approachTracker = ApproachTracker(clock = { android.os.SystemClock.elapsedRealtime() })
     private val frameAnalyzer = FrameAnalyzer()
+    private val readiness = ScanReadiness()
+    private val personConfirmation = PersonConfirmation(maxGapMs = 5_000) // allow slower phones; still requires consecutive observations
+    private var processedScope: Boolean? = null
 
     // Phone-angle monitor now lives in the ENGINE, so the background DetectionService
     // (which never touched SensorMonitor before) gets the same angle gating as the
@@ -173,7 +178,7 @@ class DetectionEngine(private val appContext: Context) {
         checkActive()
         val d = objectDetector ?: return
         val dummy = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888)
-        try { d.detect(dummy); checkActive() } finally { dummy.recycle() }
+        try { repeat(3) { checkActive(); d.detect(dummy); checkActive() } } finally { dummy.recycle() }
     }
 
     /**
@@ -284,10 +289,13 @@ class DetectionEngine(private val appContext: Context) {
             imageProxy.close()
             return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
         }
-        if (processedSessionToken != config.sessionToken) {
+        if (processedSessionToken != config.sessionToken || processedScope != config.includeNonPerson) {
             // Executed under the caller's native-work ownership, after any old frame
             // drains. A rapid Stop/Start must not inherit its alert linger or tracks.
             processedSessionToken = config.sessionToken
+            processedScope = config.includeNonPerson
+            readiness.reset(); personConfirmation.reset(); frameAnalyzer.reset()
+            lastHapticTime.clear(); lastCueTime.clear()
             approachTracker.reset(); boxSmoother.reset(); highMute.reset()
             heldAlert = AlertLevel.NONE; heldUntil = 0; heldLabel = null
             lastAnyCueTime = 0; lastSpokenAt = 0; lastMeanBrightness = 128f
@@ -310,6 +318,8 @@ class DetectionEngine(private val appContext: Context) {
         val blocked = LowLight.isBlocked(meanBrightness, variance)
 
         if (blocked || detector == null) {
+            readiness.reset(); personConfirmation.reset(); frameAnalyzer.reset()
+            approachTracker.reset(); boxSmoother.reset(); highMute.reset()
             // Reset linger so a stale HIGH doesn't survive a blocked frame.
             heldAlert = AlertLevel.NONE; heldLabel = null; heldUntil = 0L
             return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = blocked,
@@ -320,7 +330,10 @@ class DetectionEngine(private val appContext: Context) {
         var wall = false
         var ground = false
         val raw: List<Detection> = coroutineScope {
-            val wallJob = async { frameAnalyzer.analyze(work); }
+            val wallJob = async {
+                if (DetectionScope.environmentAllowed(config.includeNonPerson)) frameAnalyzer.analyze(work)
+                else frameAnalyzer.reset()
+            }
             val t0 = System.nanoTime()
             val yoloJob = async { detector.detect(work) }
             val d = yoloJob.await()
@@ -331,7 +344,7 @@ class DetectionEngine(private val appContext: Context) {
             d
         }
 
-        val filtered = if (config.includeNonPerson) raw else raw.filter { it.className == "person" }
+        val filtered = DetectionScope.filter(raw, config.includeNonPerson)
 
         // Reliability signals for this frame.
         val lowLight = LowLight.isLowLight(meanBrightness, blocked = false)
@@ -339,12 +352,24 @@ class DetectionEngine(private val appContext: Context) {
         val angleHint = sensorMonitor?.angleHint ?: ""
         val angleBad = angleQuality == SensorMonitor.AngleQuality.BAD
 
+        val now = android.os.SystemClock.elapsedRealtime()
+        // Readiness is about successful camera delivery, not transient phone tilt.
+        // BAD angle suppresses hazard cues below, without repeatedly restarting warmup.
+        val ready = readiness.observe(now, usable = true)
+        val confirmedPeople = personConfirmation.update(if (angleBad) emptyList() else filtered, now)
+        if (!ready || angleBad) {
+            approachTracker.reset(); highMute.reset()
+            heldAlert = AlertLevel.NONE; heldUntil = 0; heldLabel = null
+            wall = false; ground = false
+        }
+
         // ── Approach tracking + fill-based alert level (with TTC force-HIGH) ──
         val approachingIds = approachTracker.update(filtered)
         val scored = filtered.map { det ->
             val approaching = approachingIds.contains(det.id)
             val imminent = approachTracker.isImminent(det.id)   // TTC ≤ 1.5 s, on-bearing
-            val level = AlertPolicy.levelFor(
+            val eligible = ready && !angleBad && (det.className != "person" || det.id in confirmedPeople)
+            val level = if (!eligible) AlertLevel.NONE else AlertPolicy.levelFor(
                 det.boundingBox, det.className, config.distanceThreshold, approaching, imminent
             )
             det.copy(isApproaching = approaching, alertLevel = level)
@@ -355,7 +380,10 @@ class DetectionEngine(private val appContext: Context) {
             .maxByOrNull { AlertPolicy.fillFraction(it.boundingBox, it.className) }
 
         // ── Alert-level linger ──
-        val now = android.os.SystemClock.elapsedRealtime()
+        // Never carry a person warning across a missing/unconfirmed person frame.
+        if (heldLabel == "person" && scored.none { it.className == "person" && it.alertLevel != AlertLevel.NONE }) {
+            heldAlert = AlertLevel.NONE; heldLabel = null; heldUntil = 0
+        }
         if (rawHighest.ordinal >= heldAlert.ordinal) {
             heldAlert = rawHighest
             if (rawHighest != AlertLevel.NONE) { heldLabel = topDet?.className; heldUntil = now + lingerMs }
@@ -372,7 +400,7 @@ class DetectionEngine(private val appContext: Context) {
         // within the mute window, we also hold the loud re-alert.
         // The mute window is consumed only when the cue actually fires (a HIGH seen at a
         // bad angle must not delay the first audible alert after the angle is corrected).
-        val fireHigh = displayAlert == AlertLevel.HIGH &&
+        val fireHigh = rawHighest == AlertLevel.HIGH &&
             highMute.shouldEmit(topDet?.let { approachTracker.trackIdFor(it.id) }, now, canEmit = !angleBad)
         val mutedRepeat = displayAlert == AlertLevel.HIGH && !angleBad && !fireHigh
         // Distinguish "don't re-PLAY the sound" from "hide the visual warning" (HIGH-1).
@@ -384,18 +412,18 @@ class DetectionEngine(private val appContext: Context) {
         val suppressSound = mutedRepeat || angleBad
         val suppressVisual = angleBad
 
-        // ── Shared feedback (identical in both modes), driven by the debounced level ──
+        // ── Physical feedback requires a current confirmed hazard; linger is display-only. ──
         val pan = topDet?.let { AlertCue.panFor(it.boundingBox.centerX) }
         // Cues are emitted on the main thread so they serialize with Stop/silence (also main-thread):
         // the validity checks run INSIDE that block, so no cue can start after a Stop was applied.
-        val label = heldLabel
+        val label = topDet?.className
         val suppressed = withContext(Dispatchers.Main.immediate) {
             if (halted || muted || !config.cuesAllowed()) return@withContext true
-            if (displayAlert != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(displayAlert)
+            if (rawHighest != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(rawHighest)
             // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
             // The cue is panned toward the object so a left-side hazard is heard on the left.
-            if (config.soundEnabled && !suppressSound && displayAlert.ordinal >= AlertLevel.MEDIUM.ordinal) playAlertCue(displayAlert, pan ?: 0f)
-            if (config.voiceEnabled && !suppressSound && displayAlert == AlertLevel.HIGH) speak(VoiceCue.phrase(displayAlert, label, AlertCue.sideFor(pan)))
+            if (config.soundEnabled && !suppressSound && rawHighest.ordinal >= AlertLevel.MEDIUM.ordinal) playAlertCue(rawHighest, pan ?: 0f)
+            if (config.voiceEnabled && !suppressSound && rawHighest == AlertLevel.HIGH) speak(VoiceCue.phrase(rawHighest, label, AlertCue.sideFor(pan)))
             false
         }
         if (suppressed) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
@@ -415,7 +443,7 @@ class DetectionEngine(private val appContext: Context) {
             lowLight = lowLight, angleQuality = angleQuality, angleHint = angleHint,
             bearingPan = if (displayAlert != AlertLevel.NONE) pan else null,
             nightBoost = nightBoost, inferMs = lastInferMs,
-            stationaryMs = sensorMonitor?.stationaryMs(now) ?: 0L
+            stationaryMs = sensorMonitor?.stationaryMs(now) ?: 0L, alertsReady = ready
         )
     }
 

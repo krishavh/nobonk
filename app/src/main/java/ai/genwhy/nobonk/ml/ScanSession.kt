@@ -19,6 +19,8 @@ class ScanSession {
 
     fun current(): Int = generation.get()
     @Synchronized fun isCurrent(gen: Int): Boolean = mayScan && gen == generation.get()
+    /** Settings changed: discard in-flight results without changing Start/Stop intent. */
+    @Synchronized fun invalidateResults() { generation.incrementAndGet() }
     @Synchronized fun stop() { active = false; generation.incrementAndGet() }
     @Synchronized fun start() { generation.incrementAndGet(); active = true }
 

@@ -20,4 +20,11 @@ class ScanSessionTest {
         assertFalse(s.isCurrent(a)); assertFalse(s.isCurrent(b))
     }
     @Test fun currentFrameAcceptedWhileActive() { val s = ScanSession(); assertTrue(s.isCurrent(s.current())) }
+    @Test fun modeChangeInvalidatesOldFrameButPreservesScanningIntent() {
+        val s = ScanSession(); val old = s.current(); s.invalidateResults()
+        assertFalse(s.isCurrent(old)); assertTrue(s.mayScan); assertTrue(s.isCurrent(s.current()))
+        s.stop(); s.invalidateResults(); assertFalse(s.active); assertFalse(s.mayScan)
+        s.start(); s.setPowerAvailable(false); s.invalidateResults(); assertFalse(s.mayScan)
+        s.setPowerAvailable(true); s.setOwnerAvailable(false); s.invalidateResults(); assertFalse(s.mayScan)
+    }
 }
