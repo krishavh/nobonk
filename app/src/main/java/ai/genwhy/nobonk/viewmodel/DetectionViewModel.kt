@@ -334,6 +334,8 @@ class DetectionViewModel : ViewModel() {
         val request = modelGeneration.incrementAndGet()
         modelJob?.cancel()
         session.stop() // results queued by the previous model cannot publish
+        engine?.silence()
+        clearScanResult()
         isInitializing = true
         modelReady = false
         cameraError = null

@@ -30,6 +30,24 @@ class StartupCancellationInstrumentedTest {
         }
     }
 
+    private fun awaitCameraReady(model: DetectionViewModel) {
+        val end = SystemClock.elapsedRealtime() + 10_000
+        var ready = false
+        while (!ready && SystemClock.elapsedRealtime() < end) {
+            instrumentation.runOnMainSync {
+                assertNull(model.cameraError)
+                ready = model.alertsReady
+                if (!ready) model.processFrame(grayFrame().first)
+            }
+            // Leave Main free for native-result publication and lifecycle callbacks.
+            if (!ready) SystemClock.sleep(150)
+        }
+        instrumentation.runOnMainSync {
+            assertTrue("Real camera frames must reach readiness before replacement", model.alertsReady)
+            assertTrue("The ready scan must have fresh results", model.hasFreshResults(SystemClock.elapsedRealtime()))
+        }
+    }
+
     @Test fun immediateStopStartAndModelReplacementRecoverWithoutStaleLoadingState() {
         assumeTrue("Use the isolated emulator only", Build.MODEL.contains("sdk_gphone"))
         val store = ViewModelStore()
@@ -70,10 +88,17 @@ class StartupCancellationInstrumentedTest {
                 assertFalse("An already ready model should be reused", model.isInitializing)
                 assertEquals(readyStatus, model.initializationStatus)
                 assertEquals(completedCache, prefs.all)
-
+            }
+            awaitCameraReady(model)
+            instrumentation.runOnMainSync {
+                assertTrue("Positive control: the old model has live camera results", model.alertsReady)
                 replacement = if (model.accuracyMode == AccuracyMode.Y26N) AccuracyMode.Y26S else AccuracyMode.Y26N
                 model.setAccuracyMode(replacement, instrumentation.targetContext)
                 assertTrue(model.isInitializing)
+                assertFalse("Model replacement must immediately clear old readiness", model.alertsReady)
+                assertTrue("Model replacement must immediately clear old detections", model.detections.isEmpty())
+                assertNull("Model replacement must immediately clear old labels", model.lookUpLabel)
+                assertFalse("Model replacement must invalidate old camera results", model.hasFreshResults(SystemClock.elapsedRealtime()))
                 model.stopScanning(); model.startScanning()
                 assertTrue("Cancelled replacement must start a new owned job", model.isInitializing)
             }

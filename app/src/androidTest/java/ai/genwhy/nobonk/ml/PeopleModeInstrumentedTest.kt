@@ -16,35 +16,36 @@ import org.junit.Test
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
 
+/** Shared RGBA camera fixture; only the native frame path consumes it. */
+internal fun grayFrame(level: Int = 127): Pair<ImageProxy, () -> Boolean> {
+    val size = 128
+    val bytes = ByteBuffer.allocateDirect(size * size * 4)
+    repeat(size * size) { bytes.put(level.toByte()); bytes.put(level.toByte()); bytes.put(level.toByte()); bytes.put(255.toByte()) }
+    bytes.rewind()
+    var closed = false
+    val plane = Proxy.newProxyInstance(ImageProxy.PlaneProxy::class.java.classLoader,
+        arrayOf(ImageProxy.PlaneProxy::class.java)) { _, method, _ -> when (method.name) {
+            "getBuffer" -> bytes; "getRowStride" -> size * 4; "getPixelStride" -> 4
+            else -> error(method.name)
+        } } as ImageProxy.PlaneProxy
+    val info = Proxy.newProxyInstance(ImageInfo::class.java.classLoader,
+        arrayOf(ImageInfo::class.java)) { _, method, _ -> when (method.name) {
+            "getRotationDegrees" -> 0; "getTimestamp" -> 0L
+            "getSensorToBufferTransformMatrix" -> Matrix(); "getTagBundle" -> TagBundle.emptyBundle()
+            else -> error(method.name)
+        } } as ImageInfo
+    val frame = Proxy.newProxyInstance(ImageProxy::class.java.classLoader,
+        arrayOf(ImageProxy::class.java)) { _, method, _ -> when (method.name) {
+            "getWidth", "getHeight" -> size; "getCropRect" -> Rect(0, 0, size, size)
+            "getPlanes" -> arrayOf(plane); "getImageInfo" -> info; "getFormat" -> 1
+            "close" -> { check(!closed); closed = true; null }
+            else -> error(method.name)
+        } } as ImageProxy
+    return frame to { closed }
+}
+
 /** Real RGBA ingestion, shipped ONNX model, environment heuristic, session reset and result wiring. */
 class PeopleModeInstrumentedTest {
-    private fun grayFrame(level: Int = 127): Pair<ImageProxy, () -> Boolean> {
-        val size = 128
-        val bytes = ByteBuffer.allocateDirect(size * size * 4)
-        repeat(size * size) { bytes.put(level.toByte()); bytes.put(level.toByte()); bytes.put(level.toByte()); bytes.put(255.toByte()) }
-        bytes.rewind()
-        var closed = false
-        val plane = Proxy.newProxyInstance(ImageProxy.PlaneProxy::class.java.classLoader,
-            arrayOf(ImageProxy.PlaneProxy::class.java)) { _, method, _ -> when (method.name) {
-                "getBuffer" -> bytes; "getRowStride" -> size * 4; "getPixelStride" -> 4
-                else -> error(method.name)
-            } } as ImageProxy.PlaneProxy
-        val info = Proxy.newProxyInstance(ImageInfo::class.java.classLoader,
-            arrayOf(ImageInfo::class.java)) { _, method, _ -> when (method.name) {
-                "getRotationDegrees" -> 0; "getTimestamp" -> 0L
-                "getSensorToBufferTransformMatrix" -> Matrix(); "getTagBundle" -> TagBundle.emptyBundle()
-                else -> error(method.name)
-            } } as ImageInfo
-        val frame = Proxy.newProxyInstance(ImageProxy::class.java.classLoader,
-            arrayOf(ImageProxy::class.java)) { _, method, _ -> when (method.name) {
-                "getWidth", "getHeight" -> size; "getCropRect" -> Rect(0, 0, size, size)
-                "getPlanes" -> arrayOf(plane); "getImageInfo" -> info; "getFormat" -> 1
-                "close" -> { check(!closed); closed = true; null }
-                else -> error(method.name)
-            } } as ImageProxy
-        return frame to { closed }
-    }
-
     @Test fun peopleCannotLeakRealWallHeuristicAndRestartMustPrepareAgain() = runBlocking {
         assumeTrue("Isolated emulator only", Build.MODEL.contains("sdk_gphone"))
         val engine = DetectionEngine(InstrumentationRegistry.getInstrumentation().targetContext)
