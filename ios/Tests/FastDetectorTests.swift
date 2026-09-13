@@ -25,19 +25,45 @@ final class FastDetectorTests: XCTestCase {
         XCTAssertEqual(json["output_shape"] as? [Int], [1,FastModelContract.channels,FastModelContract.anchors])
         let names = json["names"] as! [String: String]
         XCTAssertEqual(names["15"], "cat"); XCTAssertEqual(names["16"], "dog"); XCTAssertEqual(names["17"], "horse")
-        XCTAssertNil(FastModelContract.names[17])
-        XCTAssertEqual(FastModelContract.selectedClasses, [0,1,2,3,5,7,16,15])
+        XCTAssertEqual(FastModelContract.names[17], "horse")
+        XCTAssertEqual(FastModelContract.selectedClasses, Array(0..<80))
         for (id, name) in FastModelContract.names { XCTAssertEqual(names[String(id)], name) }
     }
-    func testRawChannelMajorHeadIncludesCatDogAndRejectsHorse() throws {
+    func testEverythingRetainsAll80ModelClassesIncludingBottlePlantAndChair() throws {
+        let boxes = try decode(head((0..<80).map { ($0, $0, Float(0.9)) }))
+        XCTAssertEqual(boxes.count, 80)
+        XCTAssertEqual(Set(boxes.map(\.classID)), Set(0..<80))
+        for label in ["bottle", "potted plant", "chair"] {
+            XCTAssertTrue(boxes.contains { $0.label == label })
+        }
+    }
+    func testChairIsDecodedAndCanProduceAnObjectCue() throws {
+        let boxes = try decode(head([(0,56,0.93),(0,0,0.5)]))
+        XCTAssertEqual(boxes.count, 1)
+        XCTAssertEqual(boxes[0].classID, 56)
+        XCTAssertEqual(boxes[0].label, "chair")
+        let chair = PersonBox(id: 0, x: 0.3, y: 0.1, width: 0.4, height: 0.7,
+                              confidence: 0.93, classID: 56, detectorMode: .fastObjects)
+        XCTAssertTrue(chair.usable)
+        var policy = DetectionPolicy()
+        XCTAssertEqual(policy.evaluate([chair], time: 0), .none)
+        XCTAssertEqual(policy.evaluate([chair], time: 1), .none)
+        XCTAssertEqual(policy.evaluate([chair], time: 2), .objectAhead)
+    }
+    func testChairAndPersonSurviveOverlappingBoxes() throws {
+        let boxes = try decode(head([(0,56,0.93),(1,56,0.8),(2,0,0.9)]))
+        XCTAssertEqual(Set(boxes.map(\.classID)), Set([56,0]))
+        XCTAssertEqual(boxes.count, 2)
+    }
+    func testRawChannelMajorHeadIncludesCatDogAndHorse() throws {
         let boxes = try decode(head([(0,15,0.9),(1,16,0.8),(2,17,0.99)]))
-        XCTAssertEqual(boxes.map(\.classID), [15,16])
-        XCTAssertEqual(boxes.map(\.label), ["cat","dog"])
+        XCTAssertEqual(boxes.map(\.classID), [15,16,17])
+        XCTAssertEqual(boxes.map(\.label), ["cat","dog","horse"])
         XCTAssertEqual(boxes[0].rect.x, 158.0 / 416, accuracy: 0.000001)
     }
     func testSupportedClassSelectionTieOrderAndInclusiveThreshold() throws {
-        let boxes = try decode(head([(0,15,0.4),(0,16,0.4),(0,17,0.99)]))
-        XCTAssertEqual(boxes.count, 1); XCTAssertEqual(boxes.first?.classID, 16)
+        let boxes = try decode(head([(0,15,0.4),(0,16,0.4)]))
+        XCTAssertEqual(boxes.count, 1); XCTAssertEqual(boxes.first?.classID, 15)
         XCTAssertEqual(boxes.first?.confidence, 0.4)
         XCTAssertTrue(try decode(head([(0,0,0.3999)])).isEmpty)
     }
@@ -121,7 +147,7 @@ final class FastDetectorTests: XCTestCase {
         XCTAssertEqual(policy.evaluate([box(16)],time: 2), .none)
         XCTAssertEqual(policy.evaluate([box(16)],time: 3), .objectAhead)
         policy.reset()
-        for time in 0..<5 { XCTAssertEqual(policy.evaluate([box(17)],time: Double(time)), .none) }
-        XCTAssertFalse(box(17).usable)
+        for time in 0..<5 { XCTAssertEqual(policy.evaluate([box(80)],time: Double(time)), .none) }
+        XCTAssertFalse(box(80).usable)
     }
 }

@@ -1,6 +1,6 @@
 # NoBonk for iPhone — Browse & scan and Read / write preview
 
-Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision People is the default; an optional, checksum-pinned ONNX Fast Objects model adds eight selected classes through the free official ONNX Runtime SDK. No cloud inference, paid SDK, account, subscription or inference network client. It reuses NoBonk's corrected Blender icon and credits Krishav.
+Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision People is the default; an optional, checksum-pinned ONNX Fast Objects model exposes all 80 model-trained object classes through the free official ONNX Runtime SDK. No cloud inference, paid SDK, account, subscription or inference network client. It reuses NoBonk's corrected Blender icon and credits Krishav.
 
 ## What you can do
 
@@ -12,7 +12,7 @@ Native SwiftUI / AVFoundation preview, built locally on the Mac. Apple Vision Pe
 | Read / write | Read text you explicitly paste or write below the visible camera. Read mode uses a scrollable, selectable view without the keyboard. Paste appends to existing text. Content stays in session memory; NoBonk does not save, sync or fetch messages. |
 | Messages / WhatsApp handoff | **Pause & share** opens Apple’s share sheet with the draft; available destinations depend on installed apps. A configured phone also offers a direct Messages composer in the larger layout. You choose the recipient and confirm sending. Scanning pauses until you return and tap Start. No native inbox access. |
 | People | Apple Vision detects people locally. |
-| Fast Objects | Optional verified graph detects people, bicycles, cars, motorcycles, buses, trucks, cats and dogs locally. |
+| Fast Objects | Optional verified graph recognizes 80 model-trained classes locally, including people, chairs, bottles, potted plants, vehicles and animals. |
 | Cues | Visual indication, optional sound and haptics, with Earlier/Balanced/Closer sensitivity. These use apparent image size, not metres. |
 | Quick access | Siri/App Shortcuts plus supported Action button, Control Center and Lock Screen controls open setup. Acknowledgment and explicit Start still apply. |
 
@@ -36,7 +36,7 @@ Forty core tests and seventeen hosted WebKit/layout tests pass. Layout tests cov
 - App Shortcuts and an iOS 18+ Control widget open the setup screen after device authentication. They preserve the acknowledgment and explicit Start; see [Quick access](QUICK-ACCESS.md).
 - A deliberately started scan keeps the screen awake. Stop, leaving the app, locking the phone or a capture interruption ends scanning and restores ordinary auto-lock behavior. Debug builds log local capability and first-frame timing without logging camera images.
 
-This prototype is not Android feature parity and is not ready for App Store/TestFlight distribution. People mode does **not** detect cars or pets. Fast Objects adds selected vehicles, cats and dogs, but neither mode covers walls, potholes or general obstacles. The UI makes that limit explicit. Test on a real iPhone before relying on any behavior; NoBonk is never a safety device.
+This prototype is not Android feature parity and is not ready for App Store/TestFlight distribution. People mode does **not** detect cars or pets. Fast Objects includes the model’s 80 classes, but neither mode recognizes every object, walls or potholes. The UI makes that limit explicit. Test on a real iPhone before relying on any behavior; NoBonk is never a safety device.
 
 ## Performance strategy
 

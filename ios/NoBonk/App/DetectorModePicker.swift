@@ -22,7 +22,7 @@ struct DetectorModePicker: View {
             Text(camera.detectorMode.summary).font(.caption).foregroundStyle(.secondary)
             Text(camera.detectorMode == .visionPeople
                  ? "People mode uses Apple Vision. It does not detect vehicles, pets or other obstacles."
-                 : "Fast Objects is an early preview for eight object classes. It can miss or mislabel objects; walls, steps, ground hazards and distance are not covered. ‘Fast’ is the model name, not a speed guarantee.")
+                 : "Fast Objects is an early preview for 80 object classes. It can miss or mislabel objects; walls, steps, ground hazards and distance are not covered. ‘Fast’ is the model name, not a speed guarantee.")
                 .font(.caption).foregroundStyle(.secondary)
             if !camera.fastModelAvailable {
                 Text("Fast Objects is not included in this build.").font(.caption).foregroundStyle(.orange)
