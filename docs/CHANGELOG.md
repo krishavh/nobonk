@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.19 (versionCode 21)
+
+- Change People/Everything directly from the labelled status-tag menu or from Settings; both use the same saved detection setting. Selecting a mode does not start a stopped scan.
+- Make Settings a labelled button and move Detection history, walking setup and app information into a scrollable settings sheet. Stop remains available in the sheet header while scanning.
+- Make Start scanning compact while preserving its minimum 48dp touch target. Keep status and notices in one measured layout to avoid overlap when the status tag wraps.
+- Preserve the detection pipeline, People-only filtering, model assets, startup readiness and background-service behavior from 1.0.18.
+
 ## 1.0.18 (versionCode 20)
 
 - People is now the default. The update resets the previous default once; subsequent explicit Everything choices remain saved.

@@ -79,3 +79,9 @@ status and verified provider selection/fallback. They do not establish outdoor
 precision or recall. Field follow-up: start in People, walk safely past chairs,
 shadows and walls, confirm no object/surface warnings, then verify nearby people
 still produce cues. Everything deliberately retains broader object warnings.
+
+## Scan controls regression (1.0.19)
+
+`ScanControlsRegressionTest` exercises the production status tag and control dock with shared state. It verifies that both People/Everything controls agree, changing scope does not invoke Start, History is only exposed after opening Settings, History closes the sheet before navigating, and the compact Start control retains a 48dp touch target. A second case scrolls the settings sheet at doubled text size and invokes the fixed-header Stop control.
+
+For narrow-window visual review, use an isolated 1080px emulator at density 540 (320dp wide) and system `font_scale=2.0`, not just a 320dp composable or local font-scale override inside a wider dialog window. CI applies these emulator settings too. The tests save screenshots under `/data/local/tmp/nobonk-ui-*.png` on the disposable emulator. Rendering tests separately verify actual colored detection brackets. These controls tests do not replace physical-phone camera or background-service tests.

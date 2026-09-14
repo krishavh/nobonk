@@ -25,6 +25,8 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,9 +42,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -128,9 +133,17 @@ fun DetectionScreen(
 
         DetectionOverlay(detections = detections, frameAlert = frameAlert)
 
-        if (!isInitializing || !viewModel.scanningEnabled) {
+        // Status and notices share one stack so wrapped controls never cover a warning.
+        Column(
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+          if (!isInitializing || !viewModel.scanningEnabled) {
             TopStatusBar(
-                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
+                modifier = Modifier,
+                isObjectDetectionEnabled = isObjectDetectionEnabled,
+                onObjectDetectionToggle = { viewModel.setDetectEverything(it) },
                 batteryLevel = batteryLevel,
                 executionProvider = executionProvider,
                 mode = accuracyMode,
@@ -139,11 +152,7 @@ fun DetectionScreen(
             )
         }
 
-        // Notices stack under the status bar — one slot, most important first.
-        Column(
-            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 58.dp, start = 16.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        // Notices follow the measured status height, including at large font sizes.
             viewModel.cameraError?.let { NoticeBanner("!", "Scanning unavailable", it, color = NB.Watch) }
             when {
                 isCameraBlocked -> Unit
@@ -306,24 +315,47 @@ internal fun DetectionOverlay(detections: List<Detection>, frameAlert: AlertLeve
 
 /* ───────────────────────── top status ───────────────────────── */
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, executionProvider: String, mode: AccuracyMode, live: Boolean, stats: String? = null) {
+internal fun TopStatusBar(modifier: Modifier, batteryLevel: Int, executionProvider: String, mode: AccuracyMode, live: Boolean,
+    isObjectDetectionEnabled: Boolean, onObjectDetectionToggle: (Boolean) -> Unit, stats: String? = null) {
+  var showDetectionMenu by remember { mutableStateOf(false) }
   Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-    Row(
+    FlowRow(
         modifier = Modifier
             .clip(NB.PillShape)
             .background(NB.Glass)
             .border(1.dp, NB.GlassLine, NB.PillShape)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-            .semantics { contentDescription = "NoBonk ${if (live) "active" else "paused"}. ${if (executionProvider == "NNAPI") "NNAPI, device-selected processing" else "CPU"}. Battery $batteryLevel percent." },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        PulseDot(if (live) NB.Safe else NB.Watch)
-        Text("NOBONK", color = NB.Ink, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-        Pill(if (executionProvider == "NNAPI") "NNAPI" else "CPU", color = if (executionProvider == "NNAPI") NB.Accent else NB.Sub)
-        Pill(mode.label.uppercase(), color = NB.Accent2)
-        Text("$batteryLevel%", color = if (batteryLevel < 20) NB.Watch else NB.Sub, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Box(Modifier.align(Alignment.CenterVertically).semantics { contentDescription = "NoBonk ${if (live) "active" else "paused"}" }) {
+            PulseDot(if (live) NB.Safe else NB.Watch)
+        }
+        Text("NOBONK", modifier = Modifier.align(Alignment.CenterVertically), color = NB.Ink, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+        Pill(if (executionProvider == "NNAPI") "NNAPI" else "CPU", modifier = Modifier.align(Alignment.CenterVertically), color = if (executionProvider == "NNAPI") NB.Accent else NB.Sub)
+        Pill(mode.label.uppercase(), modifier = Modifier.align(Alignment.CenterVertically), color = NB.Accent2)
+        Text("$batteryLevel%", modifier = Modifier.align(Alignment.CenterVertically), color = if (batteryLevel < 20) NB.Watch else NB.Sub, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Box {
+            TextButton(onClick = { showDetectionMenu = true },
+                modifier = Modifier.heightIn(min = 48.dp).semantics {
+                    contentDescription = "Detection mode: ${if (isObjectDetectionEnabled) "Everything" else "People"}. Change detection mode"
+                }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text(if (isObjectDetectionEnabled) "Everything" else "People", color = NB.Safe, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = NB.Safe)
+            }
+            DropdownMenu(expanded = showDetectionMenu, onDismissRequest = { showDetectionMenu = false }) {
+                DropdownMenuItem(modifier = Modifier.semantics { selected = !isObjectDetectionEnabled }, text = { Text("People only") }, onClick = {
+                    showDetectionMenu = false
+                    if (isObjectDetectionEnabled) onObjectDetectionToggle(false)
+                })
+                DropdownMenuItem(modifier = Modifier.semantics { selected = isObjectDetectionEnabled }, text = { Text("Everything") }, onClick = {
+                    showDetectionMenu = false
+                    if (!isObjectDetectionEnabled) onObjectDetectionToggle(true)
+                })
+            }
+        }
     }
     if (stats != null) {
         Spacer(Modifier.height(4.dp))
@@ -334,8 +366,9 @@ private fun TopStatusBar(modifier: Modifier, batteryLevel: Int, executionProvide
 
 /* ───────────────────────── bottom dock ───────────────────────── */
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ControlDock(
+internal fun ControlDock(
     modifier: Modifier,
     detections: List<Detection>,
     distanceThreshold: Float,
@@ -366,7 +399,7 @@ private fun ControlDock(
     /** Camera heuristics (wall / ground) flag something even though the model recognised no object. */
     heuristicObstacle: Boolean = false
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val nearest = detections.filter { it.hasDistanceEstimate }.minByOrNull { it.distance }
     // Never imply "safe": no detections means exactly that — nothing the model recognised.
     val nearestColor = nearest?.let { NB.alert(it.alertLevel) } ?: NB.Sub
@@ -374,15 +407,27 @@ private fun ControlDock(
     GlassCard(modifier = modifier.fillMaxWidth(), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
         // Row 1 — what's ahead + proximity meter
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+            Box(Modifier.weight(1f)) {
                 SectionLabel(if (pausedReason != null) "Status" else if (nearest == null) "Watching" else "Nearest")
+            }
+            OutlinedButton(onClick = { showSettings = true }, modifier = Modifier.heightIn(min = 48.dp),
+                shape = NB.ChipShape, contentPadding = PaddingValues(horizontal = 12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Accent),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NB.Accent.copy(alpha = 0.7f))) {
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Settings", fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
                 Text(
                     if (pausedReason != null) pausedReason else if (nearest == null) (if (heuristicObstacle) "Possible obstacle ahead" else "No objects detected") else "${nearest.className.replaceFirstChar { it.uppercase() }} · ${String.format(Locale.US, "%.1f", nearest.distance)} m",
                     color = if (pausedReason != null || (nearest == null && heuristicObstacle)) NB.Watch else if (nearest == null) NB.Ink else nearestColor, fontSize = 20.sp, fontWeight = FontWeight.Bold
                 )
+        if (nearest != null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                ProximityMeter(distance = nearest.distance, threshold = distanceThreshold, color = nearestColor)
             }
-            ProximityMeter(distance = nearest?.distance, threshold = distanceThreshold, color = nearestColor,
-                emptyLabel = if (heuristicObstacle) "surface warning · object not identified" else "no object identified")
         }
         Spacer(Modifier.height(12.dp))
         // Row 2 — alert distance
@@ -392,23 +437,41 @@ private fun ControlDock(
         Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             presets.forEach { (v, label) -> SegChip(label, distanceThreshold == v, NB.Accent, Modifier.weight(1f)) { onThresholdChange(v) } }
         }
-        if (expanded) {
+        if (showSettings) {
+          ModalBottomSheet(onDismissRequest = { showSettings = false }, containerColor = NB.Night,
+              sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Settings", color = NB.Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { showSettings = false }) { Text("Done", color = NB.Accent) }
+            }
+            if (scanningEnabled) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(pausedReason ?: "Scanning", modifier = Modifier.weight(1f), color = NB.Sub)
+                    OutlinedButton(onClick = { showSettings = false; onStopBackground() },
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("settings-stop"),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Danger)) {
+                        Text("Stop", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Column(Modifier.weight(1f)) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column {
                     SectionLabel("Model")
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        AccuracyMode.entries.forEach { m -> SegChip(m.label, accuracyMode == m, NB.Accent2, Modifier.weight(1f)) { onAccuracyChange(m) } }
+                        AccuracyMode.entries.forEach { m -> SegChip(m.label, accuracyMode == m, NB.Accent2, Modifier.weight(1f).heightIn(min = 48.dp)) { onAccuracyChange(m) } }
                     }
                 }
-                Column(Modifier.weight(1f)) {
+                Column {
                     SectionLabel("Detect")
                     Spacer(Modifier.height(6.dp))
-                    Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        SegChip("People", !isObjectDetectionEnabled, NB.Safe, Modifier.weight(1f)) { onObjectDetectionToggle(false) }
-                        SegChip("Everything", isObjectDetectionEnabled, NB.Safe, Modifier.weight(1f)) { onObjectDetectionToggle(true) }
-                    }
+                    AdaptiveControlPair(grouped = true,
+                        first = { m -> SegChip("People", !isObjectDetectionEnabled, NB.Safe, m.heightIn(min = 48.dp)) { onObjectDetectionToggle(false) } },
+                        second = { m -> SegChip("Everything", isObjectDetectionEnabled, NB.Safe, m.heightIn(min = 48.dp)) { onObjectDetectionToggle(true) } }
+                    )
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -417,23 +480,37 @@ private fun ControlDock(
             Spacer(Modifier.height(8.dp))
             SectionLabel("Cues")
             Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SegChip(if (soundEnabled) "🔊 Sound" else "🔇 Sound", soundEnabled, NB.Watch, Modifier.weight(1f)) { onSoundToggle(!soundEnabled) }
-                SegChip("📳 Haptics", hapticsEnabled, NB.Watch, Modifier.weight(1f)) { onHapticsToggle(!hapticsEnabled) }
-                SegChip("🗣 Voice", voiceEnabled, NB.Watch, Modifier.weight(1f)) { onVoiceToggle(!voiceEnabled) }
-                SegChip("▶ Test", false, NB.Danger, Modifier.weight(0.8f)) { onTestAlert() }
-            }
+            AdaptiveControlPair(
+                first = { m -> SegChip(if (soundEnabled) "🔊 Sound" else "🔇 Sound", soundEnabled, NB.Watch, m.heightIn(min = 48.dp)) { onSoundToggle(!soundEnabled) } },
+                second = { m -> SegChip("📳 Haptics", hapticsEnabled, NB.Watch, m.heightIn(min = 48.dp)) { onHapticsToggle(!hapticsEnabled) } }
+            )
+            Spacer(Modifier.height(6.dp))
+            AdaptiveControlPair(
+                first = { m -> SegChip("🗣 Voice", voiceEnabled, NB.Watch, m.heightIn(min = 48.dp)) { onVoiceToggle(!voiceEnabled) } },
+                second = { m -> SegChip("▶ Test", false, NB.Danger, m.heightIn(min = 48.dp)) { onTestAlert() } }
+            )
             Spacer(Modifier.height(4.dp))
             Text(
                 "Sound and voice are panned toward the hazard — with earbuds, left means left.",
                 color = NB.Dim, fontSize = 10.sp
             )
             Spacer(Modifier.height(6.dp))
+            TextButton(onClick = { showSettings = false; onShowHistory() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Icon(Icons.Default.List, contentDescription = null, tint = NB.Accent)
+                Spacer(Modifier.width(8.dp))
+                Text("Detection history", color = NB.Accent)
+            }
+            TextButton(onClick = { showSettings = false; onWalkingSetup() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(if (walkingEnabled) "Walking mode: on · arm a session" else "Walking mode · Experimental", color = NB.Accent)
+            }
             Text(
                 "About NoBonk · safety notice · privacy · licenses",
                 color = NB.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { onShowAbout() }.padding(vertical = 4.dp)
+                modifier = Modifier.clickable { showSettings = false; onShowAbout() }.padding(vertical = 16.dp)
             )
+            }
+        }
+          }
         }
         Spacer(Modifier.height(12.dp))
         // Row 3 — actions
@@ -449,23 +526,12 @@ private fun ControlDock(
                     border = androidx.compose.foundation.BorderStroke(1.dp, NB.Danger.copy(alpha = 0.6f))) { Text("Stop", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
             } else {
                 // Stopped: nothing scans until the user explicitly starts again.
-                Button(onClick = onStartScanning, modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
+                Button(onClick = onStartScanning, modifier = Modifier.heightIn(min = 48.dp), shape = NB.ChipShape,
                     colors = ButtonDefaults.buttonColors(containerColor = NB.Safe, contentColor = Color(0xFF04140D))
                 ) { Text("Start scanning", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
             }
-            IconButton(onClick = onShowHistory, modifier = Modifier.size(48.dp).clip(NB.ChipShape).background(Color.White.copy(alpha = 0.06f))) {
-                Icon(Icons.Default.List, contentDescription = "History", tint = NB.Sub)
-            }
-            Box(
-                modifier = Modifier.size(48.dp).clip(NB.ChipShape).background(Color.White.copy(alpha = 0.06f)).clickable { expanded = !expanded }
-                    .semantics { contentDescription = if (expanded) "Hide settings" else "Show settings" },
-                contentAlignment = Alignment.Center
-            ) { Text(if (expanded) "▾" else "⚙", color = NB.Sub, fontSize = 18.sp) }
         }
-        TextButton(onClick = onWalkingSetup, modifier = Modifier.fillMaxWidth()) {
-            Text(if (walkingEnabled) "Walking mode: on · arm a session" else "Set up walking mode · Experimental", fontSize = 12.sp, color = NB.Accent)
-        }
-        // Maker credit — sits beneath the History / settings controls, outside their tap targets.
+        // Maker credit stays outside the scan and Settings tap targets.
         Spacer(Modifier.height(8.dp))
         Row(
             Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "Made by Krishav" },
@@ -476,6 +542,24 @@ private fun ControlDock(
             Text("BY", color = NB.Sub, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 2.2.sp)
             Spacer(Modifier.width(5.dp))
             Text("KRISHAV", color = NB.Ink, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.6.sp)
+        }
+    }
+}
+
+/** Keep complete labels visible at large system text sizes. */
+@Composable
+private fun AdaptiveControlPair(grouped: Boolean = false, first: @Composable (Modifier) -> Unit, second: @Composable (Modifier) -> Unit) {
+    BoxWithConstraints(if (grouped) Modifier.fillMaxWidth().selectableGroup() else Modifier.fillMaxWidth()) {
+        if (maxWidth / LocalDensity.current.fontScale < 220.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                first(Modifier.fillMaxWidth())
+                second(Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                first(Modifier.weight(1f))
+                second(Modifier.weight(1f))
+            }
         }
     }
 }
