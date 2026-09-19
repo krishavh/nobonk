@@ -192,7 +192,12 @@ data class SessionSummary(
      * millisecond values are many orders of magnitude away from that range.
      */
     val durationMinutes: Long
-        get() = (endTimestamp - startTimestamp).coerceAtLeast(0L) / MILLIS_PER_MINUTE
+        get() {
+            val diff = endTimestamp - startTimestamp
+            // Clamp negative durations (clock skew) to zero before dividing.
+            val clamped = if (diff < 0L) 0L else diff
+            return clamped / MILLIS_PER_MINUTE
+        }
 
     companion object {
         /** Milliseconds per minute; a non-zero compile-time constant, so no division-by-zero risk. */
