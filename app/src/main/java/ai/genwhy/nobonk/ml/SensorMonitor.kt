@@ -54,7 +54,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
 
     /** Raw accelerometer for the walking/standing-still gate (cadence only). */
     private val accelSensor: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
     val motion = MotionGate()
+
     /** Milliseconds the phone has been held still; 0 = moving or unknown. */
     fun stationaryMs(nowMs: Long = System.currentTimeMillis()): Long = motion.stationaryMs(nowMs)
 
