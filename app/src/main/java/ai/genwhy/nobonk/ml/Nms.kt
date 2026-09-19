@@ -79,6 +79,7 @@ object Nms {
      */
     private fun suppressWithinClass(group: List<Detection>, threshold: Float): List<Detection> {
         if (group.isEmpty()) return emptyList()
+        // Stable sort: ties in confidence preserve original relative order.
         val sorted = group.sortedByDescending { it.confidence }
         val size = sorted.size
         // A single candidate can never be suppressed by anything, so skip the
