@@ -1,5 +1,6 @@
 package ai.genwhy.nobonk.ui
 
+import ai.genwhy.nobonk.BuildConfig
 import ai.genwhy.nobonk.ml.SensorMonitor
 import ai.genwhy.nobonk.model.AlertLevel
 import ai.genwhy.nobonk.model.Detection
@@ -464,6 +465,11 @@ internal fun ControlDock(
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Spacer(Modifier.height(12.dp))
+            Text(
+                "Version ${BuildConfig.VERSION_NAME} · Build ${BuildConfig.VERSION_CODE}",
+                color = NB.Sub, fontSize = 13.sp,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Column {
                     SectionLabel("Model")
