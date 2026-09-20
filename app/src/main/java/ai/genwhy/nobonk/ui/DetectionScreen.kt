@@ -407,7 +407,9 @@ internal fun ControlDock(
     BoxWithConstraints(modifier.fillMaxWidth()) {
     // Large text must not push Start/Stop off-screen. Keep the actions fixed and let
     // the status/sensitivity content scroll inside a bounded camera control dock.
-    GlassCard(modifier = Modifier.fillMaxWidth().heightIn(max = (maxHeight * 0.7f).coerceAtMost(440.dp)), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
+    // maxHeight already excludes any content measured above this dock. Reducing it
+    // again can leave the scroll viewport with no space at large system text sizes.
+    GlassCard(modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight.coerceAtMost(440.dp)), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
         // Row 1 — what's ahead + proximity meter
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) {
