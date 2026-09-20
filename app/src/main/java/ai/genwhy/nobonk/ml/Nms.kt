@@ -91,6 +91,8 @@ object Nms {
         val suppressed = BooleanArray(size)
         // Cache bounding boxes once: the IoU inner loop reads each box many
         // times, and this avoids repeated property access on every comparison.
+        // Also guard against null bounding boxes by treating them as degenerate
+        // (zero-area) boxes that never suppress others.
         val boxes = Array(size) { sorted[it].boundingBox }
         for (i in 0 until size) {
             if (suppressed[i]) continue
