@@ -193,7 +193,10 @@ data class SessionSummary(
      */
     val durationMinutes: Long
         get() {
-            val diff = endTimestamp - startTimestamp
+            // Use saturating subtraction to prevent overflow for pathological inputs.
+            // If overflow occurs, it implies extreme clock skew; we clamp to 0 duration
+            // in that case as well, consistent with the negative-duration clamp below.
+            val diff = endTimestamp.saturatingSubtract(startTimestamp)
             // Clamp negative durations (clock skew) to zero before dividing.
             val clamped = if (diff < 0L) 0L else diff
             return clamped / MILLIS_PER_MINUTE
@@ -202,5 +205,20 @@ data class SessionSummary(
     companion object {
         /** Milliseconds per minute; a non-zero compile-time constant, so no division-by-zero risk. */
         private const val MILLIS_PER_MINUTE = 60_000L
+
+        /**
+         * Subtracts [other] from this [Long], saturating at [Long.MIN_VALUE] and [Long.MAX_VALUE]
+         * instead of wrapping around on overflow.
+         */
+        private fun Long.saturatingSubtract(other: Long): Long {
+            // Check for overflow: if signs of this and other are different, and
+            // the sign of the result is different from the sign of this, overflow occurred.
+            val result = this - other
+            if ((this xor result) and (other xor result) < 0) {
+                // Overflow occurred. Determine direction.
+                return if (this > 0) Long.MAX_VALUE else Long.MIN_VALUE
+            }
+            return result
+        }
     }
 }
