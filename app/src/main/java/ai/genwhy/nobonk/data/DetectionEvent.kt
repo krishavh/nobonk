@@ -214,8 +214,15 @@ data class SessionSummary(
             // Check for overflow: if signs of this and other are different, and
             // the sign of the result is different from the sign of this, overflow occurred.
             val result = this - other
+            // Overflow occurs if operands have different signs AND result sign differs from this.
+            // (this ^ result) < 0 means result sign != this sign.
+            // (other ^ result) < 0 means result sign != other sign.
+            // If both are true, then this and other must have different signs (since result can't match both).
+            // Actually, standard check: ((this ^ result) & (other ^ result)) < 0
             if ((this xor result) and (other xor result) < 0) {
                 // Overflow occurred. Determine direction.
+                // If this > 0, we were subtracting a negative (or adding positive) -> overflow to MAX
+                // If this < 0, we were subtracting a positive (or adding negative) -> overflow to MIN
                 return if (this > 0) Long.MAX_VALUE else Long.MIN_VALUE
             }
             return result
