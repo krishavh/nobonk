@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — walking start and pause
+
+- Put experimental walking-mode setup directly in the scan controls. It remains optional and off by default.
+- Within an explicitly armed session, start background scanning after sustained walking, release the camera and silence cues after 60 seconds without fresh steps, then require another 20-second walking qualification to resume. Each waiting period expires after 30 minutes; Stop ends the session completely.
+- Reject stale camera/model/frame callbacks across pause/restart cycles. Give each native engine its own in-flight ownership so old cleanup cannot close a newer scan.
+- Preserve People-only filtering, visible detection boxes, manual background scanning and measured execution-provider selection. Motion alone does not distinguish outdoors from indoors.
+
 ## 1.0.19 (versionCode 21)
 
 - Change People/Everything directly from the labelled status-tag menu or from Settings; both use the same saved detection setting. Selecting a mode does not start a stopped scan.

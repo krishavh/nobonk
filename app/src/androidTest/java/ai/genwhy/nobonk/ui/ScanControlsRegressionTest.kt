@@ -24,6 +24,7 @@ class ScanControlsRegressionTest {
     private var starts = 0
     private var stops = 0
     private var history = 0
+    private var walkingSetup = 0
     private val everything = mutableStateOf(false)
     private val scanning = mutableStateOf(false)
 
@@ -40,7 +41,7 @@ class ScanControlsRegressionTest {
                         ControlDock(Modifier, emptyList(), 1f, {}, {},
                             { stops++; scanning.value = false }, scanning.value, { starts++ }, true, {},
                             everything.value, { everything.value = it }, AccuracyMode.entries.first(), {},
-                            false, {}, false, {}, false, {}, onShowHistory = { history++ })
+                            false, {}, false, {}, false, {}, onShowHistory = { history++ }, onWalkingSetup = { walkingSetup++ })
                     }
                 }
             }
@@ -91,6 +92,12 @@ class ScanControlsRegressionTest {
         compose.onNodeWithTag("settings-stop").performClick()
         compose.onNodeWithText("Start scanning").assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, stops); assertEquals(0, starts) }
+    }
+
+    @Test fun walkingSetupIsVisibleWithoutOpeningSettingsAndDoesNotStartCamera() {
+        show()
+        compose.onNodeWithText("Walking mode · automatic start / pause").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, walkingSetup); assertEquals(0, starts); assertEquals(0, stops) }
     }
 
     @Test fun compactStartRemainsAFullTouchTargetAndOnlyStartsOnTap() {

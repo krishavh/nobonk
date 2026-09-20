@@ -39,9 +39,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * ladder, approach escalation, and shared haptics/sound. This is the real use case
  * (phone in hand, app hidden), and it was previously the buggiest path.
  */
-class DetectionService : LifecycleService() {
+open class DetectionService : LifecycleService() {
 
-    private var engine: DetectionEngine? = null
+    @Volatile private var engine: DetectionEngine? = null
     private lateinit var batteryMonitor: BatteryMonitor
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
@@ -57,8 +57,8 @@ class DetectionService : LifecycleService() {
 
     // FPS cap + single-flight gate (fixes PERF-C03: no unbounded background inference).
     private val gate = AtomicBoolean(false)
-    /** Engine awaiting release while a frame is in flight; whoever clears it last (frame finally / shutdown) closes it. */
-    private val pendingRelease = java.util.concurrent.atomic.AtomicReference<DetectionEngine?>(null)
+    /** Each scan owns its own retirement gate; an older frame cannot close a newer engine. */
+    @Volatile private var scanResource: RetiringResource<DetectionEngine>? = null
     private var lastProcessTime = 0L
     @Volatile private var cadenceAlert = AlertLevel.NONE
     @Volatile private var cadenceHadDetections = false
@@ -79,10 +79,10 @@ class DetectionService : LifecycleService() {
     private var startupJob: Job? = null
     private var walkingMode = false
     private var walkingDeadlineMs = 0L
-    private var walkingMonitor: ai.genwhy.nobonk.motion.WalkingMonitor? = null
+    private var walkingMonitor: ai.genwhy.nobonk.motion.WalkingMotionSource? = null
     private val walkingTimeout = object : Runnable {
         override fun run() {
-            if (life.isStopped || walkingMonitor == null) return
+            if (life.isStopped || walkingMonitor == null || life.phase != ServiceLifecycle.Phase.WAITING_FOR_WALKING) return
             if (SystemClock.elapsedRealtime() >= walkingDeadlineMs) {
                 ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode timed out after 30 minutes. Open setup to arm another session."
                 shutdown(ServiceLifecycle.StopReason.USER)
@@ -164,8 +164,7 @@ class DetectionService : LifecycleService() {
                 val ack = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
                 val explicit = true   // only an explicit ACTION_START reaches this point
                 if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack, explicitStart = explicit)) { Dbg.w(TAG, "start refused: safety gate not cleared (explicit=$explicit)"); reportArmResult(intent, 0); stopSelf(); return START_NOT_STICKY }
-                if (walkingMode && (!ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this) ||
-                        !ai.genwhy.nobonk.motion.WalkingMonitor.supported(this))) {
+                if (walkingMode && (!ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this) || !walkingMotionAvailable())) {
                     ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode needs motion permission and a supported step sensor. Start background scanning manually instead."
                     reportArmResult(intent, 0)
                     shutdown(ServiceLifecycle.StopReason.USER)
@@ -192,6 +191,10 @@ class DetectionService : LifecycleService() {
         intent.getParcelableExtra<ResultReceiver>(EXTRA_ARM_RESULT)?.send(code, Bundle.EMPTY)
     }
 
+    protected open fun walkingMotionAvailable(): Boolean = ai.genwhy.nobonk.motion.WalkingMonitor.supported(this)
+    protected open fun createWalkingMonitor(onTransition: (ai.genwhy.nobonk.motion.WalkingSessionPolicy.Transition) -> Unit): ai.genwhy.nobonk.motion.WalkingMotionSource =
+        ai.genwhy.nobonk.motion.WalkingMonitor(this, onTransition)
+
     private fun startForegroundService() {
         val notification = createNotification(if (walkingMode) "Waiting for walking · camera off · Stop to disarm" else "Preparing camera · tap to open")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -203,19 +206,23 @@ class DetectionService : LifecycleService() {
         if (walkingMode) {
             ai.genwhy.nobonk.safety.SessionState.walkingSession = true
             walkingDeadlineMs = SystemClock.elapsedRealtime() + WALKING_WAIT_MS
-            walkingMonitor = ai.genwhy.nobonk.motion.WalkingMonitor(this) {
-                if (life.isStopped) return@WalkingMonitor
+            walkingMonitor = createWalkingMonitor { transition ->
+                if (transition == ai.genwhy.nobonk.motion.WalkingSessionPolicy.Transition.PAUSE) {
+                    pauseForWalking()
+                    return@createWalkingMonitor
+                }
+                if (transition != ai.genwhy.nobonk.motion.WalkingSessionPolicy.Transition.START || life.isStopped) return@createWalkingMonitor
                 if (SystemClock.elapsedRealtime() >= walkingDeadlineMs) {
                     ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode timed out. Arm a new session when ready."
                     shutdown(ServiceLifecycle.StopReason.USER)
-                    return@WalkingMonitor
+                    return@createWalkingMonitor
                 }
                 val cameraGranted = ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
                 if (!cameraGranted || !ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) {
                     ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode stopped because camera or motion access changed."
                     shutdown(ServiceLifecycle.StopReason.USER)
                 } else if (life.onWalkingConfirmed()) {
-                    stopWalkingMonitor()
+                    mainHandler.removeCallbacks(walkingTimeout)
                     getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification("Walking detected · preparing camera"))
                     beginDetection()
                 }
@@ -232,17 +239,54 @@ class DetectionService : LifecycleService() {
         mainHandler.removeCallbacks(walkingTimeout)
     }
 
+    /** Keep the explicitly armed foreground service/motion monitor; release camera and cues. */
+    private fun pauseForWalking() {
+        if (!life.onWalkingPaused()) return
+        startupJob?.cancel() // keep the handle so the next cycle can await native cleanup
+        val oldEngine = engine; engine = null
+        val oldResource = scanResource; scanResource = null
+        oldEngine?.halt()
+        try { analysis?.clearAnalyzer(); analysis?.let { cameraProvider?.unbind(it) } } catch (_: Exception) {}
+        analysis = null
+        latestResult = null
+        mainHandler.removeCallbacks(statusWatchdog)
+        updateHud(null)
+        edge?.hide(); edge = null
+        oldResource?.retire()
+        walkingDeadlineMs = SystemClock.elapsedRealtime() + WALKING_WAIT_MS
+        mainHandler.removeCallbacks(walkingTimeout)
+        mainHandler.postDelayed(walkingTimeout, 15_000L)
+        lastNotificationContent = null
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID,
+            createNotification("Paused after no steps · camera off · walk to resume or Stop"))
+    }
+
     private fun beginDetection() {
-        if (life.isStopped) return
+        val scan = life.scanGeneration()
+        if (!life.isCurrent(scan)) return
+        lastProcessTime = 0L
+        cadenceAlert = AlertLevel.NONE
+        cadenceHadDetections = false
+        cadenceBlocked = false
+        cadenceStationaryMs = 0L
+        lastSeenAt = 0L
+        lastNotificationContent = null
         showEdgeIndicator()
+        val precedingStartup = startupJob
         startupJob = lifecycleScope.launch(Dispatchers.Default) {
+            // Native calls are not cancellable. Do not allocate a replacement until the old
+            // loader/frame has finished and released its own engine (important on older phones).
+            precedingStartup?.join()
+            while (gate.get()) { ensureActive(); kotlinx.coroutines.delay(10) }
+            ensureActive()
+            if (!life.isCurrent(scan)) return@launch
             var pendingEngine: DetectionEngine? = null
             val eng = try {
                 DetectionEngine(this@DetectionService).also { candidate ->
                     pendingEngine = candidate
                     val checkStartup = {
                         coroutineContext.ensureActive()
-                        if (life.isStopped) throw CancellationException("Background startup stopped")
+                        if (!life.isCurrent(scan)) throw CancellationException("Background startup stopped or paused")
                     }
                     candidate.loadModel(modelFile, inputPx, skipNms, checkStartup)
                     candidate.warmUp(checkStartup)
@@ -254,7 +298,7 @@ class DetectionService : LifecycleService() {
                 if (e is CancellationException) throw e
                 Dbg.e(TAG, "Model load failed: ${e.message}", e)
                 withContext(Dispatchers.Main + NonCancellable) {
-                    if (!life.isStopped) {
+                    if (life.isCurrent(scan)) {
                         ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection could not load its model. Tap Start scanning to retry."
                         shutdown(ServiceLifecycle.StopReason.HANDOFF)
                     }
@@ -265,14 +309,15 @@ class DetectionService : LifecycleService() {
             // that races the load can never orphan a loaded engine: either shutdown() already ran
             // (onModelLoaded → false → close here) or it sees `engine` set and releases it.
             withContext(Dispatchers.Main + NonCancellable) {
-                if (!life.onModelLoaded()) { eng.close(); return@withContext }
+                if (!life.onModelLoaded(scan)) { eng.close(); return@withContext }
                 engine = eng
+                scanResource = RetiringResource(eng) { runCatching { it.close() } }
                 if (voiceEnabled) eng.prepareVoice()
                 eng.startSensors()   // background angle gating
             }
-            if (life.isStopped) return@launch
+            if (!life.isCurrent(scan)) return@launch
             kotlinx.coroutines.delay(400)   // let the activity release the camera first
-            withContext(Dispatchers.Main) { if (life.mayBindCamera()) startCamera() }
+            withContext(Dispatchers.Main) { if (life.mayBindCamera(scan)) startCamera(scan) }
         }
     }
 
@@ -346,10 +391,10 @@ class DetectionService : LifecycleService() {
         }
     }
 
-    private fun startCamera() {
+    private fun startCamera(scan: Long) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
-            if (!life.mayBindCamera()) return@addListener   // Stop arrived while the provider was resolving
+            if (!life.mayBindCamera(scan)) return@addListener   // Stop arrived while the provider was resolving
             try {
                 val provider = cameraProviderFuture.get()
                 cameraProvider = provider
@@ -357,12 +402,12 @@ class DetectionService : LifecycleService() {
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                     .build()
-                    .also { it.setAnalyzer(cameraExecutor) { proxy -> processFrame(proxy) } }
+                    .also { it.setAnalyzer(cameraExecutor) { proxy -> processFrame(proxy, scan) } }
                 analysis = imageAnalysis
                 provider.unbindAll()
                 val cam = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis)
                 engine?.attachCamera(cam.cameraInfo)
-                life.onCameraBound()
+                life.onCameraBound(scan)
                 scanStatus.cameraBound(SystemClock.elapsedRealtime())
                 mainHandler.post(statusWatchdog)
             } catch (e: Exception) {
@@ -373,13 +418,19 @@ class DetectionService : LifecycleService() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun processFrame(imageProxy: ImageProxy) {
-        if (!life.mayProcessFrames()) { imageProxy.close(); return }
-        val eng = engine ?: run { imageProxy.close(); return }
+    private fun processFrame(imageProxy: ImageProxy, scan: Long) {
+        if (!life.mayProcessFrames(scan)) { imageProxy.close(); return }
+        val resource = scanResource ?: run { imageProxy.close(); return }
         val now = android.os.SystemClock.elapsedRealtime()
         val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryMonitor.level, cadenceBlocked, cadenceStationaryMs)
         if (now - lastProcessTime < interval) { imageProxy.close(); return }
         if (!gate.compareAndSet(false, true)) { imageProxy.close(); return }
+        val eng = resource.acquire()
+        if (eng == null) { imageProxy.close(); gate.set(false); return }
+        // Retirement and frame admission serialize on this engine's own lease.
+        if (!life.mayProcessFrames(scan)) {
+            imageProxy.close(); resource.release(); gate.set(false); return
+        }
         lastProcessTime = now
 
         // ATOMIC: the body always runs (and so does `finally`) even if the scope is cancelled first —
@@ -387,20 +438,20 @@ class DetectionService : LifecycleService() {
         lifecycleScope.launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.ATOMIC) {
             try {
                 val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled,
-                    cuesAllowed = { life.mayPostAlerts() && BackgroundScanStatus.isFresh(now, SystemClock.elapsedRealtime()) })
+                    cuesAllowed = { life.mayPostAlerts(scan) && BackgroundScanStatus.isFresh(now, SystemClock.elapsedRealtime()) })
                 val result = eng.process(imageProxy, cfg)   // closes imageProxy, fires haptics+sound
-                cadenceAlert = result.highestAlert
-                cadenceHadDetections = result.detections.isNotEmpty()
-                cadenceBlocked = result.cameraBlocked
-                cadenceStationaryMs = result.stationaryMs
-                if (cadenceHadDetections) lastSeenAt = android.os.SystemClock.elapsedRealtime()
                 // A frame that was in flight when Stop arrived must not re-create the HUD or re-post
                 // the notification from a stopped service (this was the visible "Stop didn't work").
                 // All publication (HUD, edge colour, notification) happens in ONE main-thread block with
                 // the lifecycle check inside it, so it serializes with shutdown() (also main-thread): a
                 // Stop that lands first removes this post or makes the check fail; nothing is re-posted.
                 mainHandler.post {
-                    if (!life.mayPostAlerts()) return@post
+                    if (!life.mayPostAlerts(scan)) return@post
+                    cadenceAlert = result.highestAlert
+                    cadenceHadDetections = result.detections.isNotEmpty()
+                    cadenceBlocked = result.cameraBlocked
+                    cadenceStationaryMs = result.stationaryMs
+                    if (cadenceHadDetections) lastSeenAt = android.os.SystemClock.elapsedRealtime()
                     scanStatus.frameCompleted(now, result.cameraBlocked, result.alertsReady)
                     latestResult = result
                     renderBackgroundStatus()
@@ -410,14 +461,14 @@ class DetectionService : LifecycleService() {
             } catch (e: Exception) {
                 Dbg.e(TAG, "Frame processing error: ${e.message}", e)
                 withContext(Dispatchers.Main + NonCancellable) {
-                    if (!life.isStopped) {
+                    if (life.isCurrent(scan)) {
                         ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection was interrupted. Open NoBonk to retry."
                         shutdown(ServiceLifecycle.StopReason.HANDOFF)
                     }
                 }
             } finally {
-                gate.set(false)
-                pendingRelease.getAndSet(null)?.let { runCatching { it.close() } }   // deferred release after Stop
+                try { resource.release() } // only this frame's engine may be closed
+                finally { gate.set(false) }
             }
         }
     }
@@ -500,7 +551,7 @@ class DetectionService : LifecycleService() {
     private fun createNotification(content: String): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
-        val stopIntent = Intent(this, DetectionService::class.java).apply { action = ACTION_STOP }
+        val stopIntent = Intent(this, javaClass).apply { action = ACTION_STOP }
         val stopPending = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("NoBonk")
@@ -544,6 +595,7 @@ class DetectionService : LifecycleService() {
         batteryMonitor.close()
         startupJob?.cancel(); startupJob = null
         val eng = engine; engine = null
+        val oldResource = scanResource; scanResource = null
         latestResult = null
         eng?.halt()   // no further cues/speech/vibration/sensors, even for a frame already in flight
         try { analysis?.let { cameraProvider?.unbind(it) } } catch (_: Exception) {}   // only OUR use case — never a foreground preview
@@ -553,25 +605,12 @@ class DetectionService : LifecycleService() {
         hudView?.let { v -> try { windowManager.removeView(v) } catch (_: Exception) {} }; hudView = null
         removeReturnControl()
         edge?.hide(); edge = null
-        releaseEngineWhenIdle(eng)
+        oldResource?.retire()
         try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID) } catch (_: Exception) {}
         if (life.stoppedByUser) ai.genwhy.nobonk.safety.SessionState.backgroundStoppedByUser = true
         ai.genwhy.nobonk.safety.SessionState.gate.onServiceStopped()
         stopSelf()
-    }
-
-    /**
-     * Never close the ONNX session under an in-flight inference: the frame coroutine holds the
-     * single-flight [gate] while it runs, so release is deferred to whoever finishes last.
-     */
-    private fun releaseEngineWhenIdle(eng: DetectionEngine?) {
-        eng ?: return
-        // Ownership hand-off, no timeout: park the engine, then if no frame holds the gate, take it
-        // back and close it; if a frame does, its `finally` (ATOMIC start guarantees it runs) closes it.
-        // getAndSet makes exactly one party the closer.
-        pendingRelease.set(eng)
-        if (!gate.get()) pendingRelease.getAndSet(null)?.let { runCatching { it.close() } }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {

@@ -12,33 +12,44 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 
-/** Local step events only. No location, step history, polling or network requests. */
-class WalkingMonitor(context: Context, private val onWalking: () -> Unit) : SensorEventListener {
+interface WalkingMotionSource { fun start(): Boolean; fun close() }
+
+/** Local step events only. No location, stored step history or network requests. */
+class WalkingMonitor(context: Context, private val onTransition: (WalkingSessionPolicy.Transition) -> Unit) : SensorEventListener, WalkingMotionSource {
     private val manager = context.getSystemService(SensorManager::class.java)
-    private val policy = SustainedWalkingPolicy()
+    private val policy = WalkingSessionPolicy()
+    private val handler = Handler(Looper.getMainLooper())
+    private val inactivityCheck = object : Runnable {
+        override fun run() {
+            if (!active) return
+            dispatch(policy.onTime(SystemClock.elapsedRealtimeNanos()))
+            if (active) handler.postDelayed(this, 1_000L)
+        }
+    }
+    private fun dispatch(transition: WalkingSessionPolicy.Transition) {
+        if (active && transition != WalkingSessionPolicy.Transition.NONE) onTransition(transition)
+    }
     private var active = false
 
-    fun start(): Boolean {
+    override fun start(): Boolean {
         val sensor = (manager?.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR, true)
             ?: manager?.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)) ?: return false
         active = true
         val registered = try {
-            manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL, 0, Handler(Looper.getMainLooper()))
+            manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL, 0, handler)
         } catch (_: SecurityException) { false }
-        if (!registered) close()
+        if (!registered) close() else handler.postDelayed(inactivityCheck, 1_000L)
         return registered
     }
     override fun onSensorChanged(event: SensorEvent) {
         if (!active || event.sensor.type != Sensor.TYPE_STEP_DETECTOR || event.values.firstOrNull() != 1f) return
-        if (policy.onStep(event.timestamp, SystemClock.elapsedRealtimeNanos())) {
-            close()
-            onWalking()
-        }
+        dispatch(policy.onStep(event.timestamp, SystemClock.elapsedRealtimeNanos()))
     }
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
-    fun close() {
+    override fun close() {
         active = false
         policy.cancel()
+        handler.removeCallbacks(inactivityCheck)
         manager?.unregisterListener(this)
     }
     companion object {

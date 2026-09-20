@@ -224,14 +224,14 @@ fun DetectionScreen(
                 title = { Text("Walking mode · Experimental") },
                 text = {
                     Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Optional and off by default. Arm a session here, then NoBonk can start background scanning after about 20 seconds of sustained walking.")
+                        Text("Optional and off by default. Arm once before your walk: scanning starts after about 20 seconds of sustained steps, pauses after 60 seconds without steps, and resumes after another 20 seconds of walking.")
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Enable walking mode", modifier = Modifier.weight(1f))
                             Switch(checked = walkingEnabled, enabled = walkingSupported,
                                 onCheckedChange = onWalkingChange,
                                 modifier = Modifier.semantics { contentDescription = "Enable walking-triggered background scanning" })
                         }
-                        Text(if (walkingSupported) "Motion access is used only on your phone. The camera stays off while waiting. Its Android privacy indicator appears when scanning begins. A notification shows Waiting and Stop; waiting expires after 30 minutes. Keep the screen on for the most reliable walking detection."
+                        Text(if (walkingSupported) "Motion stays on your phone; no location is used, so this does not distinguish indoors from outdoors. The camera is off while waiting or paused. Waiting expires after 30 minutes. Keep the screen on for reliable step detection. Android shows a camera indicator while scanning."
                             else "This phone has no supported step detector. You can still start background scanning manually.")
                         Text("Open NoBonk or press Stop to end the session. After stopping or restarting your phone, arm it again. Keep the camera uncovered and keep watching your surroundings.")
                         if (walkingStatus.isNotEmpty()) Text(walkingStatus)
@@ -500,9 +500,6 @@ internal fun ControlDock(
                 Spacer(Modifier.width(8.dp))
                 Text("Detection history", color = NB.Accent)
             }
-            TextButton(onClick = { showSettings = false; onWalkingSetup() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(if (walkingEnabled) "Walking mode: on · arm a session" else "Walking mode · Experimental", color = NB.Accent)
-            }
             Text(
                 "About NoBonk · safety notice · privacy · licenses",
                 color = NB.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
@@ -512,7 +509,9 @@ internal fun ControlDock(
         }
           }
         }
-        Spacer(Modifier.height(12.dp))
+        TextButton(onClick = onWalkingSetup, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text(if (walkingEnabled) "Walking mode · arm automatic start / pause" else "Walking mode · automatic start / pause", color = NB.Accent, fontSize = 12.sp)
+        }
         // Row 3 — actions
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (scanningEnabled) {
