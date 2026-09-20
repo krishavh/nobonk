@@ -52,6 +52,9 @@ class WalkingServiceInstrumentedTest {
     }
     private fun stopNotification() {
         val manager = i.targetContext.getSystemService(NotificationManager::class.java)
+        await("service Stop notification posted") {
+            manager.activeNotifications.any { it.id == 1 && it.notification.actions?.any { action -> action.title.toString() == "Stop" } == true }
+        }
         val notification = manager.activeNotifications.single { it.id == 1 }.notification
         notification.actions.single { it.title.toString() == "Stop" }.actionIntent.send()
     }
@@ -67,6 +70,7 @@ class WalkingServiceInstrumentedTest {
             await("camera available while waiting") { camera.available == true }
             i.runOnMainSync { service.emit(Transition.START) }
             await("reminder service ends") { WalkingServiceHarness.current == null }
+            await("walking reminder posted") { nm.activeNotifications.any { it.id == DetectionService.WALKING_NOTIFICATION_ID } }
             val reminder = nm.activeNotifications.single { it.id == DetectionService.WALKING_NOTIFICATION_ID }
             val posted = reminder.postTime
             i.runOnMainSync {
@@ -76,12 +80,13 @@ class WalkingServiceInstrumentedTest {
             }
             assertEquals(posted, nm.activeNotifications.single { it.id == DetectionService.WALKING_NOTIFICATION_ID }.postTime)
             assertEquals(true, camera.available)
-            assertTrue(nm.activeNotifications.none { it.id == 1 })
+            await("waiting notification removed") { nm.activeNotifications.none { it.id == 1 } }
             reminder.notification.actions.single { it.title.toString() == "Not now" }.actionIntent.send()
             await("dismiss removes reminder") { nm.activeNotifications.none { it.id == DetectionService.WALKING_NOTIFICATION_ID } }
         } finally {
             nm.cancel(DetectionService.WALKING_NOTIFICATION_ID)
             i.targetContext.stopService(Intent(i.targetContext, WalkingServiceHarness::class.java))
+            await("fixture service cleanup") { WalkingServiceHarness.current == null }
             camera.close(); scenario.close()
         }
     }
@@ -96,7 +101,7 @@ class WalkingServiceInstrumentedTest {
             stopNotification()
             await("stopped") { WalkingServiceHarness.current == null }
             i.runOnMainSync { service.emit(Transition.START); assertNull(service.field("engine")); assertNull(service.field("analysis")) }
-            assertTrue(i.targetContext.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id in 1..2 })
+            await("notifications removed") { i.targetContext.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id in 1..2 } }
         } finally { scenario.close() }
     }
 
@@ -115,9 +120,10 @@ class WalkingServiceInstrumentedTest {
                 assertEquals(ServiceLifecycle.Phase.STOPPED, service.phase)
                 assertNull(service.field("engine")); assertNull(service.field("analysis")); assertFalse(service.monitorActive)
             }
-            assertTrue(i.targetContext.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == 1 })
+            await("service notification removed") { i.targetContext.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == 1 } }
         } finally {
             i.targetContext.stopService(Intent(i.targetContext, WalkingServiceHarness::class.java))
+            await("fixture service cleanup") { WalkingServiceHarness.current == null }
             scenario.close()
         }
     }
@@ -141,9 +147,10 @@ class WalkingServiceInstrumentedTest {
             await("camera released after Stop") { camera.available == true }
             assertTrue(engine.halted)
             assertFalse(service.monitorActive)
-            assertTrue(i.targetContext.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == 1 })
+            await("service notification removed") { i.targetContext.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == 1 } }
         } finally {
             i.targetContext.stopService(Intent(i.targetContext, WalkingServiceHarness::class.java))
+            await("fixture service cleanup") { WalkingServiceHarness.current == null }
             camera.close(); scenario.close()
         }
     }
@@ -163,9 +170,10 @@ class WalkingServiceInstrumentedTest {
             }
             await("expiry destroys session") { WalkingServiceHarness.current == null }
             assertFalse(service.monitorActive)
-            assertTrue(i.targetContext.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id in 1..2 })
+            await("notifications removed") { i.targetContext.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id in 1..2 } }
         } finally {
             i.targetContext.stopService(Intent(i.targetContext, WalkingServiceHarness::class.java))
+            await("fixture service cleanup") { WalkingServiceHarness.current == null }
             scenario.close()
         }
     }
