@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — walking start and pause
+## 1.0.20 (versionCode 22) — walking start and pause
 
 - Put experimental walking-mode setup directly in the scan controls. It remains optional and off by default.
 - Within an explicitly armed session, start background scanning after sustained walking, release the camera and silence cues after 60 seconds without fresh steps, then require another 20-second walking qualification to resume. Each waiting period expires after 30 minutes; Stop ends the session completely.
