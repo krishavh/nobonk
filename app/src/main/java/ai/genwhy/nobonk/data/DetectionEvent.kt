@@ -219,7 +219,7 @@ data class SessionSummary(
             // (other ^ result) < 0 means result sign != other sign.
             // If both are true, then this and other must have different signs (since result can't match both).
             // Actually, standard check: ((this ^ result) & (other ^ result)) < 0
-            if ((this xor result) and (other xor result) < 0) {
+            if (((this xor result) and (other xor result)) < 0) {
                 // Overflow occurred. Determine direction.
                 // If this > 0, we were subtracting a negative (or adding positive) -> overflow to MAX
                 // If this < 0, we were subtracting a positive (or adding negative) -> overflow to MIN
