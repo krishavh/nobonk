@@ -20,39 +20,55 @@ class ServiceLifecycle {
     var stopReason: StopReason? = null
         private set
 
+    private var generation = 0L
+    private var walkingSession = false
+    @Synchronized fun scanGeneration(): Long = generation
+    @Synchronized fun isCurrent(token: Long): Boolean = token == generation && phase != Phase.STOPPED
+
     val isStopped: Boolean get() = synchronized(this) { phase == Phase.STOPPED }
 
     /** True exactly once per instance. Duplicate starts must not allocate another native engine. */
     @Synchronized fun onStartRequested(waitForWalking: Boolean = false): Boolean {
         if (phase != Phase.IDLE) return false
         phase = if (waitForWalking) Phase.WAITING_FOR_WALKING else Phase.LOADING_MODEL
+        walkingSession = waitForWalking
+        generation++
         startedBeforeStop = true
         return true
     }
     /** Only a fresh walking qualification can advance an armed session; Stop always wins. */
     @Synchronized fun onWalkingConfirmed(): Boolean {
         if (phase != Phase.WAITING_FOR_WALKING) return false
+        generation++
         phase = Phase.LOADING_MODEL
         return true
     }
+    /** Invalidate all queued work before camera/engine teardown; manual sessions never auto-pause. */
+    @Synchronized fun onWalkingPaused(): Boolean {
+        if (!walkingSession || phase !in setOf(Phase.LOADING_MODEL, Phase.BINDING_CAMERA, Phase.RUNNING)) return false
+        generation++
+        phase = Phase.WAITING_FOR_WALKING
+        return true
+    }
     /** Model finished loading. False = a Stop arrived meanwhile: release the engine, do NOT bind the camera. */
-    @Synchronized fun onModelLoaded(): Boolean {
-        if (phase != Phase.LOADING_MODEL) return false
+    @Synchronized fun onModelLoaded(token: Long = generation): Boolean {
+        if (token != generation || phase != Phase.LOADING_MODEL) return false
         phase = Phase.BINDING_CAMERA
         return true
     }
     /** About to bind the camera. False = stopped meanwhile. */
-    @Synchronized fun mayBindCamera(): Boolean = phase == Phase.BINDING_CAMERA
-    @Synchronized fun onCameraBound() { if (phase == Phase.BINDING_CAMERA) phase = Phase.RUNNING }
+    @Synchronized fun mayBindCamera(token: Long = generation): Boolean = token == generation && phase == Phase.BINDING_CAMERA
+    @Synchronized fun onCameraBound(token: Long = generation) { if (mayBindCamera(token)) phase = Phase.RUNNING }
 
     /** Frames are analysed only while running. */
-    @Synchronized fun mayProcessFrames(): Boolean = phase == Phase.RUNNING
+    @Synchronized fun mayProcessFrames(token: Long = generation): Boolean = token == generation && phase == Phase.RUNNING
     /** Notification / HUD updates and cues only while running (never after Stop). */
-    @Synchronized fun mayPostAlerts(): Boolean = phase == Phase.RUNNING
+    @Synchronized fun mayPostAlerts(token: Long = generation): Boolean = token == generation && phase == Phase.RUNNING
 
     /** Stop from any phase. Idempotent; the first reason wins. */
     @Synchronized fun stop(reason: StopReason) {
         if (isStopped) return
+        generation++
         phase = Phase.STOPPED
         stopReason = reason
     }

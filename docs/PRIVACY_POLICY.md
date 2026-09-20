@@ -64,7 +64,7 @@ can be erased at any time (see §7).
 
 In Android 1.0.16 and later, enabling walking mode requests Physical activity (`ACTIVITY_RECOGNITION`) permission. After you explicitly arm a session, local step-detector events and timestamps are processed temporarily in memory to recognize sustained walking and start an obstacle scan in that session. Steps are not saved in history, uploaded, shared, sold, or used for advertising or fitness profiles. NoBonk does not use Health Connect or health records.
 
-The camera stays closed while waiting. An ongoing notification shows status and Stop. Waiting expires after 30 minutes; if the phone sleeps, cleanup happens on the next process wake. Stop or reopening NoBonk ends the session. Process death or reboot never rearms it. Only the setup on/off preference is stored. You can disable it or revoke Physical activity access in Android Settings; manual background scanning works without that permission. Sensor support and screen-off behavior vary by phone.
+The camera stays closed while waiting. Within an armed session, scanning pauses after 60 seconds without fresh steps and can resume after another 20 seconds of sustained walking. Walking mode does not infer whether you are outdoors. An ongoing notification shows status and Stop. Each waiting period expires after 30 minutes; if the phone sleeps, cleanup happens on the next process wake. Stop or reopening NoBonk ends the session. Process death or reboot never rearms it. Only the setup on/off preference is stored. You can disable it or revoke Physical activity access in Android Settings; manual background scanning works without that permission. Sensor support and screen-off behavior vary by phone.
 
 ## 6. What NoBonk does NOT do
 

@@ -224,14 +224,14 @@ fun DetectionScreen(
                 title = { Text("Walking mode · Experimental") },
                 text = {
                     Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Optional and off by default. Arm a session here, then NoBonk can start background scanning after about 20 seconds of sustained walking.")
+                        Text("Optional and off by default. Arm once before your walk: scanning starts after about 20 seconds of sustained steps, pauses after 60 seconds without steps, and resumes after another 20 seconds of walking.")
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Enable walking mode", modifier = Modifier.weight(1f))
                             Switch(checked = walkingEnabled, enabled = walkingSupported,
                                 onCheckedChange = onWalkingChange,
                                 modifier = Modifier.semantics { contentDescription = "Enable walking-triggered background scanning" })
                         }
-                        Text(if (walkingSupported) "Motion access is used only on your phone. The camera stays off while waiting. Its Android privacy indicator appears when scanning begins. A notification shows Waiting and Stop; waiting expires after 30 minutes. Keep the screen on for the most reliable walking detection."
+                        Text(if (walkingSupported) "Motion stays on your phone; no location is used, so this does not distinguish indoors from outdoors. The camera is off while waiting or paused. Waiting expires after 30 minutes. Keep the screen on for reliable step detection. Android shows a camera indicator while scanning."
                             else "This phone has no supported step detector. You can still start background scanning manually.")
                         Text("Open NoBonk or press Stop to end the session. After stopping or restarting your phone, arm it again. Keep the camera uncovered and keep watching your surroundings.")
                         if (walkingStatus.isNotEmpty()) Text(walkingStatus)
@@ -404,7 +404,12 @@ internal fun ControlDock(
     // Never imply "safe": no detections means exactly that — nothing the model recognised.
     val nearestColor = nearest?.let { NB.alert(it.alertLevel) } ?: NB.Sub
 
-    GlassCard(modifier = modifier.fillMaxWidth(), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+    // Large text must not push Start/Stop off-screen. Keep the actions fixed and let
+    // the status/sensitivity content scroll inside a bounded camera control dock.
+    // maxHeight already excludes any content measured above this dock. Reducing it
+    // again can leave the scroll viewport with no space at large system text sizes.
+    GlassCard(modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight.coerceAtMost(440.dp)), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
         // Row 1 — what's ahead + proximity meter
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) {
@@ -419,6 +424,7 @@ internal fun ControlDock(
                 Text("Settings", fontWeight = FontWeight.Bold)
             }
         }
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
         Spacer(Modifier.height(4.dp))
                 Text(
                     if (pausedReason != null) pausedReason else if (nearest == null) (if (heuristicObstacle) "Possible obstacle ahead" else "No objects detected") else "${nearest.className.replaceFirstChar { it.uppercase() }} · ${String.format(Locale.US, "%.1f", nearest.distance)} m",
@@ -436,6 +442,7 @@ internal fun ControlDock(
         val presets = listOf(0.5f to "0.5 m", 1.0f to "1 m", 2.0f to "2 m", 3.5f to "3.5 m")
         Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             presets.forEach { (v, label) -> SegChip(label, distanceThreshold == v, NB.Accent, Modifier.weight(1f)) { onThresholdChange(v) } }
+        }
         }
         if (showSettings) {
           ModalBottomSheet(onDismissRequest = { showSettings = false }, containerColor = NB.Night,
@@ -500,9 +507,6 @@ internal fun ControlDock(
                 Spacer(Modifier.width(8.dp))
                 Text("Detection history", color = NB.Accent)
             }
-            TextButton(onClick = { showSettings = false; onWalkingSetup() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(if (walkingEnabled) "Walking mode: on · arm a session" else "Walking mode · Experimental", color = NB.Accent)
-            }
             Text(
                 "About NoBonk · safety notice · privacy · licenses",
                 color = NB.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
@@ -512,7 +516,9 @@ internal fun ControlDock(
         }
           }
         }
-        Spacer(Modifier.height(12.dp))
+        TextButton(onClick = onWalkingSetup, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text(if (walkingEnabled) "Walking mode · arm automatic start / pause" else "Walking mode · automatic start / pause", color = NB.Accent, fontSize = 12.sp)
+        }
         // Row 3 — actions
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (scanningEnabled) {
@@ -543,6 +549,7 @@ internal fun ControlDock(
             Spacer(Modifier.width(5.dp))
             Text("KRISHAV", color = NB.Ink, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.6.sp)
         }
+    }
     }
 }
 

@@ -2,7 +2,6 @@ package ai.genwhy.nobonk.ml
 
 import android.graphics.Matrix
 import android.graphics.Rect
-import android.os.Build
 import androidx.camera.core.ImageInfo
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.impl.TagBundle
@@ -11,7 +10,7 @@ import ai.genwhy.nobonk.model.AlertLevel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
+import ai.genwhy.nobonk.requireIsolatedEmulator
 import org.junit.Test
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
@@ -47,7 +46,7 @@ internal fun grayFrame(level: Int = 127): Pair<ImageProxy, () -> Boolean> {
 /** Real RGBA ingestion, shipped ONNX model, environment heuristic, session reset and result wiring. */
 class PeopleModeInstrumentedTest {
     @Test fun peopleCannotLeakRealWallHeuristicAndRestartMustPrepareAgain() = runBlocking {
-        assumeTrue("Isolated emulator only", Build.MODEL.contains("sdk_gphone"))
+        requireIsolatedEmulator()
         val engine = DetectionEngine(InstrumentationRegistry.getInstrumentation().targetContext)
         fun config(everything: Boolean, token: Int = 1) = DetectionEngine.Config(
             1f, everything, soundEnabled = false, hapticsEnabled = false, voiceEnabled = false, sessionToken = token)
