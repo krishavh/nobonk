@@ -12,7 +12,7 @@ package ai.genwhy.nobonk.service
  * and a check-then-write must not let BINDING_CAMERA overwrite STOPPED.
  */
 class ServiceLifecycle {
-    enum class Phase { IDLE, WAITING_FOR_WALKING, LOADING_MODEL, BINDING_CAMERA, RUNNING, STOPPED }
+    enum class Phase { IDLE, WAITING_FOR_WALKING, WALKING_PROMPTED, LOADING_MODEL, BINDING_CAMERA, RUNNING, STOPPED }
     enum class StopReason { USER, HANDOFF }
 
     var phase: Phase = Phase.IDLE
@@ -21,7 +21,6 @@ class ServiceLifecycle {
         private set
 
     private var generation = 0L
-    private var walkingSession = false
     @Synchronized fun scanGeneration(): Long = generation
     @Synchronized fun isCurrent(token: Long): Boolean = token == generation && phase != Phase.STOPPED
 
@@ -31,23 +30,15 @@ class ServiceLifecycle {
     @Synchronized fun onStartRequested(waitForWalking: Boolean = false): Boolean {
         if (phase != Phase.IDLE) return false
         phase = if (waitForWalking) Phase.WAITING_FOR_WALKING else Phase.LOADING_MODEL
-        walkingSession = waitForWalking
         generation++
         startedBeforeStop = true
         return true
     }
-    /** Only a fresh walking qualification can advance an armed session; Stop always wins. */
+    /** Walking only authorizes one reminder, NEVER a model load or camera bind. */
     @Synchronized fun onWalkingConfirmed(): Boolean {
         if (phase != Phase.WAITING_FOR_WALKING) return false
         generation++
-        phase = Phase.LOADING_MODEL
-        return true
-    }
-    /** Invalidate all queued work before camera/engine teardown; manual sessions never auto-pause. */
-    @Synchronized fun onWalkingPaused(): Boolean {
-        if (!walkingSession || phase !in setOf(Phase.LOADING_MODEL, Phase.BINDING_CAMERA, Phase.RUNNING)) return false
-        generation++
-        phase = Phase.WAITING_FOR_WALKING
+        phase = Phase.WALKING_PROMPTED
         return true
     }
     /** Model finished loading. False = a Stop arrived meanwhile: release the engine, do NOT bind the camera. */

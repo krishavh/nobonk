@@ -96,7 +96,7 @@ class ScanControlsRegressionTest {
 
     @Test fun walkingSetupIsVisibleWithoutOpeningSettingsAndDoesNotStartCamera() {
         show()
-        compose.onNodeWithText("Walking mode · automatic start / pause").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Walking reminder · optional").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, walkingSetup); assertEquals(0, starts); assertEquals(0, stops) }
     }
 
@@ -104,11 +104,11 @@ class ScanControlsRegressionTest {
         show(fontScale = 2f)
         compose.onNodeWithText("Start scanning").assertIsDisplayed()
         compose.onNodeWithText("Settings").assertIsDisplayed()
-        compose.onNodeWithText("Walking mode · automatic start / pause").assertIsDisplayed()
+        compose.onNodeWithText("Walking reminder · optional").assertIsDisplayed()
         compose.onNodeWithText("3.5 m").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Start scanning").assertIsDisplayed()
         compose.onNodeWithText("Settings").assertIsDisplayed()
-        compose.onNodeWithText("Walking mode · automatic start / pause").assertIsDisplayed()
+        compose.onNodeWithText("Walking reminder · optional").assertIsDisplayed()
         screenshot("walking-large-text")
     }
 

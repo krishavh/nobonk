@@ -222,23 +222,23 @@ fun DetectionScreen(
         if (showWalkingSetup) {
             AlertDialog(
                 onDismissRequest = { showWalkingSetup = false },
-                title = { Text("Walking mode · Experimental") },
+                title = { Text("Walking reminder · Experimental") },
                 text = {
                     Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Optional and off by default. Arm once before your walk: scanning starts after about 20 seconds of sustained steps, pauses after 60 seconds without steps, and resumes after another 20 seconds of walking.")
+                        Text("Optional and off by default. After about 20 seconds of sustained walking, we ask once whether you want to turn on NoBonk. Scanning never starts automatically.")
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Enable walking mode", modifier = Modifier.weight(1f))
+                            Text("Enable walking reminders", modifier = Modifier.weight(1f))
                             Switch(checked = walkingEnabled, enabled = walkingSupported,
                                 onCheckedChange = onWalkingChange,
-                                modifier = Modifier.semantics { contentDescription = "Enable walking-triggered background scanning" })
+                                modifier = Modifier.semantics { contentDescription = "Enable a one-time walking reminder" })
                         }
-                        Text(if (walkingSupported) "Motion stays on your phone; no location is used, so this does not distinguish indoors from outdoors. The camera is off while waiting or paused. Waiting expires after 30 minutes. Keep the screen on for reliable step detection. Android shows a camera indicator while scanning."
+                        Text(if (walkingSupported) "Motion stays on your phone; no location is used, so this does not distinguish indoors from outdoors. The camera stays off while waiting. Monitoring ends after one reminder or 30 minutes. Step delivery depends on your phone; keep the screen on for reliable detection."
                             else "This phone has no supported step detector. You can still start background scanning manually.")
-                        Text("Open NoBonk or press Stop to end the session. After stopping or restarting your phone, arm it again. Keep the camera uncovered and keep watching your surroundings.")
+                        Text("Choose Start scanning to turn on NoBonk, or Not now to leave it off. Ignoring or dismissing the reminder will not repeat it. You must arm a new reminder for a later walk.")
                         if (walkingStatus.isNotEmpty()) Text(walkingStatus)
                     }
                 },
-                confirmButton = { TextButton(onClick = onArmWalking, enabled = walkingEnabled && walkingSupported) { Text("Arm walking mode") } },
+                confirmButton = { TextButton(onClick = onArmWalking, enabled = walkingEnabled && walkingSupported) { Text("Remind me on my next walk") } },
                 dismissButton = { TextButton(onClick = { showWalkingSetup = false }) { Text("Done") } }
             )
         }
@@ -523,7 +523,7 @@ internal fun ControlDock(
           }
         }
         TextButton(onClick = onWalkingSetup, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            Text(if (walkingEnabled) "Walking mode · arm automatic start / pause" else "Walking mode · automatic start / pause", color = NB.Accent, fontSize = 12.sp)
+            Text(if (walkingEnabled) "Walking reminder · ask once" else "Walking reminder · optional", color = NB.Accent, fontSize = 12.sp)
         }
         // Row 3 — actions
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

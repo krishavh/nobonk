@@ -103,6 +103,9 @@ open class DetectionService : LifecycleService() {
 
     companion object {
         const val CHANNEL_ID = "DetectionServiceChannel"
+        const val WALKING_CHANNEL_ID = "WalkingReminderChannel"
+        const val WALKING_NOTIFICATION_ID = 2
+        const val EXTRA_WALKING_REMINDER = "walking_reminder"
         private const val NOTIFICATION_ID = 1
         private const val TAG = "DetectionService"
 
@@ -136,6 +139,7 @@ open class DetectionService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             ACTION_STOP -> {
+                getSystemService(NotificationManager::class.java).cancel(WALKING_NOTIFICATION_ID)
                 val reason = if (intent.getStringExtra(EXTRA_STOP_REASON) == STOP_REASON_HANDOFF) ServiceLifecycle.StopReason.HANDOFF else ServiceLifecycle.StopReason.USER
                 shutdown(reason)
                 return START_NOT_STICKY
@@ -149,6 +153,7 @@ open class DetectionService : LifecycleService() {
                     return START_NOT_STICKY // duplicate start: keep the existing session and settings
                 }
                 walkingMode = requestedWalking
+                getSystemService(NotificationManager::class.java).cancel(WALKING_NOTIFICATION_ID)
                 intent.let {
                     distanceThreshold = it.getFloatExtra(EXTRA_THRESHOLD, distanceThreshold)
                     includeNonPerson = it.getBooleanExtra(EXTRA_INCLUDE_NONPERSON, includeNonPerson)
@@ -197,34 +202,33 @@ open class DetectionService : LifecycleService() {
 
     private fun startForegroundService() {
         val notification = createNotification(if (walkingMode) "Waiting for walking · camera off · Stop to disarm" else "Preparing camera · tap to open")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        if (walkingMode) {
+            // Motion monitoring is not camera use. Android 14+ has a dedicated step/health type.
+            if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)
+            else startForeground(NOTIFICATION_ID, notification, 0)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        showReturnControl()
+        if (!walkingMode) showReturnControl()
         if (walkingMode) {
             ai.genwhy.nobonk.safety.SessionState.walkingSession = true
             walkingDeadlineMs = SystemClock.elapsedRealtime() + WALKING_WAIT_MS
             walkingMonitor = createWalkingMonitor { transition ->
-                if (transition == ai.genwhy.nobonk.motion.WalkingSessionPolicy.Transition.PAUSE) {
-                    pauseForWalking()
-                    return@createWalkingMonitor
-                }
                 if (transition != ai.genwhy.nobonk.motion.WalkingSessionPolicy.Transition.START || life.isStopped) return@createWalkingMonitor
                 if (SystemClock.elapsedRealtime() >= walkingDeadlineMs) {
                     ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode timed out. Arm a new session when ready."
                     shutdown(ServiceLifecycle.StopReason.USER)
                     return@createWalkingMonitor
                 }
-                val cameraGranted = ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                if (!cameraGranted || !ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) {
-                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode stopped because camera or motion access changed."
+                if (!ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) {
+                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking reminder stopped because motion access changed."
                     shutdown(ServiceLifecycle.StopReason.USER)
                 } else if (life.onWalkingConfirmed()) {
-                    mainHandler.removeCallbacks(walkingTimeout)
-                    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, createNotification("Walking detected · preparing camera"))
-                    beginDetection()
+                    // Consume this armed session before posting. No camera/model work and no rearming.
+                    shutdown(ServiceLifecycle.StopReason.USER)
+                    getSystemService(NotificationManager::class.java).notify(WALKING_NOTIFICATION_ID, createWalkingReminder())
                 }
             }
             if (walkingMonitor?.start() != true) {
@@ -237,28 +241,6 @@ open class DetectionService : LifecycleService() {
     private fun stopWalkingMonitor() {
         walkingMonitor?.close(); walkingMonitor = null
         mainHandler.removeCallbacks(walkingTimeout)
-    }
-
-    /** Keep the explicitly armed foreground service/motion monitor; release camera and cues. */
-    private fun pauseForWalking() {
-        if (!life.onWalkingPaused()) return
-        startupJob?.cancel() // keep the handle so the next cycle can await native cleanup
-        val oldEngine = engine; engine = null
-        val oldResource = scanResource; scanResource = null
-        oldEngine?.halt()
-        try { analysis?.clearAnalyzer(); analysis?.let { cameraProvider?.unbind(it) } } catch (_: Exception) {}
-        analysis = null
-        latestResult = null
-        mainHandler.removeCallbacks(statusWatchdog)
-        updateHud(null)
-        edge?.hide(); edge = null
-        oldResource?.retire()
-        walkingDeadlineMs = SystemClock.elapsedRealtime() + WALKING_WAIT_MS
-        mainHandler.removeCallbacks(walkingTimeout)
-        mainHandler.postDelayed(walkingTimeout, 15_000L)
-        lastNotificationContent = null
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID,
-            createNotification("Paused after no steps · camera off · walk to resume or Stop"))
     }
 
     private fun beginDetection() {
@@ -548,6 +530,29 @@ open class DetectionService : LifecycleService() {
         }
     }
 
+    private fun createWalkingReminder(): Notification {
+        val open = PendingIntent.getActivity(this, 2,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_WALKING_REMINDER, true)
+            }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val dismiss = PendingIntent.getService(this, 3,
+            Intent(this, javaClass).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE)
+        return NotificationCompat.Builder(this, WALKING_CHANNEL_ID)
+            .setContentTitle("Walking detected · Turn on NoBonk?")
+            .setContentText("Camera is off. Open NoBonk and choose Start scanning when ready.")
+            .setSmallIcon(R.mipmap.ic_launcher_monochrome)
+            .setContentIntent(open)
+            .addAction(0, "Open NoBonk", open)
+            .addAction(0, "Not now", dismiss)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setTimeoutAfter(WALKING_WAIT_MS)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .build()
+    }
+
     private fun createNotification(content: String): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
@@ -578,6 +583,10 @@ open class DetectionService : LifecycleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, "Detection Service", NotificationManager.IMPORTANCE_LOW)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(WALKING_CHANNEL_ID, "Walking reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "One reminder per explicitly armed walk; never starts scanning automatically."
+                })
         }
     }
 
