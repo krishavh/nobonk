@@ -121,6 +121,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
         val manager = sensorManager ?: return
         val sensor = gravitySensor ?: return
         manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+        // Register the raw accelerometer separately for the motion gate.
+        // If the gravity sensor IS the accelerometer (fallback case), the
+        // system deduplicates the registration automatically.
         accelSensor?.let { manager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
     }
 
