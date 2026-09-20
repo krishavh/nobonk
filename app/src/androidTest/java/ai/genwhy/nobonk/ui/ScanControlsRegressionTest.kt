@@ -100,6 +100,18 @@ class ScanControlsRegressionTest {
         compose.runOnIdle { assertEquals(1, walkingSetup); assertEquals(0, starts); assertEquals(0, stops) }
     }
 
+    @Test fun largeTextKeepsActionsVisibleWhenSensitivityScrolls() {
+        show(fontScale = 2f)
+        compose.onNodeWithText("Start scanning").assertIsDisplayed()
+        compose.onNodeWithText("Settings").assertIsDisplayed()
+        compose.onNodeWithText("Walking mode · automatic start / pause").assertIsDisplayed()
+        compose.onNodeWithText("3.5 m").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Start scanning").assertIsDisplayed()
+        compose.onNodeWithText("Settings").assertIsDisplayed()
+        compose.onNodeWithText("Walking mode · automatic start / pause").assertIsDisplayed()
+        screenshot("walking-large-text")
+    }
+
     @Test fun compactStartRemainsAFullTouchTargetAndOnlyStartsOnTap() {
         show(fontScale = 1f)
         val start = compose.onNodeWithText("Start scanning").assertIsDisplayed()

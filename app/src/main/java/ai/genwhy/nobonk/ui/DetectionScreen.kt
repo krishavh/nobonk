@@ -404,7 +404,10 @@ internal fun ControlDock(
     // Never imply "safe": no detections means exactly that — nothing the model recognised.
     val nearestColor = nearest?.let { NB.alert(it.alertLevel) } ?: NB.Sub
 
-    GlassCard(modifier = modifier.fillMaxWidth(), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+    // Large text must not push Start/Stop off-screen. Keep the actions fixed and let
+    // the status/sensitivity content scroll inside a bounded camera control dock.
+    GlassCard(modifier = Modifier.fillMaxWidth().heightIn(max = (maxHeight * 0.7f).coerceAtMost(440.dp)), accent = nearest?.let { NB.alert(it.alertLevel).takeIf { _ -> it.alertLevel != AlertLevel.NONE } }) {
         // Row 1 — what's ahead + proximity meter
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) {
@@ -419,6 +422,7 @@ internal fun ControlDock(
                 Text("Settings", fontWeight = FontWeight.Bold)
             }
         }
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
         Spacer(Modifier.height(4.dp))
                 Text(
                     if (pausedReason != null) pausedReason else if (nearest == null) (if (heuristicObstacle) "Possible obstacle ahead" else "No objects detected") else "${nearest.className.replaceFirstChar { it.uppercase() }} · ${String.format(Locale.US, "%.1f", nearest.distance)} m",
@@ -436,6 +440,7 @@ internal fun ControlDock(
         val presets = listOf(0.5f to "0.5 m", 1.0f to "1 m", 2.0f to "2 m", 3.5f to "3.5 m")
         Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             presets.forEach { (v, label) -> SegChip(label, distanceThreshold == v, NB.Accent, Modifier.weight(1f)) { onThresholdChange(v) } }
+        }
         }
         if (showSettings) {
           ModalBottomSheet(onDismissRequest = { showSettings = false }, containerColor = NB.Night,
@@ -542,6 +547,7 @@ internal fun ControlDock(
             Spacer(Modifier.width(5.dp))
             Text("KRISHAV", color = NB.Ink, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.6.sp)
         }
+    }
     }
 }
 

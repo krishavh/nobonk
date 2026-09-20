@@ -7,7 +7,6 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
 import android.os.Handler
 import android.os.Looper
-import android.os.Build
 import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -15,7 +14,7 @@ import ai.genwhy.nobonk.motion.WalkingSessionPolicy.Transition
 import ai.genwhy.nobonk.testing.WalkingHarnessActivity
 import ai.genwhy.nobonk.testing.WalkingServiceHarness
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
+import ai.genwhy.nobonk.requireIsolatedEmulator
 import org.junit.Test
 
 /** Synthetic motion only. Real LifecycleService, CameraX, ONNX, notification Stop, and camera teardown. */
@@ -32,7 +31,7 @@ class WalkingServiceInstrumentedTest {
         fail("Timed out: $label")
     }
     private fun grant() {
-        assumeTrue("Isolated emulator only; never modify a user's phone", Build.MODEL.contains("sdk_gphone"))
+        requireIsolatedEmulator()
         i.uiAutomation.executeShellCommand("appops set ${i.targetContext.packageName} SYSTEM_ALERT_WINDOW allow").use {
             java.io.FileInputStream(it.fileDescriptor).readBytes()
         }
