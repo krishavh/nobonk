@@ -92,6 +92,8 @@ object Letterbox {
         if (!t.isUsable) return NormBox(0f, 0f, 0f, 0f)
         // Precompute reciprocals once: dividing by the scaled extent undoes the
         // forward scale, and subtracting the pad removes the centering offset.
+        // isUsable guarantees scaledW/H are positive and finite, so these divisions
+        // cannot produce NaN or Infinity.
         val invW = 1f / t.scaledW
         val invH = 1f / t.scaledH
         val ol = clamp01((left - t.padX) * invW)
