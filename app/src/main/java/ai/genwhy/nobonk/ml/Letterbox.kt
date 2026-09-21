@@ -1,6 +1,8 @@
 package ai.genwhy.nobonk.ml
 
 import ai.genwhy.nobonk.model.NormBox
+import kotlin.math.min
+import kotlin.math.max
 
 /**
  * Pure aspect-preserving letterbox geometry (fixes audit ML-04/ML-10).
