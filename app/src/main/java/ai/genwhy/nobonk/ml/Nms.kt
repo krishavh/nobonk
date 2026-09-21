@@ -101,13 +101,17 @@ object Nms {
             // newly kept one. Strictly greater: a box exactly at the threshold
             // survives.
             val keptBox = boxes[i]
-            for (j in i + 1 until size) {
-                if (!suppressed[j]) {
-                    // Compute IoU explicitly to avoid precedence ambiguity with
-                    // the elvis operator; null boxes yield 0f (never suppress).
-                    val iou = keptBox?.iou(boxes[j]) ?: 0f
-                    if (iou > threshold) {
-                        suppressed[j] = true
+            // If the kept box itself is null/degenerate, it cannot suppress
+            // any other box (IoU is 0 by convention), so skip the inner loop.
+            if (keptBox != null) {
+                for (j in i + 1 until size) {
+                    if (!suppressed[j]) {
+                        // Compute IoU explicitly to avoid precedence ambiguity with
+                        // the elvis operator; null boxes yield 0f (never suppress).
+                        val iou = keptBox.iou(boxes[j]) ?: 0f
+                        if (iou > threshold) {
+                            suppressed[j] = true
+                        }
                     }
                 }
             }
