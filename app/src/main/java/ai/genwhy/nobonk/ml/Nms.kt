@@ -108,7 +108,8 @@ object Nms {
                     if (!suppressed[j]) {
                         // Compute IoU explicitly to avoid precedence ambiguity with
                         // the elvis operator; null boxes yield 0f (never suppress).
-                        val iou = keptBox.iou(boxes[j]) ?: 0f
+                        val otherBox = boxes[j]
+                        val iou = if (otherBox != null) keptBox.iou(otherBox) ?: 0f else 0f
                         if (iou > threshold) {
                             suppressed[j] = true
                         }
