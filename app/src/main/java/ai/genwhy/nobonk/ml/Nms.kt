@@ -102,7 +102,7 @@ object Nms {
             // survives.
             val keptBox = boxes[i]
             for (j in i + 1 until size) {
-                if (!suppressed[j] && keptBox.iou(boxes[j]) > threshold) {
+                if (!suppressed[j] && keptBox?.iou(boxes[j]) ?: 0f > threshold) {
                     suppressed[j] = true
                 }
             }
