@@ -69,7 +69,7 @@ object Letterbox {
         // Scaling by size / max(srcW, srcH) is the min of the two per-axis factors:
         // it keeps the whole frame inside the square input while preserving aspect
         // ratio; the other axis is then padded.
-        val scale = sizeF / maxOf(srcW, srcH).toFloat()
+        val scale = sizeF / max(srcW, srcH).toFloat()
         // Center the scaled content: leftover space on each axis is split evenly.
         // scale <= 1 guarantees the leftover (and thus padding) is non-negative;
         // coerceAtLeast(0f) is a cheap belt-and-braces against float rounding.
@@ -99,7 +99,7 @@ object Letterbox {
         val or = clamp01((right - t.padX) * invW)
         val ob = clamp01((bottom - t.padY) * invH)
         // Re-order in case the detector emitted corners in an unexpected order.
-        return NormBox(minOf(ol, or), minOf(ot, ob), maxOf(ol, or), maxOf(ot, ob))
+        return NormBox(min(ol, or), min(ot, ob), max(ol, or), max(ot, ob))
     }
 
     /**
