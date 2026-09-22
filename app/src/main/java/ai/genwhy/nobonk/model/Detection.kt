@@ -1,5 +1,7 @@
 package ai.genwhy.nobonk.model
 
+import kotlin.math.abs
+
 /**
  * A single object detection in normalized frame coordinates.
  *
@@ -101,6 +103,17 @@ data class Detection(
             // Inverted edges intentionally propagate a negative sign (see KDoc).
             (right - left) * (bottom - top)
         }
+
+    /**
+     * Absolute fraction of the frame covered by [boundingBox], in 0‥1.
+     *
+     * Unlike [boxArea], this returns the magnitude of the area, handling
+     * inverted-edge boxes (where right < left or bottom < top) by taking the
+     * absolute value of the raw product. Useful when a positive area magnitude
+     * is required regardless of edge ordering.
+     */
+    val absBoxArea: Float
+        get() = abs(boxArea)
 
     /**
      * Compact debug/label rendering, e.g. `person#3 92% HIGH`.
