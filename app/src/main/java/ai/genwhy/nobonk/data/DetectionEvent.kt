@@ -211,8 +211,6 @@ data class SessionSummary(
          * instead of wrapping around on overflow.
          */
         private fun Long.saturatingSubtract(other: Long): Long {
-            // Check for overflow: if signs of this and other are different, and
-            // the sign of the result is different from the sign of this, overflow occurred.
             val result = this - other
             // Overflow occurs if operands have different signs AND result sign differs from this.
             // (this ^ result) < 0 means result sign != this sign.
