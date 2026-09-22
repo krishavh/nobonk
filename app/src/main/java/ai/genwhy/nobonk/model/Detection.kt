@@ -126,6 +126,7 @@ data class Detection(
         append(className).append('#').append(id)
         // toInt() truncates toward zero; out-of-range confidences render as-is
         // (clamping is the detector boundary's responsibility, not the label's).
+        // Note: Float.toInt() returns 0 for NaN, which is acceptable for debug labels.
         append(' ').append((confidence * 100).toInt()).append('%')
         if (hasDistanceEstimate) {
             append(" ~").append(distance).append('m')
