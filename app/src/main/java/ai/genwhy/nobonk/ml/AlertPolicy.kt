@@ -208,6 +208,10 @@ object AlertPolicy {
     /**
      * Normalize a raw box dimension to a finite fraction in 0‥1: NaN → 0, then clamp.
      * Needed because [Float.coerceIn] passes NaN through unchanged (both comparisons fail).
+     *
+     * Note: ±Infinity is intentionally left for [Float.coerceIn] to clamp to the bounds
+     * (positive infinity → 1, negative infinity → 0), which is the desired saturation
+     * behaviour for an out-of-range box dimension.
      */
     private fun Float.saneFraction(): Float =
         if (isNaN()) 0f else coerceIn(0f, 1f)
