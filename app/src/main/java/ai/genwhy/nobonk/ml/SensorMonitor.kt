@@ -5,6 +5,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.sqrt
 
 /**
@@ -208,7 +210,7 @@ class SensorMonitor(context: Context) : SensorEventListener {
      * full precision of the degree conversion before truncating to Float.
      */
     private fun computePitch(gy: Float, gz: Float): Float =
-        Math.toDegrees(Math.atan2(-gz.toDouble(), -gy.toDouble())).toFloat()
+        (atan2(-gz.toDouble(), -gy.toDouble()) * (180.0 / PI)).toFloat()
 
     private companion object {
         /** Above this pitch the camera starts losing its forward view. */
