@@ -1,6 +1,7 @@
 package ai.genwhy.nobonk.model
 
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * A single object detection in normalized frame coordinates.
@@ -118,16 +119,17 @@ data class Detection(
     /**
      * Compact debug/label rendering, e.g. `person#3 92% HIGH`.
      *
-     * Confidence is formatted as a whole percentage (truncating toward zero via
-     * [Float.toInt], so 99.9% → 99%); a missing distance estimate ([Float.NaN])
+     * Confidence is formatted as a whole percentage (rounding to the nearest
+     * integer, so 92.6% → 93%); a missing distance estimate ([Float.NaN])
      * is omitted rather than rendered as "NaN".
      */
     override fun toString(): String = buildString {
         append(className).append('#').append(id)
-        // toInt() truncates toward zero; out-of-range confidences render as-is
-        // (clamping is the detector boundary's responsibility, not the label's).
-        // Note: Float.toInt() returns 0 for NaN, which is acceptable for debug labels.
-        append(' ').append((confidence * 100).toInt()).append('%')
+        // roundToInt() rounds to the nearest integer (ties to even); out-of-range
+        // confidences render as-is (clamping is the detector boundary's
+        // responsibility, not the label's). NaN maps to 0, which is acceptable for
+        // debug labels.
+        append(' ').append((confidence * 100f).roundToInt()).append('%')
         if (hasDistanceEstimate) {
             append(" ~").append(distance).append('m')
         }
