@@ -96,7 +96,7 @@ data class Detection(
      * spans, so degenerate (zero-width or zero-height) boxes simply yield 0
      * without any division. A box whose edges are inverted (right < left, etc.)
      * yields a negative area; consumers comparing against thresholds are
-     * unaffected, but use [kotlin.math.abs] if a magnitude is required.
+     * unaffected, but use [absBoxArea] if a magnitude is required.
      */
     val boxArea: Float
         get() = with(boundingBox) {
