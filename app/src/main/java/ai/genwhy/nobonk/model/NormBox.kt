@@ -1,5 +1,8 @@
 package ai.genwhy.nobonk.model
 
+import kotlin.math.max
+import kotlin.math.min
+
 /**
  * A pure-Kotlin axis-aligned bounding box in **normalized frame coordinates**
  * (0f‥1f, origin top-left). Deliberately has NO Android/Compose dependency so
@@ -80,10 +83,10 @@ data class NormBox(
         // Intersection rectangle: max of the left/top edges, min of the
         // right/bottom edges. Using `>=` here treats edge-touching boxes
         // (zero-area overlap) as disjoint.
-        val interLeft = maxOf(left, other.left)
-        val interTop = maxOf(top, other.top)
-        val interRight = minOf(right, other.right)
-        val interBottom = minOf(bottom, other.bottom)
+        val interLeft = max(left, other.left)
+        val interTop = max(top, other.top)
+        val interRight = min(right, other.right)
+        val interBottom = min(bottom, other.bottom)
 
         if (interLeft >= interRight || interTop >= interBottom) return 0f
 
