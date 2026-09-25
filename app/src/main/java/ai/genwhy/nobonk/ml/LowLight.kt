@@ -69,9 +69,8 @@ object LowLight {
         // under IEEE-754, but infinities would not, so the finite check is load-bearing.
         if (!meanBrightness.isFinite() || !variance.isFinite()) return false
 
-        // Guard against invalid thresholds which could cause unexpected behavior or
-        // division issues if logic were extended. Negative thresholds make the test
-        // unsatisfiable (safe), but we explicitly check for finite to be robust.
+        // Non-finite thresholds make the comparisons meaningless; treat as "not
+        // blocked" (the safe outcome) rather than trusting IEEE-754 quirks.
         if (!brightnessThreshold.isFinite() || !varianceThreshold.isFinite()) return false
 
         // Strict `<` on both axes: a frame exactly at either threshold is treated as
@@ -102,14 +101,17 @@ object LowLight {
         lowLightThreshold: Float = DEFAULT_LOW_LIGHT_THRESHOLD,
         maxGain: Float = 2.5f
     ): Float {
+        // Glitchy or invalid readings are treated as "normal light": no boost rather
+        // than amplifying noise. NaN also fails the `>=` check below, but the explicit
+        // finite test keeps the intent clear.
         if (!meanBrightness.isFinite() || meanBrightness <= 0f) return 1f
         if (meanBrightness >= lowLightThreshold) return 1f
 
-        // Guard against division by zero or negative/zero targets which would result
-        // in Infinity or NaN, ensuring we return a safe default gain.
+        // A non-positive or non-finite target would make rawGain infinite/NaN; fall
+        // back to unity gain instead of feeding garbage to the detector.
         if (!target.isFinite() || target <= 0f) return 1f
 
-        // Guard against invalid maxGain which would result in NaN from coerceIn.
+        // maxGain < 1 would make coerceIn produce NaN (min > max); clamp to no-boost.
         if (!maxGain.isFinite() || maxGain < 1f) return 1f
 
         // target / meanBrightness > 1 because meanBrightness < lowLightThreshold <= target
@@ -148,8 +150,8 @@ object LowLight {
         // the `<` check, but the explicit finite test also rejects infinities.
         if (!meanBrightness.isFinite()) return false
 
-        // If the threshold itself is invalid, we cannot reliably determine low light.
-        // Treat as not low light (safe default: don't show banner).
+        // A non-finite threshold makes the comparison meaningless; suppress the
+        // banner (safe default) rather than trusting IEEE-754 quirks.
         if (!lowLightThreshold.isFinite()) return false
 
         return !blocked && meanBrightness < lowLightThreshold
