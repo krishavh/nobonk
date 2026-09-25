@@ -150,7 +150,9 @@ class SensorMonitor(context: Context) : SensorEventListener {
         // the components synchronously here, so no copy is needed.
         val values = event?.values?.takeIf { it.size >= AXIS_COUNT } ?: return
         if (event.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
-            val x = values[0]; val y = values[1]; val z = values[2]
+            val x = values[0]
+            val y = values[1]
+            val z = values[2]
             // Guard against NaN/Inf in accelerometer components before feeding
             // them into the motion gate; a non-finite magnitude would poison
             // the cadence estimate.
