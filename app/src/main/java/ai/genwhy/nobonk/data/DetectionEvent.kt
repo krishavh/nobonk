@@ -186,20 +186,14 @@ data class SessionSummary(
      * A negative [endTimestamp] minus [startTimestamp] difference (e.g. from a clock
      * adjustment mid-session) is clamped to zero so the UI never shows a negative
      * duration. Integer division by [MILLIS_PER_MINUTE] truncates any sub-minute remainder.
-     *
-     * Note: the subtraction could in principle overflow for pathological inputs
-     * (near [Long.MIN_VALUE]/[Long.MAX_VALUE] timestamps), but real wall-clock
-     * millisecond values are many orders of magnitude away from that range.
      */
     val durationMinutes: Long
         get() {
-            // Use saturating subtraction to prevent overflow for pathological inputs.
-            // If overflow occurs, it implies extreme clock skew; we clamp to 0 duration
-            // in that case as well, consistent with the negative-duration clamp below.
+            // Saturating subtraction prevents wrap-around for pathological timestamp
+            // magnitudes; any remaining negative result (clock skew mid-session) is
+            // clamped to zero below, so the UI never shows a negative duration.
             val diff = endTimestamp.saturatingSubtract(startTimestamp)
-            // Clamp negative durations (clock skew) to zero before dividing.
-            val clamped = if (diff < 0L) 0L else diff
-            return clamped / MILLIS_PER_MINUTE
+            return (if (diff < 0L) 0L else diff) / MILLIS_PER_MINUTE
         }
 
     companion object {
@@ -212,12 +206,12 @@ data class SessionSummary(
          */
         private fun Long.saturatingSubtract(other: Long): Long {
             val result = this - other
-            // Overflow occurs if operands have different signs AND result sign differs from this.
-            // Standard check: ((this ^ result) & (other ^ result)) < 0
+            // Overflow occurred iff operands have different signs AND the result's sign
+            // differs from the minuend's: ((this ^ result) & (other ^ result)) < 0.
             if (((this xor result) and (other xor result)) < 0) {
-                // Overflow occurred. Determine direction.
-                // If this > 0, we were subtracting a negative (or adding positive) -> overflow to MAX
-                // If this < 0, we were subtracting a positive (or adding negative) -> overflow to MIN
+                // Direction: a positive minuend means we subtracted a negative, so the
+                // true result exceeds Long.MAX_VALUE; a negative minuend means the
+                // true result is below Long.MIN_VALUE.
                 return if (this > 0) Long.MAX_VALUE else Long.MIN_VALUE
             }
             return result
