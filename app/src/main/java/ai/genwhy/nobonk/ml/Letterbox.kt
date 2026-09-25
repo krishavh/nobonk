@@ -23,8 +23,8 @@ object Letterbox {
      *
      * @property srcW source frame width in pixels (must be > 0 for a usable
      *   transform)
-     * @property srcH source frame height in pixels (must be > 0 for a usable
-     *   transform)
+     * @property srcH source frame height in pixels (must be > 0 for a
+     *   usable transform)
      * @property size model input edge length in pixels (must be > 0 for a
      *   usable transform)
      * @property scale factor applied to the source to fit inside
