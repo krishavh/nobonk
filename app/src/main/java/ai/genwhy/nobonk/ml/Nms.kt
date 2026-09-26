@@ -93,7 +93,12 @@ object Nms {
         // times, and this avoids repeated property access on every comparison.
         // Also guard against null bounding boxes by treating them as degenerate
         // (zero-area) boxes that never suppress others.
-        val boxes = Array(size) { sorted[it].boundingBox }
+        val boxes = arrayOfNulls<Any?>(size).let { arr ->
+            // Typed as the bounding-box type via the Detection accessor; stored
+            // in a nullable array because a Detection may legitimately lack a
+            // bounding box (e.g. a malformed model output row).
+            Array(size) { sorted[it].boundingBox }
+        }
         for (i in 0 until size) {
             if (suppressed[i]) continue
             keep.add(sorted[i])
