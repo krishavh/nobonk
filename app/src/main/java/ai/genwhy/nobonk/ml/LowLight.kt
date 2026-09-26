@@ -107,7 +107,7 @@ object LowLight {
         if (!meanBrightness.isFinite() || meanBrightness <= 0f) return 1f
         if (meanBrightness >= lowLightThreshold) return 1f
 
-        // A non-positive or non-finite target would make rawGain infinite/NaN; fall
+        // A non-finite or non-positive target would make rawGain infinite/NaN; fall
         // back to unity gain instead of feeding garbage to the detector.
         if (!target.isFinite() || target <= 0f) return 1f
 
