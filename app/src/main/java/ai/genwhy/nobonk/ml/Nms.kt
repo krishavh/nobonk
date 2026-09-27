@@ -94,7 +94,9 @@ object Nms {
         // Stored in a nullable array because a Detection may legitimately lack
         // a bounding box (e.g. a malformed model output row); null boxes are
         // treated as degenerate (zero-area) and never suppress others.
-        val boxes = Array(size) { sorted[it].boundingBox }
+        val boxes = arrayOfNulls<Any?>(size).let { arr ->
+            Array(size) { sorted[it].boundingBox }
+        }
         for (i in 0 until size) {
             if (suppressed[i]) continue
             keep.add(sorted[i])
