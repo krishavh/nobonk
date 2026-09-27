@@ -22,8 +22,8 @@ import java.util.Locale
  * LOW → MEDIUM → HIGH ladder. The user's distance preset becomes a *sensitivity* knob:
  * a larger "alert at N m" means "warn me earlier", i.e. trigger at a smaller fill.
  *
- * `isApproaching` (from [ApproachTracker]) escalates one level, so a fast closer fires
- * an escalated warning before it fully fills the frame.
+ * [isApproaching][ApproachTracker] (from the approach tracker) escalates one level, so
+ * a fast closer fires an escalated warning before it fully fills the frame.
  *
  * All functions are pure and total: NaN/infinite inputs are normalized rather than
  * propagated, so no caller path can produce a NaN threshold or an unhandled level.
