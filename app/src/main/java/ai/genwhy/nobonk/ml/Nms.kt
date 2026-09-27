@@ -91,32 +91,26 @@ object Nms {
         val suppressed = BooleanArray(size)
         // Cache bounding boxes once: the IoU inner loop reads each box many
         // times, and this avoids repeated property access on every comparison.
-        // Stored in a nullable array because a Detection may legitimately lack
-        // a bounding box (e.g. a malformed model output row); null boxes are
-        // treated as degenerate (zero-area) and never suppress others.
-        val boxes = arrayOfNulls<Any?>(size).let { arr ->
-            Array(size) { sorted[it].boundingBox }
-        }
+        // A Detection may legitimately lack a bounding box (e.g. a malformed
+        // model output row); null boxes are treated as degenerate (zero-area)
+        // and never suppress others.
+        val boxes = Array(size) { sorted[it].boundingBox }
         for (i in 0 until size) {
             if (suppressed[i]) continue
             keep.add(sorted[i])
+            // If the kept box is null/degenerate, it cannot suppress any other
+            // box (IoU is 0 by convention), so skip the inner loop entirely.
+            val keptBox = boxes[i] ?: continue
             // Suppress every remaining lower-confidence box that overlaps the
             // newly kept one. Strictly greater: a box exactly at the threshold
             // survives.
-            val keptBox = boxes[i]
-            // If the kept box itself is null/degenerate, it cannot suppress
-            // any other box (IoU is 0 by convention), so skip the inner loop.
-            if (keptBox != null) {
-                for (j in i + 1 until size) {
-                    if (!suppressed[j]) {
-                        // Compute IoU explicitly to avoid precedence ambiguity with
-                        // the elvis operator; null boxes yield 0f (never suppress).
-                        val otherBox = boxes[j]
-                        val iou = if (otherBox != null) keptBox.iou(otherBox) ?: 0f else 0f
-                        if (iou > threshold) {
-                            suppressed[j] = true
-                        }
-                    }
+            for (j in i + 1 until size) {
+                if (suppressed[j]) continue
+                // Null boxes yield 0f IoU (never suppress); the explicit local
+                // avoids precedence ambiguity when mixing `?:` with comparison.
+                val otherBox = boxes[j] ?: continue
+                if ((keptBox.iou(otherBox) ?: 0f) > threshold) {
+                    suppressed[j] = true
                 }
             }
         }
