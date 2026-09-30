@@ -40,7 +40,7 @@ jobs:
             adb shell wm size 1080x2400
             adb shell wm density 540
             adb shell settings put system font_scale 2.0
-            ./gradlew --no-daemon -Pbundle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.genwhy.nobonk.ui.DetectionOverlayRegressionTest,ai.genwhy.nobonk.ml.PeopleModeInstrumentedTest,ai.genwhy.nobonk.ui.ScanControlsRegressionTest,ai.genwhy.nobonk.service.WalkingServiceInstrumentedTest
+            ./gradlew --no-daemon -Pbundle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=ai.genwhy.nobonk.ui.DetectionOverlayRegressionTest,ai.genwhy.nobonk.ml.PeopleModeInstrumentedTest,ai.genwhy.nobonk.ui.ScanControlsRegressionTest,ai.genwhy.nobonk.service.WalkingServiceInstrumentedTest,ai.genwhy.nobonk.ui.WalkingReminderPromptTest
       - name: Save regression test results
         if: always()
         uses: actions/upload-artifact@v4

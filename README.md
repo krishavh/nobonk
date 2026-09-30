@@ -37,7 +37,7 @@ Current Android distance estimates are approximate, and hazards may be missed. N
 
 ## Set up in the foreground. Use it in the background.
 
-**Android controls:** Change People/Everything from the top status tag or the labelled **Settings** button. Find **Detection history** inside Settings. Walking-mode setup is directly below the main controls. Start scanning is compact, and Stop stays available in the settings sheet while scanning.
+**Android controls:** Change People/Everything from the top status tag or the labelled **Settings** button. Find **Detection history** inside Settings. Optional walking reminders are directly below the main controls: after sustained walking, NoBonk asks once whether to start. The camera stays off until you choose Start scanning; ignoring or dismissing the reminder does not repeat it. Start scanning is compact, and Stop stays available in the settings sheet while scanning.
 
 **Android 1.0.18:** People is the default, including on the first launch after this update. People mode excludes object and surface warnings. Choose Everything explicitly to include objects such as chairs and experimental wall/ground warnings. Person alerts require consecutive matching detections; boxes remain visible while confirmation is pending. Detection can still miss or misidentify hazards.
 

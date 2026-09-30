@@ -38,12 +38,12 @@ class WalkingHarnessActivity : Activity() {
         super.onCreate(state)
         setContentView(android.widget.TextView(this).apply { text = "NoBonk instrumentation: synthetic motion, real camera service" })
     }
-    fun startWalking() {
+    fun startWalking(waitForWalking: Boolean = true) {
         getSharedPreferences("nobonk_prefs", MODE_PRIVATE).edit().putInt(SafetyNotice.PREF_ACK_VERSION, SafetyNotice.VERSION).commit()
         SessionState.gate.onAcknowledged()
         startForegroundService(Intent(this, WalkingServiceHarness::class.java).apply {
             action = DetectionService.ACTION_START
-            putExtra(DetectionService.EXTRA_WAIT_FOR_WALKING, true)
+            putExtra(DetectionService.EXTRA_WAIT_FOR_WALKING, waitForWalking)
             putExtra(DetectionService.EXTRA_SOUND, false)
             putExtra(DetectionService.EXTRA_HAPTICS, false)
             putExtra(DetectionService.EXTRA_VOICE, false)

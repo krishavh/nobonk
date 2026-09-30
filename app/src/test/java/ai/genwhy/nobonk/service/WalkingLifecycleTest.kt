@@ -77,7 +77,7 @@ class WalkingLifecycleTest {
     fun `walking confirmation is the only exit from waiting`() {
         assertTrue(life.onStartRequested(waitForWalking = true))
         assertTrue(life.onWalkingConfirmed())
-        assertEquals(ServiceLifecycle.Phase.LOADING_MODEL, life.phase)
+        assertEquals(ServiceLifecycle.Phase.WALKING_PROMPTED, life.phase)
     }
 
     @Test
@@ -85,7 +85,7 @@ class WalkingLifecycleTest {
         assertTrue(life.onStartRequested(waitForWalking = true))
         assertTrue(life.onWalkingConfirmed())
         assertFalse(life.onWalkingConfirmed())
-        assertEquals(ServiceLifecycle.Phase.LOADING_MODEL, life.phase)
+        assertEquals(ServiceLifecycle.Phase.WALKING_PROMPTED, life.phase)
     }
 
     @Test
@@ -154,7 +154,7 @@ class WalkingLifecycleTest {
         // Actual policy qualification (not a hand-faked transition).
         assertTrue(feedSteps(policy, 16, 22_500_000_000L))
         assertTrue(life.onWalkingConfirmed())
-        assertEquals(ServiceLifecycle.Phase.LOADING_MODEL, life.phase)
+        assertEquals(ServiceLifecycle.Phase.WALKING_PROMPTED, life.phase)
         // Stop wins; a queued walking callback arriving afterwards is denied.
         life.stop(ServiceLifecycle.StopReason.USER)
         assertFalse(life.onWalkingConfirmed())
