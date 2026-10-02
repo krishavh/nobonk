@@ -23,7 +23,7 @@ class AlertCadence {
         lastCall = nowMs
         if (!canEmit) {
             // Suppression is not evidence of a clear scene and consumes no emission budget.
-            clearSince = null
+            interruptObservation()
             return false
         }
         if (lastObservation?.let { nowMs - it >= CLEAR_MS } == true) {
@@ -64,6 +64,9 @@ class AlertCadence {
         }
         return true
     }
+
+    /** A covered/unavailable camera contributes no clear-scene evidence. */
+    fun interruptObservation() { clearSince = null }
 
     fun reset() {
         lastEmission = null; lastCall = null; lastObservation = null; clearSince = null

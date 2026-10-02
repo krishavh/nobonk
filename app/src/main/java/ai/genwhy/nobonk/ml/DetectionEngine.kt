@@ -319,6 +319,7 @@ class DetectionEngine(private val appContext: Context) {
         val blocked = LowLight.isBlocked(meanBrightness, variance)
 
         if (blocked || detector == null) {
+            withContext(Dispatchers.Main.immediate) { alertCadence.interruptObservation() }
             readiness.reset(); personConfirmation.reset(); frameAnalyzer.reset()
             approachTracker.reset(); boxSmoother.reset()
             // Preserve cue cadence through a brief obstruction; readiness still resets.
@@ -411,7 +412,7 @@ class DetectionEngine(private val appContext: Context) {
                 (config.hapticsEnabled && vibrator?.hasVibrator() == true) || (config.voiceEnabled && ttsReady)
             val emit = alertCadence.shouldEmit(
                 rawHighest, topDet?.let { approachTracker.trackIdFor(it.id) }, now,
-                canEmit = !angleBad && physicalChannelReady
+                canEmit = ready && !angleBad && physicalChannelReady
             )
             if (emit) {
                 if (config.hapticsEnabled) handleHaptics(rawHighest)

@@ -129,4 +129,17 @@ class AlertCadenceTest {
         assertTrue(gate.shouldEmit(HIGH, "a", 101, true))
     }
 
+    @Test fun coveredCameraInterruptsClearEvidenceWithoutRearmingTheCue() {
+        val gate = AlertCadence()
+        assertTrue(gate.shouldEmit(HIGH, "a", 0, true))
+        assertFalse(gate.shouldEmit(NONE, null, 100, true))
+        assertFalse(gate.shouldEmit(NONE, null, 1500, true))
+        gate.interruptObservation()
+        assertFalse(gate.shouldEmit(NONE, null, 2000, true))
+        assertFalse(gate.shouldEmit(NONE, null, 3100, true))
+        assertFalse(gate.shouldEmit(HIGH, "a", 3200, true))
+        for (time in 3300L..6300L step 500L) assertFalse(gate.shouldEmit(NONE, null, time, true))
+        assertTrue(gate.shouldEmit(LOW, "a", 6400, true))
+    }
+
 }
