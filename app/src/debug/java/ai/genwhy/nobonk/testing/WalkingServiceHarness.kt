@@ -41,7 +41,7 @@ class WalkingHarnessActivity : Activity() {
     fun startWalking(waitForWalking: Boolean = true) {
         getSharedPreferences("nobonk_prefs", MODE_PRIVATE).edit().putInt(SafetyNotice.PREF_ACK_VERSION, SafetyNotice.VERSION).commit()
         SessionState.gate.onAcknowledged()
-        startForegroundService(Intent(this, WalkingServiceHarness::class.java).apply {
+        startService(Intent(this, WalkingServiceHarness::class.java).apply {
             action = DetectionService.ACTION_START
             putExtra(DetectionService.EXTRA_WAIT_FOR_WALKING, waitForWalking)
             putExtra(DetectionService.EXTRA_SOUND, false)

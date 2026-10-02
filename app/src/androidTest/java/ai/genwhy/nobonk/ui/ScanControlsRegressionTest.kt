@@ -169,4 +169,22 @@ class ScanControlsRegressionTest {
         compose.runOnIdle { assertEquals(1, backgroundStarts); assertEquals(0, starts) }
     }
 
+    @Test fun deniedCameraSettingsAndExitStayReachableAtLargeText() {
+        var openedSettings = 0
+        var exited = 0
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                MaterialTheme {
+                    Box(Modifier.width(320.dp).height(420.dp)) {
+                        CameraPermissionScreen(onRetry = { starts++ }, onSettings = { openedSettings++ }, onExit = { exited++ })
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Open app settings").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Not now").performScrollTo().assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, openedSettings); assertEquals(1, exited); assertEquals(0, starts) }
+    }
+
 }

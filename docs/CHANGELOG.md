@@ -8,6 +8,10 @@
 - Observe CameraX interruptions immediately, discard old results, and require fresh frames when access returns. Critical camera errors release resources and require explicit retry.
 - Explain overlay permission for NoBonk only and notification limitations. Add reviewable, optional-details feedback email drafts and copy fallback inside Settings.
 - Load bundled models through verified private files instead of model-sized Java byte arrays, avoiding the memory exhaustion found on the Android 10 emulator. Cache hits do not rewrite the model; interrupted extraction cannot publish a partial file.
+- Validate model confidence, class IDs and geometry before accepting detections; malformed output cannot be coerced into a Person. Reuse frame-transform objects to reduce allocations.
+- Keep the app visible until Android accepts the requested background service. Show startup failures, cancel obsolete callbacks after rotation/Stop, and keep notification return separate from the walking reminder. Preserve live foreground preview on an active manual handoff and keep explicit Stop terminal.
+- Release the old foreground camera binding when its screen stops, preventing a brief camera reopen when returning after notification Stop on older Android versions.
+- Preserve History/About navigation across rotation, provide an app-settings route for denied motion access, and keep camera-permission actions reachable with large text.
 - Includes the ask-once walking reminder from the unreleased 1.0.21 candidate. Physical-device acceptance and Play declaration/review are still required; see docs/reviews for evidence.
 
 ## 1.0.20 (versionCode 22) — walking start and pause

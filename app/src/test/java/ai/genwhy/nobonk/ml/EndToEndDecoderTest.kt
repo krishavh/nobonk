@@ -33,6 +33,30 @@ class EndToEndDecoderTest {
         assertTrue(out.isEmpty())
     }
 
+    @Test fun malformedGeometryAndFractionalClassesCannotBecomePeople() {
+        val invalid = listOf(
+            row(Float.NaN, 104f, 312f, 312f, .9f, 0f),
+            row(104f, 104f, Float.POSITIVE_INFINITY, 312f, .9f, 0f),
+            row(104f, 104f, 312f, 312f, .9f, .5f),
+            row(104f, 104f, 312f, 312f, .9f, 80f),
+            row(104f, 104f, 312f, 312f, 2f, 0f)
+        )
+        val out = CocoRawHeadDecoder.decodeEndToEnd(rows(*(invalid + good).toTypedArray()), 6, square, .4f)
+        assertEquals(listOf("car"), out.map { it.className })
+    }
+
+    @Test fun rawHeadRejectsNonFiniteOrNegativeGeometryBeforeClamping() {
+        val output = arrayOf(Array(84) { FloatArray(4) })
+        for (i in 0..3) {
+            output[0][0][i] = 208f; output[0][1][i] = 208f
+            output[0][2][i] = 100f; output[0][3][i] = 100f; output[0][4][i] = .9f
+        }
+        output[0][0][0] = Float.NaN
+        output[0][2][1] = Float.POSITIVE_INFINITY
+        output[0][3][2] = -100f
+        assertEquals(1, CocoRawHeadDecoder.decode(output, true, 80, square, .4f).size)
+    }
+
     @Test fun nanOrNegativeClassIsNotDecodedAsPerson() {
         val out = CocoRawHeadDecoder.decodeEndToEnd(
             rows(row(104f, 104f, 312f, 312f, 0.9f, Float.NaN), row(104f, 104f, 312f, 312f, 0.9f, -1f)),

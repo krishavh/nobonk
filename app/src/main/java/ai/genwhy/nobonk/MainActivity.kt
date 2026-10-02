@@ -7,6 +7,9 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.ResultReceiver
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,6 +29,7 @@ import ai.genwhy.nobonk.ui.HistoryScreen
 import ai.genwhy.nobonk.ui.LicensesScreen
 import ai.genwhy.nobonk.ui.theme.PersonDetectionTheme
 import ai.genwhy.nobonk.viewmodel.DetectionViewModel
+import java.lang.ref.WeakReference
 
 class MainActivity : ComponentActivity() {
     private val viewModel: DetectionViewModel by viewModels()
@@ -35,12 +39,16 @@ class MainActivity : ComponentActivity() {
     private var walkingEnabled by mutableStateOf(false)
     private var walkingStatus by mutableStateOf("")
     private var showWalkingPrompt by mutableStateOf(false)
-    private var walkingArmGeneration = 0L
-    private var walkingArmPending = false
+    private var sessionStartGeneration = 0L
+    private var sessionStartPending = false
+    private var pendingStartIsWalking = false
+    private var sessionStartReceiver: SessionStartReceiver? = null
+    private val sessionStartHandler = Handler(Looper.getMainLooper())
+    private var sessionStartTimeout: Runnable? = null
     private val motionPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         expectingReturn = false
         setWalkingPreference(granted)
-        walkingStatus = if (granted) "Ready. Tap Remind me on my next walk for one reminder." else "Motion permission was not granted. Manual background scanning is still available."
+        walkingStatus = if (granted) "Ready. Tap Remind me on my next walk for one reminder." else "Motion permission was not granted. You can allow Physical activity in Android app settings, then enable reminders here. Manual background scanning is still available."
     }
     private var showHistory by mutableStateOf(false)
     private var showLicenses by mutableStateOf(false)
@@ -139,6 +147,9 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE)
         cueChoiceDone = prefs.getBoolean("cue_choice_done", false)
         walkingEnabled = prefs.getBoolean("walking_mode_enabled", false) && ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this) && ai.genwhy.nobonk.motion.WalkingMonitor.supported(this)
+        showHistory = savedInstanceState?.getBoolean(STATE_HISTORY_VISIBLE) == true
+        showLicenses = savedInstanceState?.getBoolean(STATE_LICENSES_VISIBLE) == true
+        walkingStatus = savedInstanceState?.getString(STATE_WALKING_STATUS).orEmpty()
         // Safety notice: the current version must be acknowledged before any camera request
         // or camera start (fresh installs and upgrades from first_run_done-only builds alike).
         ackVersion = prefs.getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
@@ -288,7 +299,11 @@ class MainActivity : ComponentActivity() {
                                     walkingSupported = ai.genwhy.nobonk.motion.WalkingMonitor.supported(this),
                                     walkingStatus = walkingStatus,
                                     onWalkingChange = { setWalkingMode(it) },
-                                    onArmWalking = { armWalkingMode() }
+                                    onArmWalking = { armWalkingMode() },
+                                    onWalkingSettings = {
+                                        expectingReturn = true
+                                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                                    }
                                 )
                             }
                         }
@@ -318,6 +333,9 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
         outState.putBoolean("walking_prompt_visible", showWalkingPrompt)
         outState.putBoolean("scan_stopped", !viewModel.scanningEnabled)
+        outState.putBoolean(STATE_HISTORY_VISIBLE, showHistory)
+        outState.putBoolean(STATE_LICENSES_VISIBLE, showLicenses)
+        outState.putString(STATE_WALKING_STATUS, if (sessionStartPending) SESSION_START_INTERRUPTED else walkingStatus)
         outState.putBoolean(STATE_GATE_CLEARED, ai.genwhy.nobonk.safety.SessionState.gate.cleared)
         outState.putString(STATE_GATE_TOKEN, ai.genwhy.nobonk.safety.SessionState.gate.processToken)
     }
@@ -341,6 +359,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // A pending start belongs to this visible Activity. Recreation cancels it rather than
+        // letting a late acknowledgement move an obsolete Activity's task or stop a later session.
+        if (sessionStartPending) stopDetectionService(DetectionService.STOP_REASON_USER)
+        clearSessionStartCallback()
         super.onDestroy()
         updateCoordinator?.dispose(); updateCoordinator = null   // release the Play install listener
         // A finished activity (Back / Not now / task removed) is a genuine end of launch: re-prompt next time.
@@ -406,7 +428,7 @@ class MainActivity : ComponentActivity() {
         walkingStatus = ""
         if (!enabled) {
             setWalkingPreference(false)
-            if (walkingArmPending || ai.genwhy.nobonk.safety.SessionState.walkingSession) stopDetectionService()
+            if (ai.genwhy.nobonk.safety.SessionState.walkingSession || (sessionStartPending && pendingStartIsWalking)) stopDetectionService()
             return
         }
         if (!ai.genwhy.nobonk.motion.WalkingMonitor.supported(this)) {
@@ -418,7 +440,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun armWalkingMode() {
-        if (walkingArmPending) return
+        if (sessionStartPending) return
         if (!walkingEnabled || !ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) {
             walkingStatus = "Enable walking reminders and allow motion access first."
             return
@@ -434,30 +456,27 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startDetectionService(waitForWalking: Boolean = false) {
+        if (sessionStartPending || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
         if (!ai.genwhy.nobonk.safety.SessionState.gate.cameraAllowed(ackVersion)) return   // never start detection past a pending gate
         if (!waitForWalking && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             viewModel.reportCameraError("Allow camera access before starting a background session.")
             return
         }
         expectingReturn = true   // we are about to move the task back for an authorized session
-        val armGeneration = if (waitForWalking) ++walkingArmGeneration else walkingArmGeneration
-        walkingArmPending = waitForWalking
+        val startGeneration = ++sessionStartGeneration
+        clearSessionStartCallback()
+        sessionStartPending = true
+        pendingStartIsWalking = waitForWalking
+        // A walking reminder must keep the camera off. Manual background scanning preserves
+        // the foreground session choice so Open NoBonk can hand it back to the live preview.
+        // Lifecycle pause releases foreground scanning; Stop/failure still clears the choice.
+        if (waitForWalking) viewModel.stopScanning()
         val mode = viewModel.accuracyMode
         val intent = Intent(this, DetectionService::class.java).apply {
             action = DetectionService.ACTION_START
             putExtra(DetectionService.EXTRA_WAIT_FOR_WALKING, waitForWalking)
-            if (waitForWalking) putExtra(DetectionService.EXTRA_ARM_RESULT,
-                object : android.os.ResultReceiver(android.os.Handler(android.os.Looper.getMainLooper())) {
-                    override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                        if (armGeneration != walkingArmGeneration) return // a Stop or later session superseded this acknowledgement
-                        walkingArmPending = false
-                        // Stay visible until Android has accepted the motion foreground service.
-                        if (resultCode == 1 && walkingEnabled && ai.genwhy.nobonk.safety.SessionState.walkingSession && !isDestroyed && !isFinishing &&
-                            lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
-                            moveTaskToBack(true)
-                        } else stopDetectionService(DetectionService.STOP_REASON_USER)
-                    }
-                })
+            putExtra(DetectionService.EXTRA_ARM_RESULT,
+                SessionStartReceiver(this@MainActivity, startGeneration).also { sessionStartReceiver = it })
             // Hand the user's config to the background pipeline so it matches foreground.
             putExtra(DetectionService.EXTRA_THRESHOLD, viewModel.distanceThreshold)
             putExtra(DetectionService.EXTRA_INCLUDE_NONPERSON, viewModel.isObjectDetectionEnabled)
@@ -469,18 +488,24 @@ class MainActivity : ComponentActivity() {
             putExtra(DetectionService.EXTRA_VOICE, viewModel.voiceEnabled)
         }
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
-            if (!waitForWalking) moveTaskToBack(true)
+            // We remain visible until the service validates and promotes the requested type.
+            // A rejected request must not leave an unfulfilled startForegroundService obligation.
+            startService(intent)
+            sessionStartTimeout = Runnable { onSessionStartResult(startGeneration, 0) }.also {
+                sessionStartHandler.postDelayed(it, SESSION_START_TIMEOUT_MS)
+            }
         } catch (e: Exception) {
-            walkingArmPending = false
+            sessionStartPending = false
+            clearSessionStartCallback()
             expectingReturn = false
             viewModel.reportCameraError("Background scanning could not start. Check camera access and try again.")
         }
     }
 
     private fun stopDetectionService(reason: String = DetectionService.STOP_REASON_USER) {
-        walkingArmGeneration++
-        walkingArmPending = false
+        sessionStartGeneration++
+        sessionStartPending = false
+        clearSessionStartCallback()
         val intent = Intent(this, DetectionService::class.java).apply {
             action = DetectionService.ACTION_STOP
             putExtra(DetectionService.EXTRA_STOP_REASON, reason)
@@ -488,10 +513,52 @@ class MainActivity : ComponentActivity() {
         try { startService(intent) } catch (e: Exception) { ai.genwhy.nobonk.util.Dbg.w("MainActivity", "stop intent failed: ${e.message}") }
     }
 
+    private fun onSessionStartResult(generation: Long, resultCode: Int) {
+        if (generation != sessionStartGeneration || !sessionStartPending) return
+        val wasWalkingStart = pendingStartIsWalking
+        sessionStartPending = false
+        clearSessionStartCallback()
+        // Stay visible until Android has accepted the requested foreground service type.
+        val matchingSession = ai.genwhy.nobonk.safety.SessionState.gate.serviceActive &&
+            ai.genwhy.nobonk.safety.SessionState.walkingSession == wasWalkingStart
+        if (resultCode == 1 && matchingSession && (!wasWalkingStart || walkingEnabled) && !isDestroyed && !isFinishing &&
+            lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            moveTaskToBack(true)
+        } else {
+            val failure = ai.genwhy.nobonk.safety.SessionState.backgroundFailure
+            ai.genwhy.nobonk.safety.SessionState.backgroundFailure = null
+            if (wasWalkingStart) walkingStatus = failure ?: SESSION_START_INTERRUPTED
+            else viewModel.reportCameraError(failure ?: "Background scanning could not start. Tap Start scanning to try again.")
+            expectingReturn = false
+            stopDetectionService(DetectionService.STOP_REASON_USER)
+        }
+    }
+
+    private fun clearSessionStartCallback() {
+        sessionStartReceiver?.detach()
+        sessionStartReceiver = null
+        sessionStartTimeout?.let { sessionStartHandler.removeCallbacks(it) }
+        sessionStartTimeout = null
+    }
+
+    /** The service may retain this Binder callback after recreation; it must not retain an Activity. */
+    private class SessionStartReceiver(activity: MainActivity, private val generation: Long) : ResultReceiver(Handler(Looper.getMainLooper())) {
+        private val owner = WeakReference(activity)
+        fun detach() = owner.clear()
+        override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+            owner.get()?.onSessionStartResult(generation, resultCode)
+        }
+    }
+
     companion object {
         private const val PREF_FIRST_RUN_DONE = "first_run_done"
         private const val STATE_GATE_CLEARED = "state_gate_cleared"
         private const val STATE_GATE_TOKEN = "state_gate_token"
         private const val PREF_UPDATE_SNOOZE = "update_snooze_until"
+        private const val STATE_HISTORY_VISIBLE = "history_visible"
+        private const val STATE_LICENSES_VISIBLE = "licenses_visible"
+        private const val STATE_WALKING_STATUS = "walking_status"
+        private const val SESSION_START_INTERRUPTED = "Background setup was interrupted. Start scanning or arm another reminder when ready."
+        private const val SESSION_START_TIMEOUT_MS = 5_000L
     }
 }

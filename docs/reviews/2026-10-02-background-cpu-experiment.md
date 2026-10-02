@@ -13,6 +13,6 @@ Approximate averages of the two runs:
 | Sharp | off |61.6|115.0|
 | Sharp | bounded1ms |57.1|118.0|
 
-Disabling spinning reduced process CPU time in this experiment but increased inference latency. The bounded setting had a smaller tradeoff. These results do not quantify battery savings or establish good settings on Pixel/Tensor, older physical devices, NNAPI or XNNPACK. The production app uses different thread counts and measures provider selection. **Production settings remain unchanged.**
+Disabling spinning coincided with lower process CPU time but increased inference latency. The bounded treatment set duration/backoff without explicitly enabling spinning, so it inherited the package default; these measurements cannot establish a bounded-spinning benefit. A follow-up must explicitly enable spinning for that treatment and verify the packaged runtime behavior. These results do not quantify battery savings or establish good settings on Pixel/Tensor, older physical devices, NNAPI or XNNPACK. The production app uses different thread counts and measures provider selection. **Production settings remain unchanged.**
 
 A follow-up on physical hardware should compare identical camera scenes, provider/model, cadence, thermal starting state and notification/overlay configuration; measure CPU time, end-to-end fresh-frame latency and energy over long enough runs. Preserve output parity and Stop/camera interruption behavior. Do not choose a provider solely from CPU labels or this emulator result.

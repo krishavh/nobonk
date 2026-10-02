@@ -89,9 +89,10 @@ fun DetectionScreen(
     walkingSupported: Boolean = false,
     walkingStatus: String = "",
     onWalkingChange: (Boolean) -> Unit = {},
-    onArmWalking: () -> Unit = {}
+    onArmWalking: () -> Unit = {},
+    onWalkingSettings: () -> Unit = {}
 ) {
-    var showWalkingSetup by remember { mutableStateOf(false) }
+    var showWalkingSetup by rememberSaveable { mutableStateOf(false) }
     var frameClock by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     LaunchedEffect(viewModel) {
         while (true) {
@@ -241,6 +242,7 @@ fun DetectionScreen(
                             else "This phone has no supported step detector. You can still start background scanning manually.")
                         Text("Choose Start scanning to turn on NoBonk, or Not now to leave it off. Ignoring or dismissing the reminder will not repeat it. You must arm a new reminder for a later walk.")
                         if (walkingStatus.isNotEmpty()) Text(walkingStatus)
+                        if (walkingSupported) TextButton(onClick = onWalkingSettings) { Text("Android app settings") }
                     }
                 },
                 confirmButton = { TextButton(onClick = onArmWalking, enabled = walkingEnabled && walkingSupported) { Text("Remind me on my next walk") } },
@@ -779,13 +781,24 @@ fun CameraPreview(
     val ownedUseCases = remember { java.util.concurrent.atomic.AtomicReference<List<androidx.camera.core.UseCase>>(emptyList()) }
     val disposed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
-    DisposableEffect(Unit) {
-        onDispose {
+    DisposableEffect(lifecycleOwner) {
+        fun releasePreview() {
             // Leaving the preview (Stop, screen change): no late callback may bind, and we release
             // only the use cases THIS preview owns (a newly started background service keeps its own).
-            disposed.set(true)
+            if (!disposed.compareAndSet(false, true)) return
             try { val p = providerRef.get(); val u = ownedUseCases.get(); if (p != null && u.isNotEmpty()) p.unbind(*u.toTypedArray()) } catch (_: Exception) {}
             cameraExecutor.shutdown()
+        }
+        // CameraX otherwise retains these use cases and reopens at ON_START, before
+        // MainActivity.onResume can consume a background Stop. A resume creates a new
+        // preview through cameraRebindKey, after the current safety/Stop state is checked.
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) releasePreview()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            releasePreview()
         }
     }
 
@@ -797,6 +810,9 @@ fun CameraPreview(
         // normalized detection boxes line up with the FILL_CENTER preview on tall screens.
         cameraProviderFuture.addListener({ if (disposed.get()) return@addListener; previewView.post {
             if (disposed.get()) return@post   // disposed between provider resolution and layout
+            // A new composition can also occur while already stopped (for example a battery
+            // update). Do not install dormant bindings that reopen before resume checks.
+            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@post
             val cameraProvider = cameraProviderFuture.get()
             providerRef.set(cameraProvider)
             val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }

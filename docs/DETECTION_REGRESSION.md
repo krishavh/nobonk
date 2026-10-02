@@ -85,3 +85,42 @@ still produce cues. Everything deliberately retains broader object warnings.
 `ScanControlsRegressionTest` exercises the production status tag and control dock with shared state. It verifies that both People/Everything controls agree, changing scope does not invoke Start, History is only exposed after opening Settings, History closes the sheet before navigating, and the compact Start control retains a 48dp touch target. A second case scrolls the settings sheet at doubled text size and invokes the fixed-header Stop control.
 
 For narrow-window visual review, use an isolated 1080px emulator at density 540 (320dp wide) and system `font_scale=2.0`, not just a 320dp composable or local font-scale override inside a wider dialog window. CI applies these emulator settings too. The tests save screenshots under `/data/local/tmp/nobonk-ui-*.png` on the disposable emulator. Rendering tests separately verify actual colored detection brackets. These controls tests do not replace physical-phone camera or background-service tests.
+
+## Background field acceptance (1.0.22 candidate)
+
+Record phone model, Android version, app version from Settings, detection scope,
+model and sensitivity. Start stationary in a safe place with another person
+helping; do not manufacture near-collisions or test in traffic. These observations
+remain outstanding until a real phone is available.
+
+1. In People mode, point at chairs, walls and shadows, then at a person. Check
+   that nonperson/surface warnings remain absent and person boxes still appear.
+   Record misidentified people separately: filtering cannot correct a model
+   that incorrectly labels another object as a person.
+2. Hold one stable confirmed hazard in view. Time successive sound/haptic/voice
+   cues: the shared minimum repeat intervals are 6 seconds for high, 10 for
+   medium and 15 for low. Escalation or a new high-priority person may cue sooner.
+   Confirm visual boxes stay live between sounds. Then clear the scene and
+   introduce another person; reduced repetition must not suppress fresh hazards.
+3. Choose Run in background, then open another app. Move Open NoBonk away from
+   that app's controls and bring up its keyboard. The return control must not
+   cover the keyboard. Open NoBonk must return to the active preview. Repeat with
+   notification Stop: returning afterward must stay stopped, with the camera
+   indicator off. Record camera release timing rather than assuming it is instant.
+4. Let another camera app take access. NoBonk must show paused/unavailable,
+   clear old hazards and stay silent. After access returns, new frames must be
+   required before alerts resume. Explicit Stop must defeat recovery.
+5. Slowly tilt the uncovered rear camera up and down in portrait and landscape.
+   Verify angle guidance matches orientation, settles without rapid flicker,
+   and does not imply calibrated distance. Repeat with an obscured camera.
+6. Test the optional walking reminder separately: arm it, walk, receive one
+   prompt, dismiss it and confirm the camera never started. Re-arm and choose
+   Start explicitly. Stop must disarm it. Notification denial must produce an
+   understandable setup message instead of silently waiting for an unseen prompt.
+7. Open Settings → feedback, select a category, inspect the optional diagnostics
+   and email draft, then cancel. Confirm nothing sends automatically. Copy the
+   report if there is no configured email app.
+
+Use the same safe route and settings when comparing the installed release and
+candidate. Report observed alert counts and missed detections, not an unsupported
+accuracy percentage. Keep videos private unless separately approved for sharing.

@@ -74,12 +74,16 @@ internal object CocoRawHeadDecoder {
         for (i in 0 until numBoxes) {
             val row = offset + i * END_TO_END_ROW
             val confidence = output.get(row + 4)
-            if (!confidence.isFinite() || confidence < confidenceThreshold) continue
+            if (!confidence.isFinite() || confidence !in 0f..1f || confidence < confidenceThreshold) continue
             val classValue = output.get(row + 5)
             if (!classValue.isFinite() || classValue < 0f) continue
             val classId = classValue.toInt()
+            if (classValue != classId.toFloat() || classId !in names) continue
+            val left = output.get(row); val top = output.get(row + 1)
+            val right = output.get(row + 2); val bottom = output.get(row + 3)
+            if (!left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite()) continue
             val box = Letterbox.boxToOriginalNorm(
-                output.get(row), output.get(row + 1), output.get(row + 2), output.get(row + 3), transform
+                left, top, right, bottom, transform
             )
             if (box.isEmpty) continue
             val name = classNameFor(classId)
@@ -106,11 +110,12 @@ internal object CocoRawHeadDecoder {
             }
             // classId < 0: no class scored above 0 (only reachable with a threshold <= 0).
             // Infinite score: corrupt output, never a real confidence.
-            if (classId >= 0 && maxScore >= confidenceThreshold && maxScore.isFinite()) {
+            if (classId >= 0 && maxScore >= confidenceThreshold && maxScore.isFinite() && maxScore <= 1f) {
                 val xc = value(0, i)
                 val yc = value(1, i)
                 val w = value(2, i)
                 val h = value(3, i)
+                if (!xc.isFinite() || !yc.isFinite() || !w.isFinite() || !h.isFinite() || w <= 0f || h <= 0f) continue
                 val box = Letterbox.boxToOriginalNorm(xc - w / 2f, yc - h / 2f, xc + w / 2f, yc + h / 2f, transform)
                 // Entirely inside the letterbox padding (or NaN geometry): nothing in the frame.
                 if (box.isEmpty) continue

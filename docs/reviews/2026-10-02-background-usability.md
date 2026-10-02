@@ -27,10 +27,30 @@ References:
 
 ## Verification and remaining release work
 
-286 JVM tests and debug lint passed. Both Android 10 (API 29) and Android 16 (API 36.1) full instrumentation runs passed 29 tests, with only the explicitly optional power experiment skipped. These runs include real native-model output parity for both models, model replacement/Stop, camera competition/recovery using a real competing Camera2 client, keyboard layering with a focused text editor, draggable overlays, and feedback at 2× text size.
+At commit a6dad2a, 286 JVM tests and debug lint passed. Both Android 10 (API 29) and Android 16 (API 36.1) full instrumentation runs passed 29 tests, with only the explicitly optional power experiment skipped. These runs include real native-model output parity for both models, model replacement/Stop, camera competition/recovery using a real competing Camera2 client, keyboard layering with a focused text editor, draggable overlays, and feedback at 2× text size. Later Claude integration changes are undergoing a fresh full run; those earlier results do not certify the combined candidate.
 
 The first Android 10 run exposed a 38 MB Java allocation on its 48 MB heap while reading a model asset. Production had the same loading pattern. Models now stream through a 64 KiB buffer into private, hash-verified, atomically installed files; ORT loads by file path. Valid cache hits do not rewrite the file. Eight unit tests cover bounded allocation, exact identity, concurrent loads, corruption repair, cancellation and failed extraction. The previously failing native-model test passed afterward on both API levels.
 
-Emulator tests cannot establish outdoor false-positive rates, real haptic comfort, physical camera angles or device-specific battery behavior. Release-artifact verification is still pending.
+Emulator tests cannot establish outdoor false-positive rates, real haptic comfort, physical camera angles or device-specific battery behavior. The a6dad2a release artifact was inspected and locally signed; the combined candidate must be rebuilt and reverified.
+
+## Claude review integration
+
+Claude's October 2 branch was based on the older main checkout, so changes were reviewed individually. Integrated decoder validation, reused frame-transform objects, notification channel wording and the scrollable camera-permission screen. Retained the already verified bounded-allocation model cache rather than replacing it with the competing loader.
+
+The notification return intent now reuses the existing Activity and has an identity distinct from the walking reminder, preventing reminder extras from leaking into ordinary return taps. Pending service-start callbacks use weak Activity references, cancellation, generation checks and a timeout. Rotation cannot allow an obsolete callback to dismiss a newer screen. Manual start errors remain visible.
+
+Rejected the proposed unconditional camera foreground-service promotion on refused starts: walking sessions use a different service type, and camera permission may be missing. Instead, the visible Activity starts the service normally and waits for validation and promotion of the correct type before moving to the background. Failed admission acknowledges rejection and cleans up without leaving an outstanding foreground-start deadline. Stop and failed/obsolete acknowledgements cannot restart detection. New device tests cover refused admission, real notification return and callback recreation.
+
+Decoder checks reject non-finite geometry, invalid confidence and fractional/out-of-range class IDs before clamping. A malformed class value must not become a Person detection. Valid model-output parity remains part of the device suite.
+
+The real MainActivity background/notification/Stop test found an additional Android 10 lifecycle race: after notification Stop, a retained foreground CameraX binding reopened at ON_START before onResume consumed the stopped state. Camera logs showed OPENING and OPEN before the next UI frame released it. CameraPreview now releases only its owned use cases at ON_STOP and prevents late binds; the existing resume key creates a fresh preview only after the app has checked Stop and the safety gate. New preview bindings also require RESUMED, covering compositions created while already stopped. The previously failing Android 10 end-to-end test passed with this fix. It verifies live manual handoff, camera release on Stop, return through the safety reminder without camera activation, and stopped state across real Activity recreation.
+
+After these changes, 298 JVM tests and debug lint passed. The final full Android 10 and Android 16 suites each passed 36 tests with one optional power-experiment skip (37 XML test cases). Raw reports are retained in the local release handoff under background-usability-20261002/final-api29 and final-api36. The test sends the real posted notification PendingIntent with test-only SystemUI-equivalent launch privilege; it does not add background-launch privileges to the production app. Physical-phone acceptance remains outstanding.
 
 Before release: inspect the release artifact, test on a physical phone, and resolve the existing Play walking-service declaration evidence requirement. The previous closed-test release and Google production-access application are separate from this candidate. The support@nobonk.com routing configuration exists, but end-to-end delivery still needs verification.
+
+## Private real-scene replay
+
+An opt-in replay passed on API 29 and API 36.1 using four retained pavement crops and the official Ultralytics bus/person control. Each run exercises both shipped models, both scopes and four temporal frames: 20 cases / 80 frames. API 36 results record zero detections and no hazard alerts for these pavement crops; the positive control retains four people in People mode and five objects in Everything mode. People mode does not produce the bus hazard shown in Everything mode. This is a narrow regression check, not an outdoor accuracy estimate: repeated compressed still images do not reproduce movement, sensors, camera placement or real cue comfort. Private fixtures are SHA-verified, staged only on isolated emulators and excluded from the repository and app bundle. The test is skipped by default.
+
+Evidence is retained in the release handoff: background-private-replay-api29.log, background-private-replay-api36-verified-input.log, and background-usability-20261002/private-replay-results.json.

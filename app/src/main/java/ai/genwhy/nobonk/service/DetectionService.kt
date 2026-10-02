@@ -151,6 +151,7 @@ open class DetectionService : LifecycleService() {
                 if (intent?.action != ACTION_START) { stopSelf(); return START_NOT_STICKY }
                 val requestedWalking = intent.getBooleanExtra(EXTRA_WAIT_FOR_WALKING, false)
                 if (!life.onStartRequested(waitForWalking = requestedWalking)) {
+                    reportArmResult(intent, 0)
                     if (life.isStopped) { stopSelf(); return START_NOT_STICKY }
                     return START_NOT_STICKY // duplicate start: keep the existing session and settings
                 }
@@ -170,15 +171,30 @@ open class DetectionService : LifecycleService() {
                 // current safety notice (the UI gate is the first line, this is the second).
                 val ack = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getInt(ai.genwhy.nobonk.safety.SafetyNotice.PREF_ACK_VERSION, 0)
                 val explicit = true   // only an explicit ACTION_START reaches this point
-                if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack, explicitStart = explicit)) { Dbg.w(TAG, "start refused: safety gate not cleared (explicit=$explicit)"); reportArmResult(intent, 0); stopSelf(); return START_NOT_STICKY }
+                if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceMayStart(ack, explicitStart = explicit)) { Dbg.w(TAG, "start refused: safety gate not cleared (explicit=$explicit)"); reportArmResult(intent, 0); shutdown(ServiceLifecycle.StopReason.HANDOFF); return START_NOT_STICKY }
+                if (!walkingMode && ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Camera access is off. Open NoBonk to allow access before scanning."
+                    reportArmResult(intent, 0)
+                    shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                    return START_NOT_STICKY
+                }
                 if (walkingMode && (!ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this) || !walkingMotionAvailable())) {
                     ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Walking mode needs motion permission and a supported step sensor. Start background scanning manually instead."
                     reportArmResult(intent, 0)
                     shutdown(ServiceLifecycle.StopReason.USER)
                     return START_NOT_STICKY
                 }
+                if (walkingMode && (!androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled() ||
+                    getSystemService(NotificationManager::class.java).getNotificationChannel(WALKING_CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE)) {
+                    ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Allow NoBonk notifications before arming a walking reminder."
+                    reportArmResult(intent, 0)
+                    shutdown(ServiceLifecycle.StopReason.HANDOFF)
+                    return START_NOT_STICKY
+                }
                 try {
-                    startForegroundService()
+                    // The visible Activity uses startService and waits for this acknowledgement.
+                    // Rejection has no outstanding startForegroundService promotion obligation.
+                    promoteAndStartSession()
                     ai.genwhy.nobonk.safety.SessionState.gate.onServiceStarted()
                     reportArmResult(intent, 1)
                 } catch (e: Exception) {
@@ -202,7 +218,7 @@ open class DetectionService : LifecycleService() {
     protected open fun createWalkingMonitor(onTransition: (ai.genwhy.nobonk.motion.WalkingSessionPolicy.Transition) -> Unit): ai.genwhy.nobonk.motion.WalkingMotionSource =
         ai.genwhy.nobonk.motion.WalkingMonitor(this, onTransition)
 
-    private fun startForegroundService() {
+    private fun promoteAndStartSession() {
         val notification = createNotification(if (walkingMode) "Waiting for walking · camera off · Stop to disarm" else "Preparing camera · tap to open")
         if (walkingMode) {
             // Motion monitoring is not camera use. Android 14+ has a dedicated step/health type.
@@ -413,9 +429,7 @@ open class DetectionService : LifecycleService() {
     /** Bring the existing NoBonk task to the front (no new instance, no camera duplication). */
     private fun openApp() {
         try {
-            val i = Intent(this, MainActivity::class.java).addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            )
+            val i = Intent(this, MainActivity::class.java).addFlags(OpenAppIntent.FLAGS)
             startActivity(i)
         } catch (e: Exception) {
             Dbg.e(TAG, "openApp failed (notification tap remains the fallback)", e)
@@ -647,8 +661,8 @@ open class DetectionService : LifecycleService() {
     }
 
     private fun createNotification(content: String): Notification {
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val intent = Intent(this, MainActivity::class.java).addFlags(OpenAppIntent.FLAGS)
+        val pendingIntent = PendingIntent.getActivity(this, OpenAppIntent.NOTIFICATION_REQUEST_CODE, intent, PendingIntent.FLAG_IMMUTABLE)
         val stopIntent = Intent(this, javaClass).apply { action = ACTION_STOP }
         val stopPending = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
