@@ -37,15 +37,21 @@ Current Android distance estimates are approximate, and hazards may be missed. N
 
 ## Set up in the foreground. Use it in the background.
 
+**Development candidate:** This branch prepares 1.0.22. A source update is not proof of Google Play availability. The ask-first walking reminder and the background refinements below are still awaiting release verification.
+
 **Android controls:** Change People/Everything from the top status tag or the labelled **Settings** button. Find **Detection history** inside Settings. Optional walking reminders are directly below the main controls: after sustained walking, NoBonk asks once whether to start. The camera stays off until you choose Start scanning; ignoring or dismissing the reminder does not repeat it. Start scanning is compact, and Stop stays available in the settings sheet while scanning.
 
 **Android 1.0.18:** People is the default, including on the first launch after this update. People mode excludes object and surface warnings. Choose Everything explicitly to include objects such as chairs and experimental wall/ground warnings. Person alerts require consecutive matching detections; boxes remain visible while confirmation is pending. Detection can still miss or misidentify hazards.
 
 1. **Open NoBonk to set up and test.** Acknowledge the safety reminder, allow the camera, check what your phone detects, and adjust sensitivity and sound, vibration or voice cues in a safe space.
-2. **Choose Run in background on Android.** Allow the requested notification and overlay permissions, then switch apps. Keep the rear camera uncovered and pointed toward the scene.
+2. **Choose Run in background on Android.** Allow display over other apps for **NoBonk only**, then switch apps. Notification permission makes the notification’s Open/Stop controls available; it is not permission to draw over every individual app. Keep the rear camera uncovered and pointed toward the scene.
 3. **Receive alerts above other apps.** Use **Open NoBonk** to return to the settings. The app and notification include Stop controls; reliable shutdown is an active testing priority.
 
-The foreground view is the Android setup and testing space; background operation is its primary intended use. The separate **iPhone development preview** supports foreground People and Fast Objects detection, plus Browse & scan and a local Draft & scan editor. Draft beside the visible camera, then explicitly pause to share through Messages or an available app such as WhatsApp. It does not scan in the background, and there is no public App Store or TestFlight release yet. Follow [iPhone development](https://github.com/krishavh/nobonk/pull/2) or see the [iPhone preview details](https://nobonk.genwhy.ai/#iphone).
+**Background refinements in this candidate:** sound, vibration and speech share a repeat-cue limit while detection boxes stay visible. Persistent HIGH/MEDIUM/LOW cues repeat no faster than 6/10/15 seconds, with shorter allowances for escalation or a newly tracked HIGH hazard. Repeated tracking changes are bounded, not proof of new people. Drag **Open NoBonk** away from other controls; Settings can turn off the animated edge while keeping text warnings and the return control. The floating control stays behind the keyboard. Android or protected apps can hide overlays, and another camera app can interrupt scanning.
+
+**Check the view before walking:** stand still, hold the phone naturally and confirm the rear-camera preview sees ahead rather than only ground or sky. The angle notice is guidance, not distance calibration. **Settings → Send feedback** stops scanning and prepares a reviewable email draft; no image, history or location is attached. You can omit the phone/settings details or copy the report instead.
+
+The foreground view is the Android setup and testing space; background operation is its primary intended use. The separate **iPhone development preview** supports foreground People and Fast Objects detection, plus Browse & scan and a local Draft & scan editor. Draft beside the visible camera, then explicitly pause to share through Messages or an available app such as WhatsApp. It does not scan in the background, and there is no public App Store or TestFlight release yet. Follow [iPhone development](https://github.com/krishavh/nobonk/pull/2) or see the [iPhone preview details](https://nobonk.com/#iphone).
 
 ## Real Android screenshots
 
@@ -55,11 +61,11 @@ Unretouched frames from a developer-supplied phone recording—not mockups.
 |---|---|
 | <img src="docs/images/nobonk-android-setup.png" width="280" alt="NoBonk camera view with sensitivity controls and Run in background button"> | <img src="docs/images/nobonk-android-background.png" width="280" alt="NoBonk PERSON AHEAD alert and Open NoBonk control over the Android home screen"> |
 
-These show the interface in one test, not verified detection accuracy. [Watch the real walkthrough](https://nobonk.genwhy.ai/#background).
+These show the interface in one test, not verified detection accuracy. [Watch the real walkthrough](https://nobonk.com/#background).
 
 ## Join the Android closed test
 
-Use the same Google account to [join the tester group](https://groups.google.com/g/nobonk-android-testers), then [opt into the Google Play test and install](https://play.google.com/apps/testing/ai.genwhy.nobonk). Stay opted in for at least 14 consecutive days, try the app regularly, and send feedback to support@genwhy.ai. [Full testing instructions](https://nobonk.genwhy.ai/#testing-guide).
+Use the same Google account to [join the tester group](https://groups.google.com/g/nobonk-android-testers), then [opt into the Google Play test and install](https://play.google.com/apps/testing/ai.genwhy.nobonk). Stay opted in for at least 14 consecutive days, try the app regularly, and send feedback to support@genwhy.ai. [Full testing instructions](https://nobonk.com/#testing-guide).
 
 ## How it works
 
@@ -144,7 +150,7 @@ From the command line:
 - **Debug build / install:** `./gradlew assembleDebug` (a helper script, `build_and_install.sh`, builds and installs to a connected device).
 - **Signed release bundle (for Play):** `./gradlew bundleRelease` produces `app/build/outputs/bundle/release/app-release.aab`. Signing reads keystore credentials from `~/.gradle/gradle.properties` or the `NOBONK_*` environment variables — **no secrets are committed**. See [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md) for keystore generation and the full Play submission steps, and [`docs/PLAY_16KB_CHECK.md`](docs/PLAY_16KB_CHECK.md) for the required 16 KB native-library check (`scripts/check_16kb_alignment.sh`).
 
-**Android requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Background scanning is Android's primary mode. The [iPhone development preview](https://github.com/krishavh/nobonk/pull/2) supports foreground People/Fast Objects, Browse & scan and Draft & scan. Sending through Messages or the share sheet pauses its camera. It has no background scanning or public App Store/TestFlight release yet. See the [current iPhone status](https://nobonk.genwhy.ai/#iphone).
+**Android requirements:** builds against Android SDK 36 (compile/target API 36); runs on **Android 10+ (API 29)** and up. Background scanning is Android's primary mode. The [iPhone development preview](https://github.com/krishavh/nobonk/pull/2) supports foreground People/Fast Objects, Browse & scan and Draft & scan. Sending through Messages or the share sheet pauses its camera. It has no background scanning or public App Store/TestFlight release yet. See the [current iPhone status](https://nobonk.com/#iphone).
 
 ## Known limitations
 

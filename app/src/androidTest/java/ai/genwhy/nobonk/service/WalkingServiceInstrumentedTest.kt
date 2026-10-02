@@ -35,7 +35,8 @@ class WalkingServiceInstrumentedTest {
         i.uiAutomation.executeShellCommand("appops set ${i.targetContext.packageName} SYSTEM_ALERT_WINDOW allow").use {
             java.io.FileInputStream(it.fileDescriptor).readBytes()
         }
-        listOf(Manifest.permission.CAMERA, Manifest.permission.ACTIVITY_RECOGNITION, Manifest.permission.POST_NOTIFICATIONS).forEach {
+        (listOf(Manifest.permission.CAMERA, Manifest.permission.ACTIVITY_RECOGNITION) +
+            if (android.os.Build.VERSION.SDK_INT >= 33) listOf(Manifest.permission.POST_NOTIFICATIONS) else emptyList()).forEach {
             i.uiAutomation.grantRuntimePermission(i.targetContext.packageName, it)
         }
     }
@@ -175,6 +176,125 @@ class WalkingServiceInstrumentedTest {
             i.targetContext.stopService(Intent(i.targetContext, WalkingServiceHarness::class.java))
             await("fixture service cleanup") { WalkingServiceHarness.current == null }
             scenario.close()
+        }
+    }
+
+    @Test fun returnControlCanMoveAndStopRemovesIt() {
+        grant()
+        val scenario = ActivityScenario.launch(WalkingHarnessActivity::class.java)
+        try {
+            scenario.onActivity { it.startWalking(waitForWalking = false) }
+            await("return control visible") { WalkingServiceHarness.current?.field("returnView") != null }
+            val service = WalkingServiceHarness.current!!
+            i.runOnMainSync {
+                val view = service.field("returnView") as android.view.View
+                val original = view.layoutParams as android.view.WindowManager.LayoutParams
+                val beforeX = original.x; val beforeY = original.y
+                val t = SystemClock.uptimeMillis()
+                fun touch(action: Int, x: Float, y: Float, offset: Long) {
+                    val event = android.view.MotionEvent.obtain(t, t + offset, action, x, y, 0)
+                    try { view.dispatchTouchEvent(event) } finally { event.recycle() }
+                }
+                touch(android.view.MotionEvent.ACTION_DOWN, 20f, 20f, 0)
+                touch(android.view.MotionEvent.ACTION_MOVE, -200f, 240f, 100)
+                touch(android.view.MotionEvent.ACTION_UP, -200f, 240f, 200)
+                val moved = view.layoutParams as android.view.WindowManager.LayoutParams
+                assertTrue("Drag should reposition the window", moved.x != beforeX || moved.y != beforeY)
+                assertTrue(moved.x >= 0 && moved.y >= 0)
+                assertTrue(service.getSharedPreferences("nobonk_prefs", 0).contains("return_control_x"))
+            }
+            stopNotification()
+            await("stopped") { WalkingServiceHarness.current == null }
+            assertNull(service.field("returnView"))
+        } finally {
+            i.targetContext.stopService(Intent(i.targetContext, WalkingServiceHarness::class.java))
+            await("cleanup") { WalkingServiceHarness.current == null }
+            scenario.close()
+        }
+    }
+
+    @Test fun edgeTrailCanBeDisabledWithoutRemovingReturnControlOrScan() {
+        grant()
+        val prefs = i.targetContext.getSharedPreferences("nobonk_prefs", 0)
+        prefs.edit().putBoolean("edge_trail_enabled", false).commit()
+        val scenario = ActivityScenario.launch(WalkingHarnessActivity::class.java)
+        try {
+            scenario.onActivity { it.startWalking(waitForWalking = false) }
+            await("background scan") { WalkingServiceHarness.current?.phase == ServiceLifecycle.Phase.RUNNING }
+            val service = WalkingServiceHarness.current!!
+            i.runOnMainSync { assertNull(service.field("edge")); assertNotNull(service.field("returnView")); assertNotNull(service.field("analysis")) }
+            stopNotification()
+            await("stopped") { WalkingServiceHarness.current == null }
+        } finally {
+            i.targetContext.stopService(Intent(i.targetContext, WalkingServiceHarness::class.java))
+            await("cleanup") { WalkingServiceHarness.current == null }
+            prefs.edit().remove("edge_trail_enabled").remove("return_control_x").remove("return_control_y").commit()
+            scenario.close()
+        }
+    }
+
+    @Test fun lowerReturnControlStaysBehindKeyboardWithoutTakingTypingFocus() {
+        grant()
+        val prefs = i.targetContext.getSharedPreferences("nobonk_prefs", 0)
+        prefs.edit().putFloat("return_control_x", 0.5f).putFloat("return_control_y", 1f).commit()
+        val automation = i.uiAutomation
+        val oldFlags = automation.serviceInfo.flags
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        fun shell(command: String): String = automation.executeShellCommand(command).use {
+            java.io.FileInputStream(it.fileDescriptor).readBytes().toString(Charsets.UTF_8).trim()
+        }
+        fun returnWindow(w: android.view.accessibility.AccessibilityWindowInfo): Boolean {
+            fun contains(node: android.view.accessibility.AccessibilityNodeInfo?, depth: Int = 0): Boolean {
+                if (node == null || depth > 5) return false
+                if (node.text?.toString() == "Open NoBonk" || node.contentDescription?.toString()?.startsWith("Open NoBonk controls") == true) return true
+                return (0 until node.childCount).any { contains(node.getChild(it), depth + 1) }
+            }
+            return w.title?.toString() == "NoBonk return control" || contains(w.root)
+        }
+        val oldImeSetting = shell("settings get secure show_ime_with_hard_keyboard")
+        shell("settings put secure show_ime_with_hard_keyboard 1")
+        val scanner = ActivityScenario.launch(WalkingHarnessActivity::class.java)
+        var typing: ActivityScenario<ai.genwhy.nobonk.testing.TypingHarnessActivity>? = null
+        try {
+            scanner.onActivity { it.startWalking(waitForWalking = false) }
+            await("return control") { WalkingServiceHarness.current?.field("returnView") != null }
+            await("return accessibility window", timeout = 10_000, onMain = false) {
+                automation.windows.any { returnWindow(it) }
+            }
+            typing = ActivityScenario.launch(ai.genwhy.nobonk.testing.TypingHarnessActivity::class.java)
+            typing.onActivity { it.showKeyboard() }
+            await("editor keyboard", onMain = false) {
+                automation.windows.any { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            }
+            val windows = automation.windows
+            val ime = windows.first { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            val control = windows.find { returnWindow(it) }
+            assertTrue("Return control must be below or fully hidden by the keyboard", control == null || control.layer < ime.layer)
+            typing.onActivity { assertTrue("Editor retains focus", it.editor.hasFocus()); assertTrue(it.editor.hasWindowFocus()) }
+            i.runOnMainSync {
+                val view = WalkingServiceHarness.current!!.field("returnView") as android.view.View
+                assertTrue("Overlay remains attached while keyboard covers it", view.isAttachedToWindow)
+            }
+            shell("screencap -p /data/local/tmp/nobonk-keyboard-overlay.png")
+            typing.onActivity { it.hideKeyboard() }
+            await("keyboard dismissed", onMain = false) {
+                automation.windows.none { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            }
+            await("return control restored", onMain = false) {
+                automation.windows.any { returnWindow(it) }
+            }
+            stopNotification()
+            await("stopped") { WalkingServiceHarness.current == null }
+        } finally {
+            i.targetContext.stopService(Intent(i.targetContext, WalkingServiceHarness::class.java))
+            await("cleanup") { WalkingServiceHarness.current == null }
+            typing?.close(); scanner.close()
+            prefs.edit().remove("return_control_x").remove("return_control_y").commit()
+            automation.serviceInfo = automation.serviceInfo.apply { flags = oldFlags }
+            if (oldImeSetting == "null") shell("settings delete secure show_ime_with_hard_keyboard")
+            else shell("settings put secure show_ime_with_hard_keyboard $oldImeSetting")
         }
     }
 

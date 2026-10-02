@@ -73,13 +73,13 @@ class ObjectDetector(
 
     init {
         checkActive()
-        val modelBytes = context.assets.open(modelName).use { it.readBytes() }
+        val model = BundledModelFile.load(context, modelName, checkActive)
         checkActive()
 
         // Cache a verified measured choice, not a hardware assumption. Invalidate after
         // model/app/runtime/OS changes; a failed cached warm-up triggers benchmarking.
         val digest = java.security.MessageDigest.getInstance("SHA-256")
-        val modelHash = digest.digest(modelBytes).joinToString("") { "%02x".format(it) }
+        val modelHash = model.sha256
         val identity = "$modelHash|${android.os.Build.FINGERPRINT}|${ortEnvironment.version}|${ai.genwhy.nobonk.BuildConfig.VERSION_CODE}|ep-v3"
         val key = digest.digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
         val prefs = context.getSharedPreferences("nobonk_execution", Context.MODE_PRIVATE)
@@ -100,7 +100,7 @@ class ObjectDetector(
                         "XNNPACK" -> { options.setIntraOpNumThreads(1); options.addXnnpack(mapOf("intra_op_num_threads" to "4")) }
                         else -> options.setIntraOpNumThreads(4)
                     }
-                    val session = ortEnvironment.createSession(modelBytes, options)
+                    val session = ortEnvironment.createSession(model.file.absolutePath, options)
                     try {
                         checkActive()
                         val size = readInputSize(session, modelName, requestedInputSize)

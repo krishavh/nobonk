@@ -26,12 +26,12 @@ class OrtBufferInstrumentedTest {
         val env = OrtEnvironment.getEnvironment()
         assertEquals("1.29.0", env.version)
         for (model in listOf("yolo26n_416.onnx", "yolo26s_416.onnx")) {
-            val bytes = instrumentation.targetContext.assets.open(model).use { it.readBytes() }
+            val modelFile = BundledModelFile.load(instrumentation.targetContext, model)
             for (provider in listOf("CPU", "XNNPACK")) {
                 OrtSession.SessionOptions().use { options ->
                     options.setIntraOpNumThreads(if (provider == "CPU") 2 else 1)
                     if (provider == "XNNPACK") options.addXnnpack(mapOf("intra_op_num_threads" to "2"))
-                    env.createSession(bytes, options).use { session ->
+                    env.createSession(modelFile.file.absolutePath, options).use { session ->
                         verifyAndMeasure(env, session, model, provider)
                     }
                 }

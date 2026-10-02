@@ -1,6 +1,6 @@
 # NoBonk — Privacy Policy
 
-**Last updated:** 2026-09-13
+**Last updated:** 2026-10-02
 **App:** NoBonk (`ai.genwhy.nobonk`)
 **Developer:** Published by a parent/guardian on behalf of Krishav (student author).
 **Contact:** support@genwhy.ai (Haarith, parent and account holder), or an issue at github.com/krishavh/nobonk.
@@ -69,7 +69,7 @@ The camera stays closed while waiting and after the reminder. Scanning starts on
 ## 6. What NoBonk does NOT do
 
 - **No internet.** The app declares **no `INTERNET` permission** and makes no
-  network connections. It cannot send your data anywhere even if it wanted to.
+  network connections. Camera processing and history storage remain local. Opening an optional support email draft is handled by your chosen email app, as explained below.
 - **No accounts, no sign-in, no advertising, no analytics or tracking SDKs.**
   Libraries include ONNX Runtime, CameraX, Jetpack Compose, AndroidX Security
   and Google Play In-App Updates.
@@ -118,3 +118,9 @@ Questions or requests: support@genwhy.ai (Haarith, parent and account holder).
 The public short-form page is https://krishavh.github.io/privacy/nobonk.html (repo
 `krishavh/krishavh.github.io`); Play Console → App content → Privacy policy points at it.
 Keep this file and that page in agreement whenever permissions or stored data change.
+
+## Optional feedback (1.0.22 development candidate)
+
+Settings → Send feedback stops scanning and prepares a draft in the email app you choose. You write the message and decide whether to include the displayed app version, phone model, Android version and current detection/cue settings. NoBonk does not attach camera images, detection history, sensor readings or location. Nothing is sent automatically. Copy feedback places the displayed report on the system clipboard only when you choose that action.
+
+If you send the email, your email provider handles delivery and NoBonk support receives your message and sender address so we can investigate and reply. Avoid including sensitive information. The draft remains in the interface during ordinary screen recreation; NoBonk does not add it to detection history or a feedback database. Close the feedback screen to discard the in-app draft.

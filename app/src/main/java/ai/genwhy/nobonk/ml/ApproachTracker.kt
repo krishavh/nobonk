@@ -88,8 +88,8 @@ class ApproachTracker(
     private var imminentIds: Set<String> = emptySet()
 
     /**
-     * Stable track id for a current-frame detection id, or null if this detection did
-     * not match any existing track (i.e. it's brand new this frame). Lets the engine
+     * Stable track id for every current-frame detection, including a newly created track.
+     * Null means the detection is absent from the current frame. Lets the engine
      * mute repeat HIGH re-alerts per *track* rather than per (unstable) detection id.
      */
     fun trackIdFor(detectionId: String): String? = detIdToTrackId[detectionId]
@@ -159,9 +159,11 @@ class ApproachTracker(
                     if (ttcSec <= imminentTtcSec) imminent.add(det.id)
                 }
             } else {
+                val trackId = "t${nextId++}"
+                idMap[det.id] = trackId
                 tracks.add(
                     Track(
-                        id = "t${nextId++}",
+                        id = trackId,
                         className = det.className,
                         box = det.boundingBox,
                         fill = fill,

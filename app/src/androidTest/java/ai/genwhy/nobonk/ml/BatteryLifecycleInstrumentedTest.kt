@@ -1,14 +1,13 @@
 package ai.genwhy.nobonk.ml
 
 import ai.genwhy.nobonk.viewmodel.DetectionViewModel
-import android.os.Build
+import ai.genwhy.nobonk.requireIsolatedEmulator
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /** System battery broadcasts, real ViewModel and model load, isolated to an emulator. */
@@ -26,7 +25,7 @@ class BatteryLifecycleInstrumentedTest {
     }
 
     @Test fun batteryChangesPauseRecoverAndRespectStopAcrossHiddenOwner() {
-        assumeTrue("This test only overrides battery state on an emulator", Build.MODEL.contains("sdk_gphone"))
+        requireIsolatedEmulator()
         val store = ViewModelStore()
         lateinit var model: DetectionViewModel
         lateinit var monitor: BatteryMonitor

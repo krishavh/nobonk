@@ -25,6 +25,9 @@ class ScanControlsRegressionTest {
     private var stops = 0
     private var history = 0
     private var walkingSetup = 0
+    private var backgroundStarts = 0
+    private var permissionRequests = 0
+    private val overlayAllowed = mutableStateOf(true)
     private val everything = mutableStateOf(false)
     private val scanning = mutableStateOf(false)
 
@@ -38,8 +41,8 @@ class ScanControlsRegressionTest {
                         TopStatusBar(Modifier, 80, "XNNPACK", AccuracyMode.entries.first(), active,
                             everything.value, { everything.value = it })
                         Spacer(Modifier.weight(1f))
-                        ControlDock(Modifier, emptyList(), 1f, {}, {},
-                            { stops++; scanning.value = false }, scanning.value, { starts++ }, true, {},
+                        ControlDock(Modifier, emptyList(), 1f, {}, { backgroundStarts++ },
+                            { stops++; scanning.value = false }, scanning.value, { starts++ }, overlayAllowed.value, { permissionRequests++ },
                             everything.value, { everything.value = it }, AccuracyMode.entries.first(), {},
                             false, {}, false, {}, false, {}, onShowHistory = { history++ }, onWalkingSetup = { walkingSetup++ })
                     }
@@ -70,7 +73,7 @@ class ScanControlsRegressionTest {
         compose.onNodeWithContentDescription("Detection mode: Everything. Change detection mode").assertIsDisplayed()
         compose.onNodeWithText("Settings").performClick()
         compose.onNode(hasText("Everything") and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).assertIsSelected()
-        compose.onNode(hasText("People") and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).performClick()
+        compose.onNode(hasText("People") and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).performScrollTo().assertIsDisplayed().performClick()
         compose.onNode(hasText("People") and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).assertIsSelected()
         compose.onNodeWithText("Detection history").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Done").assertIsDisplayed()
@@ -122,4 +125,48 @@ class ScanControlsRegressionTest {
         start.performClick()
         compose.runOnIdle { assertEquals(1, starts); assertEquals(0, stops) }
     }
+    @Test fun feedbackStopsScanningAndOpensReviewableDraftWithoutSending() {
+        show(fontScale = 2f, active = true)
+        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithText("Send feedback").performScrollTo().performClick()
+        compose.onNodeWithText("Help improve NoBonk").assertIsDisplayed()
+        compose.onNodeWithText("Open email draft").assertIsNotEnabled()
+        compose.onNodeWithText("What happened?").performScrollTo().performTextInput("Too many alerts while standing still.")
+        compose.onNodeWithText("Open email draft").assertIsEnabled()
+        compose.onNodeWithText("Copy feedback").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Close", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("Start scanning").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, stops); assertEquals(0, starts) }
+    }
+
+    @Test fun backgroundHelpExplainsSinglePermissionAndCameraDirection() {
+        show()
+        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithText("Camera angle & background help").performScrollTo().performClick()
+        compose.onNodeWithText("Use NoBonk with other apps").assertIsDisplayed()
+        compose.onNodeWithText("1. Stand still", substring = true).assertExists()
+        compose.onNodeWithText("3. Allow display over other apps for NoBonk only", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Got it").performClick()
+        compose.onNodeWithText("Start scanning").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, starts) }
+    }
+
+    @Test fun overlayPermissionExplanationNeverStartsBackgroundUntilExplicitTap() {
+        overlayAllowed.value = false
+        show(active = true)
+        compose.onNodeWithText("Set up background").performClick()
+        compose.onNodeWithText("Use NoBonk with other apps").assertIsDisplayed()
+        compose.onNodeWithText("Open NoBonk permission").performClick()
+        compose.runOnIdle { assertEquals(1, permissionRequests); assertEquals(0, backgroundStarts) }
+        // Returning without permission keeps setup available and does not start a service.
+        compose.onNodeWithText("Set up background").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Open NoBonk permission").performClick()
+        compose.runOnIdle { overlayAllowed.value = true }
+        // Granting permission still requires the user's explicit background action.
+        compose.onNodeWithText("Run in background").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(2, permissionRequests); assertEquals(0, backgroundStarts) }
+        compose.onNodeWithText("Run in background").performClick()
+        compose.runOnIdle { assertEquals(1, backgroundStarts); assertEquals(0, starts) }
+    }
+
 }

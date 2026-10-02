@@ -9,6 +9,7 @@ import android.os.*
 import ai.genwhy.nobonk.util.Dbg
 import android.view.*
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.CameraState
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -92,6 +93,7 @@ open class DetectionService : LifecycleService() {
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysis: ImageAnalysis? = null
     private val scanStatus = BackgroundScanStatus()
+    private val cameraAvailability = CameraAvailability()
     private var latestResult: DetectionEngine.Result? = null
     private val statusWatchdog = object : Runnable {
         override fun run() {
@@ -305,7 +307,7 @@ open class DetectionService : LifecycleService() {
 
     /** Moving red screen-edge trail. Hazard text and the return control remain separate. */
     private fun showEdgeIndicator() {
-        if (edge != null) return
+        if (edge != null || !getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE).getBoolean("edge_trail_enabled", true)) return
         edge = EdgeIndicator(this, windowManager).also { it.show(AlertLevel.NONE, cameraBlocked = true) }
     }
     /** Top inset (status bar + display cutout) in px, so overlay windows never sit under the clock. */
@@ -349,10 +351,57 @@ open class DetectionService : LifecycleService() {
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.END; x = (12 * d).toInt(); y = topInsetPx() + (8 * d).toInt() }
+        params.gravity = Gravity.TOP or Gravity.LEFT
+        params.title = "NoBonk return control"
+        val screen = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) windowManager.currentWindowMetrics.bounds
+            else android.graphics.Rect(0, 0, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
+        val insets = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) windowManager.currentWindowMetrics.windowInsets
+            .getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()) else android.graphics.Insets.of(0, topInsetPx(), 0, (24 * d).toInt())
+        val saved = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE)
+        pill.maxWidth = (screen.width() - insets.left - insets.right).coerceAtLeast(1)
+        pill.measure(View.MeasureSpec.makeMeasureSpec(pill.maxWidth, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
+        fun place(x: Int, y: Int) {
+            val point = OverlayPosition.clamp(x, y, screen.width(), screen.height(), pill.measuredWidth, pill.measuredHeight,
+                insets.left, insets.top, insets.right, insets.bottom)
+            params.x = point.x; params.y = point.y
+        }
+        // Fractions survive screen-size changes; clamp them against current insets and text size.
+        val savedX = saved.getFloat("return_control_x", 1f).coerceIn(0f, 1f)
+        val savedY = saved.getFloat("return_control_y", 0f).coerceIn(0f, 1f)
+        place((savedX * (screen.width() - pill.measuredWidth).coerceAtLeast(0)).toInt(),
+            (savedY * (screen.height() - pill.measuredHeight).coerceAtLeast(0)).toInt())
+        var downX = 0f; var downY = 0f; var startX = 0; var startY = 0; var dragging = false
+        val slop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+        pill.contentDescription = "Open NoBonk controls. Drag to move."
+        pill.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX; downY = event.rawY; startX = params.x; startY = params.y; dragging = false; true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downX; val dy = event.rawY - downY
+                    if (kotlin.math.hypot(dx, dy) > slop) dragging = true
+                    if (dragging) {
+                        place(startX + dx.toInt(), startY + dy.toInt())
+                        runCatching { windowManager.updateViewLayout(view, params) }
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (!dragging) view.performClick()
+                    else saved.edit()
+                        .putFloat("return_control_x", params.x.toFloat() / (screen.width() - pill.measuredWidth).coerceAtLeast(1))
+                        .putFloat("return_control_y", params.y.toFloat() / (screen.height() - pill.measuredHeight).coerceAtLeast(1)).apply()
+                    true
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> { dragging = false; true }
+                else -> false
+            }
+        }
         try { windowManager.addView(pill, params); returnView = pill } catch (e: Exception) { Dbg.e(TAG, "return control add error", e) }
     }
 
@@ -391,6 +440,35 @@ open class DetectionService : LifecycleService() {
                 engine?.attachCamera(cam.cameraInfo)
                 life.onCameraBound(scan)
                 scanStatus.cameraBound(SystemClock.elapsedRealtime())
+                cam.cameraInfo.cameraState.observe(this) { state ->
+                    // LiveData dispatch and Stop both run on Main. No callback may revive a session.
+                    if (!life.mayPostAlerts(scan)) return@observe
+                    val critical = state.error?.type == CameraState.ErrorType.CRITICAL
+                    val open = state.type == CameraState.Type.OPEN && state.error == null
+                    if (cameraAvailability.observe(open, critical)) {
+                        latestResult = null
+                        cadenceAlert = AlertLevel.NONE; cadenceHadDetections = false
+                        cadenceBlocked = true; cadenceStationaryMs = 0L
+                        engine?.silence()
+                        if (open && !critical) {
+                            // CameraX reopened the same user-started camera; demand fresh results.
+                            scanStatus.cameraBound(SystemClock.elapsedRealtime())
+                        }
+                        if (critical) {
+                            // Keep the explanatory Open/Stop controls, but release expensive resources.
+                            // FAILED is terminal: only a fresh explicit session can try again.
+                            ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background camera unavailable. Check camera access, then tap Start scanning to try again."
+                            val failedEngine = engine; engine = null
+                            val failedResource = scanResource; scanResource = null
+                            failedEngine?.halt()
+                            try { analysis?.clearAnalyzer() } catch (_: Exception) {}
+                            try { analysis?.let { cameraProvider?.unbind(it) } } catch (_: Exception) {}
+                            analysis = null
+                            failedResource?.retire()
+                        }
+                        renderBackgroundStatus()
+                    }
+                }
                 mainHandler.post(statusWatchdog)
             } catch (e: Exception) {
                 Dbg.e(TAG, "Camera binding failed", e)
@@ -402,6 +480,7 @@ open class DetectionService : LifecycleService() {
 
     private fun processFrame(imageProxy: ImageProxy, scan: Long) {
         if (!life.mayProcessFrames(scan)) { imageProxy.close(); return }
+        val cameraToken = cameraAvailability.admitFrame() ?: run { imageProxy.close(); return }
         val resource = scanResource ?: run { imageProxy.close(); return }
         val now = android.os.SystemClock.elapsedRealtime()
         val interval = FrameCadence.intervalMs(cadenceAlert, cadenceHadDetections, now - lastSeenAt, batteryMonitor.level, cadenceBlocked, cadenceStationaryMs)
@@ -410,7 +489,7 @@ open class DetectionService : LifecycleService() {
         val eng = resource.acquire()
         if (eng == null) { imageProxy.close(); gate.set(false); return }
         // Retirement and frame admission serialize on this engine's own lease.
-        if (!life.mayProcessFrames(scan)) {
+        if (!life.mayProcessFrames(scan) || !cameraAvailability.mayPublish(cameraToken)) {
             imageProxy.close(); resource.release(); gate.set(false); return
         }
         lastProcessTime = now
@@ -420,7 +499,8 @@ open class DetectionService : LifecycleService() {
         lifecycleScope.launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.ATOMIC) {
             try {
                 val cfg = DetectionEngine.Config(distanceThreshold, includeNonPerson, soundEnabled, hapticsEnabled, voiceEnabled,
-                    cuesAllowed = { life.mayPostAlerts(scan) && BackgroundScanStatus.isFresh(now, SystemClock.elapsedRealtime()) })
+                    sessionToken = cameraToken.toInt(), // reopening must rebuild readiness/confirmation, not reuse old tracks
+                    cuesAllowed = { life.mayPostAlerts(scan) && cameraAvailability.mayPublish(cameraToken) && BackgroundScanStatus.isFresh(now, SystemClock.elapsedRealtime()) })
                 val result = eng.process(imageProxy, cfg)   // closes imageProxy, fires haptics+sound
                 // A frame that was in flight when Stop arrived must not re-create the HUD or re-post
                 // the notification from a stopped service (this was the visible "Stop didn't work").
@@ -428,7 +508,7 @@ open class DetectionService : LifecycleService() {
                 // the lifecycle check inside it, so it serializes with shutdown() (also main-thread): a
                 // Stop that lands first removes this post or makes the check fail; nothing is re-posted.
                 mainHandler.post {
-                    if (!life.mayPostAlerts(scan)) return@post
+                    if (!life.mayPostAlerts(scan) || !cameraAvailability.mayPublish(cameraToken)) return@post
                     cadenceAlert = result.highestAlert
                     cadenceHadDetections = result.detections.isNotEmpty()
                     cadenceBlocked = result.cameraBlocked
@@ -443,7 +523,8 @@ open class DetectionService : LifecycleService() {
             } catch (e: Exception) {
                 Dbg.e(TAG, "Frame processing error: ${e.message}", e)
                 withContext(Dispatchers.Main + NonCancellable) {
-                    if (life.isCurrent(scan)) {
+                    // An obsolete frame must not tear down a camera that has already reopened.
+                    if (life.isCurrent(scan) && cameraAvailability.mayPublish(cameraToken)) {
                         ai.genwhy.nobonk.safety.SessionState.backgroundFailure = "Background detection was interrupted. Open NoBonk to retry."
                         shutdown(ServiceLifecycle.StopReason.HANDOFF)
                     }
@@ -458,9 +539,21 @@ open class DetectionService : LifecycleService() {
     /** Main-thread publication; a stale result can never keep the scanning trail or hazard alive. */
     private fun renderBackgroundStatus() {
         if (!life.mayPostAlerts()) return
+        val availability = cameraAvailability.state()
+        if (availability == CameraAvailability.State.INTERRUPTED || availability == CameraAvailability.State.FAILED) {
+            edge?.setLevel(AlertLevel.NONE, cameraBlocked = true)
+            if (availability == CameraAvailability.State.FAILED) {
+                updateHud("CAMERA UNAVAILABLE — open NoBonk to check camera access and start again.")
+                updateNotification("Camera unavailable · open NoBonk to retry")
+            } else {
+                updateHud("SCANNING PAUSED — camera unavailable. Another app may be using it.")
+                updateNotification("Camera interrupted · waiting for camera access")
+            }
+            return
+        }
         val state = scanStatus.state(SystemClock.elapsedRealtime())
         val result = latestResult
-        edge?.setLevel(result?.highestAlert ?: AlertLevel.NONE, state != BackgroundScanStatus.State.SCANNING)
+        edge?.setLevel(result?.highestAlert ?: AlertLevel.NONE, state != BackgroundScanStatus.State.SCANNING || result?.angleQuality == ai.genwhy.nobonk.ml.SensorMonitor.AngleQuality.BAD)
         when (state) {
             BackgroundScanStatus.State.WAITING -> {
                 updateHud(null)
@@ -600,6 +693,7 @@ open class DetectionService : LifecycleService() {
         val first = !life.isStopped
         life.stop(reason)
         if (!first) return
+        cameraAvailability.stop()
         stopWalkingMonitor()
         ai.genwhy.nobonk.safety.SessionState.walkingSession = false
         batteryMonitor.close()

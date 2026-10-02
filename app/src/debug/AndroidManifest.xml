@@ -6,6 +6,8 @@
         <receiver android:name=".debug.DebugStopReceiver" android:exported="true">
             <intent-filter><action android:name="ai.genwhy.nobonk.debug.STOP" /></intent-filter>
         </receiver>
+        <activity android:name=".testing.TypingHarnessActivity" android:exported="false" />
+        <activity android:name=".testing.CompetingCameraActivity" android:exported="false" />
         <activity android:name=".testing.WalkingHarnessActivity" android:exported="false" />
         <service android:name=".testing.WalkingServiceHarness" android:exported="false" android:foregroundServiceType="camera|health" />
     </application>

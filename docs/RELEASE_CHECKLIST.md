@@ -1,5 +1,15 @@
 # NoBonk — Play Store Release Checklist
 
+## Current release state — verified October 2, 2026
+
+- Google Play Console says **“We have your application for production access”** and **“We're reviewing your application form.”** It records the application on Thursday, October 1 at 10:47 AM. Production is still inactive. Do not submit a duplicate application or describe access as approved.
+- The last verified closed-test release is 1.0.20 (22). The prior 1.0.21 (23) draft and the local 1.0.22 (24) usability candidate are not proof of tester availability.
+- The walking reminder candidate still needs its applicable foreground-service declaration evidence and release review. The existing manual-camera video does not demonstrate the new walking flow.
+- Use the **existing** laptop upload keystore and its local signing procedure; do not regenerate keys from the historical setup example below. Passwords stay in local Keychain/signing memory and must not appear in logs or handoffs.
+- Current website: https://nobonk.com/. Candidate test evidence and remaining physical-device checks: [background usability review](reviews/2026-10-02-background-usability.md).
+
+The original setup checklist below is historical where it conflicts with this dated state.
+
 Owner of this doc: release engineering. Audience: the **adult parent/guardian**
 who will hold the Play Console account, plus any agent finishing the build.
 

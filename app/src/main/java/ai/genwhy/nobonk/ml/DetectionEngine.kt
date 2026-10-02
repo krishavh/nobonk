@@ -122,10 +122,7 @@ class DetectionEngine(private val appContext: Context) {
     @Volatile private var ttsReady = false
     private var lastSpokenAt = 0L
 
-    // Per-track HIGH re-alert mute (Round-2): after a HIGH fires the loud LOOK-UP + sound
-    // on a track, don't re-blast the same track for MUTE_MS — the box stays red and
-    // haptics continue, but we stop hammering the user for one persistent hazard.
-    private val highMute = HighReAlertMute(muteMs = 2_000L)
+    private val alertCadence = AlertCadence()
 
     // Alert-level hysteresis (fixes ML-11 flicker): escalate immediately, but hold the
     // level for LINGER_MS before de-escalating so overlay/sound/HUD don't strobe when an
@@ -296,7 +293,7 @@ class DetectionEngine(private val appContext: Context) {
             processedScope = config.includeNonPerson
             readiness.reset(); personConfirmation.reset(); frameAnalyzer.reset()
             lastHapticTime.clear(); lastCueTime.clear()
-            approachTracker.reset(); boxSmoother.reset(); highMute.reset()
+            approachTracker.reset(); boxSmoother.reset(); alertCadence.reset()
             heldAlert = AlertLevel.NONE; heldUntil = 0; heldLabel = null
             lastAnyCueTime = 0; lastSpokenAt = 0; lastMeanBrightness = 128f
         }
@@ -319,7 +316,8 @@ class DetectionEngine(private val appContext: Context) {
 
         if (blocked || detector == null) {
             readiness.reset(); personConfirmation.reset(); frameAnalyzer.reset()
-            approachTracker.reset(); boxSmoother.reset(); highMute.reset()
+            approachTracker.reset(); boxSmoother.reset()
+            // Preserve cue cadence through a brief obstruction; readiness still resets.
             // Reset linger so a stale HIGH doesn't survive a blocked frame.
             heldAlert = AlertLevel.NONE; heldLabel = null; heldUntil = 0L
             return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = blocked,
@@ -358,7 +356,8 @@ class DetectionEngine(private val appContext: Context) {
         val ready = readiness.observe(now, usable = true)
         val confirmedPeople = personConfirmation.update(if (angleBad) emptyList() else filtered, now)
         if (!ready || angleBad) {
-            approachTracker.reset(); highMute.reset()
+            approachTracker.reset()
+            // A tilt or warmup frame must not rearm a rapid repeat cue.
             heldAlert = AlertLevel.NONE; heldUntil = 0; heldLabel = null
             wall = false; ground = false
         }
@@ -393,23 +392,7 @@ class DetectionEngine(private val appContext: Context) {
         }
         val displayAlert = heldAlert
 
-        // ── Per-track HIGH re-alert mute + bad-angle gating ──
-        // When the angle is BAD the camera is pointed at the ceiling/ground: detections
-        // are unreliable, so we suppress the loud LOOK-UP + sound and instead surface a
-        // "point phone forward" reliability cue. When the same track already fired HIGH
-        // within the mute window, we also hold the loud re-alert.
-        // The mute window is consumed only when the cue actually fires (a HIGH seen at a
-        // bad angle must not delay the first audible alert after the angle is corrected).
-        val fireHigh = rawHighest == AlertLevel.HIGH &&
-            highMute.shouldEmit(topDet?.let { approachTracker.trackIdFor(it.id) }, now, canEmit = !angleBad)
-        val mutedRepeat = displayAlert == AlertLevel.HIGH && !angleBad && !fireHigh
-        // Distinguish "don't re-PLAY the sound" from "hide the visual warning" (HIGH-1).
-        // A persistent hazard re-fires HIGH every frame; after the first alert we mute the
-        // re-played SOUND on that track for the mute window — but the red LOOK-UP visual
-        // (overlay + HUD line) must stay up, not blink out for 2 s. Only a BAD angle (camera
-        // at ceiling/ground → unreliable detections) suppresses the visual, swapping in the
-        // "point phone forward" cue instead.
-        val suppressSound = mutedRepeat || angleBad
+        // The cadence gate controls physical cues only; keep every detection and visual warning.
         val suppressVisual = angleBad
 
         // ── Physical feedback requires a current confirmed hazard; linger is display-only. ──
@@ -419,11 +402,18 @@ class DetectionEngine(private val appContext: Context) {
         val label = topDet?.className
         val suppressed = withContext(Dispatchers.Main.immediate) {
             if (halted || muted || !config.cuesAllowed()) return@withContext true
-            if (rawHighest != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(rawHighest)
-            // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
-            // The cue is panned toward the object so a left-side hazard is heard on the left.
-            if (config.soundEnabled && !suppressSound && rawHighest.ordinal >= AlertLevel.MEDIUM.ordinal) playAlertCue(rawHighest, pan ?: 0f)
-            if (config.voiceEnabled && !suppressSound && rawHighest == AlertLevel.HIGH) speak(VoiceCue.phrase(rawHighest, label, AlertCue.sideFor(pan)))
+            if (config.voiceEnabled && tts == null) prepareVoice()
+            val physicalChannelReady = config.soundEnabled ||
+                (config.hapticsEnabled && vibrator?.hasVibrator() == true) || (config.voiceEnabled && ttsReady)
+            val emit = alertCadence.shouldEmit(
+                rawHighest, topDet?.let { approachTracker.trackIdFor(it.id) }, now,
+                canEmit = !angleBad && physicalChannelReady
+            )
+            if (emit) {
+                if (config.hapticsEnabled) handleHaptics(rawHighest)
+                if (config.soundEnabled && rawHighest.ordinal >= AlertLevel.MEDIUM.ordinal) playAlertCue(rawHighest, pan ?: 0f)
+                if (config.voiceEnabled && rawHighest == AlertLevel.HIGH) speak(VoiceCue.phrase(rawHighest, label, AlertCue.sideFor(pan)))
+            }
             false
         }
         if (suppressed) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
@@ -606,11 +596,10 @@ class DetectionEngine(private val appContext: Context) {
         } catch (e: Exception) { Dbg.e(TAG, "TTS init failed: ${e.message}") }
     }
 
-    /** Lazily create the TTS engine (first HIGH with voice on), then speak [text] once per [VoiceCue.REPEAT_MS]. */
+    /** The shared cadence gate has already spaced this cue; do not silently consume it again. */
     private fun speak(text: String?) {
         text ?: return
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastSpokenAt < VoiceCue.REPEAT_MS) return
         if (tts == null) prepareVoice()
         val engine = tts ?: return
         if (!ttsReady) return   // first call warms the engine; the next HIGH speaks
@@ -630,7 +619,7 @@ class DetectionEngine(private val appContext: Context) {
         boxSmoother.reset()
         stopSensors()
         sensorMonitor = null
-        highMute.reset()
+        alertCadence.reset()
     }
 
     companion object { private const val TAG = "DetectionEngine" }

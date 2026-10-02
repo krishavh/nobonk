@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.22 (versionCode 24) — development candidate, not yet on Google Play
+
+- Space repeated sound, vibration and speech through one cadence gate. Preserve visible detection boxes, immediate first cues, controlled escalation, People-only filtering and Stop. Track switching and brief camera-angle/obstruction changes cannot reset the gate into a rapid burst.
+- Correct rear-camera elevation in portrait, landscape and upside-down holding. Treat missing/stale sensors as unknown; use separate nearly-vertical entry/recovery thresholds to avoid angle-boundary flicker. Angle guidance is not distance calibration.
+- Make Open NoBonk draggable with saved, clamped placement; keep it behind the keyboard. Add an optional animated-edge switch without disabling warning text or detection.
+- Observe CameraX interruptions immediately, discard old results, and require fresh frames when access returns. Critical camera errors release resources and require explicit retry.
+- Explain overlay permission for NoBonk only and notification limitations. Add reviewable, optional-details feedback email drafts and copy fallback inside Settings.
+- Load bundled models through verified private files instead of model-sized Java byte arrays, avoiding the memory exhaustion found on the Android 10 emulator. Cache hits do not rewrite the model; interrupted extraction cannot publish a partial file.
+- Includes the ask-once walking reminder from the unreleased 1.0.21 candidate. Physical-device acceptance and Play declaration/review are still required; see docs/reviews for evidence.
+
 ## 1.0.20 (versionCode 22) — walking start and pause
 
 - Put experimental walking-mode setup directly in the scan controls. It remains optional and off by default.

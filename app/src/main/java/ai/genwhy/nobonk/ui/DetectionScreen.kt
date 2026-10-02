@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -148,7 +149,7 @@ fun DetectionScreen(
                 batteryLevel = batteryLevel,
                 executionProvider = executionProvider,
                 mode = accuracyMode,
-                live = viewModel.alertsReady && fresh && !isInitializing && viewModel.scanningEnabled && batteryLevel >= ai.genwhy.nobonk.ml.BatteryLevel.MIN_SCAN_PERCENT && !isCameraBlocked && viewModel.cameraError == null,
+                live = phoneAngleQuality != SensorMonitor.AngleQuality.BAD && viewModel.alertsReady && fresh && !isInitializing && viewModel.scanningEnabled && batteryLevel >= ai.genwhy.nobonk.ml.BatteryLevel.MIN_SCAN_PERCENT && !isCameraBlocked && viewModel.cameraError == null,
                 stats = if (viewModel.fps > 0f) String.format(Locale.US, "%.0f fps · %d ms", viewModel.fps, viewModel.inferMs) else null
             )
         }
@@ -157,11 +158,14 @@ fun DetectionScreen(
             viewModel.cameraError?.let { NoticeBanner("!", "Scanning unavailable", it, color = NB.Watch) }
             when {
                 isCameraBlocked -> Unit
-                phoneAngleQuality != SensorMonitor.AngleQuality.OK && phoneAngleHint.isNotEmpty() ->
+                phoneAngleQuality != SensorMonitor.AngleQuality.OK &&
+                    phoneAngleQuality != SensorMonitor.AngleQuality.UNKNOWN && phoneAngleHint.isNotEmpty() ->
                     NoticeBanner("📐", "Camera angle", phoneAngleHint,
                         color = if (phoneAngleQuality == SensorMonitor.AngleQuality.BAD) NB.Danger else NB.Watch,
                         description = "Camera angle warning. $phoneAngleHint")
                 isLowLight -> NoticeBanner("🔅", if (viewModel.isNightBoost) "Low light · night boost on" else "Low light", "Detection is less reliable in the dark", color = NB.Watch)
+                phoneAngleQuality == SensorMonitor.AngleQuality.UNKNOWN && viewModel.scanningEnabled ->
+                    NoticeBanner("📐", "Check your camera view", phoneAngleHint, color = NB.Watch)
             }
             if (viewModel.scanningEnabled && !isInitializing && !isCameraBlocked && viewModel.cameraError == null &&
                 phoneAngleQuality != SensorMonitor.AngleQuality.BAD && batteryLevel >= 10 && (!viewModel.alertsReady || !fresh))
@@ -401,6 +405,45 @@ internal fun ControlDock(
     heuristicObstacle: Boolean = false
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showFeedback by rememberSaveable { mutableStateOf(false) }
+    var showBackgroundHelp by remember { mutableStateOf(false) }
+    val dockContext = LocalContext.current
+    val visualPrefs = remember { dockContext.getSharedPreferences("nobonk_prefs", android.content.Context.MODE_PRIVATE) }
+    var edgeTrail by remember { mutableStateOf(visualPrefs.getBoolean("edge_trail_enabled", true)) }
+    if (showFeedback) FeedbackDialog(
+        settingsSummary = "Detect: ${if (isObjectDetectionEnabled) "Everything" else "People"} · Model: ${accuracyMode.label}\nSensitivity: $distanceThreshold m · Sound: $soundEnabled · Haptics: $hapticsEnabled · Voice: $voiceEnabled",
+        onDismiss = { showFeedback = false }
+    )
+    if (showBackgroundHelp) {
+      val notificationsAvailable = remember {
+          val manager = dockContext.getSystemService(android.app.NotificationManager::class.java)
+          androidx.core.app.NotificationManagerCompat.from(dockContext).areNotificationsEnabled() &&
+              manager?.getNotificationChannel(ai.genwhy.nobonk.service.DetectionService.CHANNEL_ID)?.importance != android.app.NotificationManager.IMPORTANCE_NONE
+      }
+      AlertDialog(
+        onDismissRequest = { showBackgroundHelp = false },
+        title = { Text("Use NoBonk with other apps") },
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("1. Stand still in a safe place. Hold the phone as you would while using it. In the preview, make sure the rear camera sees people and the path ahead—not only the ground or sky. Angle guidance is approximate; it cannot calibrate distance.")
+            Text("2. Test your sound or vibration in Settings. People mode ignores object and surface alerts. Keep the camera uncovered.")
+            Text("3. Allow display over other apps for NoBonk only, then return here and tap Run in background. You do not need to grant permission to each app you use.")
+            Text("Drag Open NoBonk away from controls it covers; tap it to return. When notifications are allowed, the NoBonk notification also opens the app and has Stop. Some apps and protected screens hide overlays. NoBonk cannot change another app's layout or guarantee camera access if another app uses it.")
+            if (!notificationsAvailable) {
+                Text("NoBonk notifications are turned off. The notification’s Open and Stop controls may not appear. Keep the floating Open NoBonk control available to return and stop scanning.")
+                TextButton(onClick = {
+                    showBackgroundHelp = false
+                    dockContext.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, dockContext.packageName))
+                }) { Text("Open notification settings") }
+            }
+            Text("Keep looking up. NoBonk can miss or misidentify hazards. Camera scanning uses battery and may stop if Android interrupts it.")
+        } },
+        confirmButton = { TextButton(onClick = { showBackgroundHelp = false; if (!canDrawOverlays) onGrantOverlay() }) {
+            Text(if (canDrawOverlays) "Got it" else "Open NoBonk permission")
+        } },
+        dismissButton = { TextButton(onClick = { showBackgroundHelp = false }) { Text("Close") } }
+    )
+    }
     val nearest = detections.filter { it.hasDistanceEstimate }.minByOrNull { it.distance }
     // Never imply "safe": no detections means exactly that — nothing the model recognised.
     val nearestColor = nearest?.let { NB.alert(it.alertLevel) } ?: NB.Sub
@@ -504,10 +547,23 @@ internal fun ControlDock(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Sound and voice are panned toward the hazard — with earbuds, left means left.",
+                "Cues are spaced out for a persistent hazard; a higher alert level can warn sooner. Sound and voice are panned toward the hazard.",
                 color = NB.Dim, fontSize = 10.sp
             )
             Spacer(Modifier.height(6.dp))
+            OutlinedButton(onClick = { onStopBackground(); showSettings = false; showFeedback = true },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Send feedback") }
+            TextButton(onClick = { showSettings = false; showBackgroundHelp = true },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Camera angle & background help") }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Moving screen-edge trail", Modifier.weight(1f), color = NB.Ink)
+                Switch(checked = edgeTrail, onCheckedChange = {
+                    edgeTrail = it
+                    visualPrefs.edit().putBoolean("edge_trail_enabled", it).apply()
+                })
+            }
+            Text("Turn the trail off for a quieter screen. Warning text and Open NoBonk stay available. Applies on your next background scan.", color = NB.Sub, fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp))
             TextButton(onClick = { showSettings = false; onShowHistory() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Icon(Icons.Default.List, contentDescription = null, tint = NB.Accent)
                 Spacer(Modifier.width(8.dp))
@@ -529,10 +585,10 @@ internal fun ControlDock(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (scanningEnabled) {
                 Button(
-                    onClick = { if (canDrawOverlays) onStartBackground() else onGrantOverlay() },
+                    onClick = { if (canDrawOverlays) onStartBackground() else showBackgroundHelp = true },
                     modifier = Modifier.weight(1f).height(48.dp), shape = NB.ChipShape,
                     colors = ButtonDefaults.buttonColors(containerColor = if (canDrawOverlays) NB.Safe else NB.Watch, contentColor = Color(0xFF04140D))
-                ) { Text(if (canDrawOverlays) "Run in background" else "Allow overlay", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
+                ) { Text(if (canDrawOverlays) "Run in background" else "Set up background", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1) }
                 OutlinedButton(onClick = onStopBackground, modifier = Modifier.height(48.dp), shape = NB.ChipShape,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NB.Danger),
                     border = androidx.compose.foundation.BorderStroke(1.dp, NB.Danger.copy(alpha = 0.6f))) { Text("Stop", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
