@@ -81,7 +81,7 @@ NOBONK_KEY_PASSWORD=********
 ```
 
 …or as environment variables of the same names (best for CI). With them present,
-`./gradlew bundleRelease` produces a **signed** `app-release.aab`. Without them,
+`./gradlew -Pbundle bundleRelease` produces a **signed** `app-release.aab`. Without them,
 the build still works but the release artifact is unsigned (safe default).
 
 **Enroll in Play App Signing** (default for new apps): you upload with this
@@ -96,7 +96,7 @@ NDK r27+ present via ONNX/CameraX):
 
 ```bash
 ./gradlew clean
-./gradlew bundleRelease          # -> app/build/outputs/bundle/release/app-release.aab
+./gradlew -Pbundle bundleRelease          # -> app/build/outputs/bundle/release/app-release.aab
 scripts/check_16kb_alignment.sh  # must print RESULT: PASS  (see PLAY_16KB_CHECK.md)
 ```
 
@@ -110,7 +110,7 @@ Also recommended:
 
 > ⚠️ This checklist's Gradle changes were **not build-verified in the
 > release-engineering sandbox** (no JDK/Android SDK there). Run
-> `./gradlew bundleRelease` (or at least `assembleDebug`) once on the build
+> `./gradlew -Pbundle bundleRelease` (or at least `assembleDebug`) once on the build
 > machine and fix any sync error before submitting. The config was reviewed for
 > correctness: `compileSdk=36` needs AGP ≥ 8.9 (repo uses AGP 9.0.1 ✓);
 > core-library desugaring dep added; signing block is credential-guarded.
@@ -208,7 +208,7 @@ a retrain + re-benchmark effort. Not chosen now.
    **identity/address verification**. (§1)
 2. **Generate the upload keystore** and store the credentials outside the repo.
    (§2) Back it up.
-3. On the build machine, **build the signed AAB** (`./gradlew bundleRelease`) and
+3. On the build machine, **build the signed AAB** (`./gradlew -Pbundle bundleRelease`) and
    **run `scripts/check_16kb_alignment.sh`** → must PASS. (§3, R4)
 4. In Console, **Create app** → name **NoBonk**, Default language English (US),
    App or game = **App**, Free, accept declarations.
