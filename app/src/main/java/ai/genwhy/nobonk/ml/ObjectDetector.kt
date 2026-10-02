@@ -9,9 +9,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import ai.genwhy.nobonk.util.Dbg
 import ai.genwhy.nobonk.model.Detection
-import ai.genwhy.nobonk.model.NormBox
 import java.nio.FloatBuffer
-import java.util.UUID
 
 /**
  * Object detector using ONNX Runtime — supports both YOLO11 and YOLO26 model families.
@@ -223,30 +221,10 @@ class ObjectDetector(
         estimateDistance(box.height, box.width, name)
     }
 
-    private fun parseYolo26(output: FloatBuffer, numBoxes: Int, t: Letterbox.Transform): List<Detection> {
-        val detections = mutableListOf<Detection>()
-        for (i in 0 until numBoxes) {
-            val row = i * 6
-            val confidence = output.get(row + 4)
-            if (confidence < confidenceThreshold) continue
-            val classId = output.get(row + 5).toInt()
-            val box = Letterbox.boxToOriginalNorm(output.get(row), output.get(row + 1), output.get(row + 2), output.get(row + 3), t)
-            detections.add(makeDetection(box, confidence, classId))
+    private fun parseYolo26(output: FloatBuffer, numBoxes: Int, t: Letterbox.Transform): List<Detection> =
+        CocoRawHeadDecoder.decodeEndToEnd(output, numBoxes, t, confidenceThreshold) { box, name ->
+            estimateDistance(box.height, box.width, name)  // informational only
         }
-        return detections
-    }
-
-    private fun makeDetection(box: NormBox, score: Float, classId: Int): Detection {
-        val cls = classNameFor(classId)
-        return Detection(
-            id = UUID.randomUUID().toString(),
-            boundingBox = box,
-            confidence = score,
-            distance = estimateDistance(box.height, box.width, cls),  // informational only
-            className = cls,
-            classId = classId
-        )
-    }
 
     /**
      * Rough monocular distance for the on-screen label / history only. The alarm ladder
