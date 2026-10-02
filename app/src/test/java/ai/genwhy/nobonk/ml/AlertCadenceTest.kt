@@ -26,8 +26,8 @@ class AlertCadenceTest {
     @Test fun sustainedClearSceneRearmsFirstHazard() {
         val gate = AlertCadence()
         assertTrue(gate.shouldEmit(HIGH, "a", 0, true))
-        assertFalse(gate.shouldEmit(NONE, null, 3000, true))
-        assertTrue(gate.shouldEmit(LOW, "a", 3100, true))
+        for (time in 100L..3100L step 500L) assertFalse(gate.shouldEmit(NONE, null, time, true))
+        assertTrue(gate.shouldEmit(LOW, "a", 3200, true))
     }
     @Test fun suppressedCuesDoNotConsumeFirstAlert() {
         val gate = AlertCadence()
@@ -73,6 +73,60 @@ class AlertCadenceTest {
             gate.shouldEmit(HIGH, "track-$it", it, true)
         }
         assertEquals(20, emissions)
+    }
+
+    @Test fun absentFramesDoNotRearmSameOrReassignedPerson() {
+        for (gap in listOf(3000L, 3100L)) for (identity in listOf("a", "reassigned-a")) {
+            val gate = AlertCadence()
+            assertTrue(gate.shouldEmit(HIGH, "a", 0, true))
+            assertFalse(gate.shouldEmit(HIGH, identity, gap, true))
+            assertFalse(gate.shouldEmit(HIGH, "another-id", 3200, true))
+            assertFalse(gate.shouldEmit(HIGH, identity, 5999, true))
+            assertTrue(gate.shouldEmit(HIGH, identity, 6000, true))
+            // Once a cue establishes fresh identity continuity, genuinely new people keep
+            // the existing 1.5-second exception.
+            assertTrue(gate.shouldEmit(HIGH, "new-person", 7500, true))
+        }
+    }
+
+    @Test fun observedClearRearmsAtThreeSecondsNotOneMillisecondBefore() {
+        for (duration in listOf(2999L, 3000L)) {
+            val gate = AlertCadence()
+            assertTrue(gate.shouldEmit(HIGH, "a", 0, true))
+            for (time in 100L..2600L step 500L) assertFalse(gate.shouldEmit(NONE, null, time, true))
+            assertFalse(gate.shouldEmit(NONE, null, 100 + duration, true))
+            assertEquals(duration == 3000L, gate.shouldEmit(LOW, "a", 101 + duration, true))
+        }
+    }
+
+    @Test fun suppressionBreaksClearEvidenceButPreservesEmissionBudget() {
+        val gate = AlertCadence()
+        assertTrue(gate.shouldEmit(HIGH, "a", 0, true))
+        assertFalse(gate.shouldEmit(NONE, null, 100, true))
+        assertFalse(gate.shouldEmit(NONE, null, 2000, false))
+        assertFalse(gate.shouldEmit(NONE, null, 3100, true))
+        assertFalse(gate.shouldEmit(HIGH, "reassigned-a", 3200, true))
+        assertTrue(gate.shouldEmit(HIGH, "reassigned-a", 6000, true))
+    }
+
+    @Test fun twoClearSamplesSeparatedByMissingFramesAreNotAContinuousClearScene() {
+        val gate = AlertCadence()
+        assertTrue(gate.shouldEmit(HIGH, "a", 0, true))
+        assertFalse(gate.shouldEmit(NONE, null, 100, true))
+        assertFalse(gate.shouldEmit(NONE, null, 3200, true))
+        assertFalse(gate.shouldEmit(LOW, "a", 3300, true))
+        // Start counting actual clear observations again, rather than time since the old hazard.
+        for (time in 3400L..6400L step 500L) assertFalse(gate.shouldEmit(NONE, null, time, true))
+        assertTrue(gate.shouldEmit(LOW, "a", 6500, true))
+    }
+
+    @Test fun gapDoesNotBlockSeverityEscalationAndSuppressedClockRollbackResets() {
+        val gate = AlertCadence()
+        assertTrue(gate.shouldEmit(LOW, "a", 0, true))
+        assertTrue(gate.shouldEmit(HIGH, "reassigned-a", 3100, true))
+        assertFalse(gate.shouldEmit(HIGH, "a", 5000, false))
+        assertFalse(gate.shouldEmit(HIGH, "a", 100, false))
+        assertTrue(gate.shouldEmit(HIGH, "a", 101, true))
     }
 
 }

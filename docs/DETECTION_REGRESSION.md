@@ -124,3 +124,7 @@ remain outstanding until a real phone is available.
 Use the same safe route and settings when comparing the installed release and
 candidate. Report observed alert counts and missed detections, not an unsupported
 accuracy percentage. Keep videos private unless separately approved for sharing.
+
+### Processing gaps must not rearm alerts
+
+A missing frame is not a clear scene. After a HIGH cue, neither the same track nor a reassigned track may use a three-second processing gap to bypass the six-second repeat interval. Suppressed frames break clear-scene evidence without consuming a cue. Observed clear frames spanning three seconds rearm the first hazard; escalation still bypasses the ordinary repeat interval. These cases are covered in AlertCadenceTest.
