@@ -76,6 +76,15 @@ android {
         debug {
             isMinifyEnabled = false     // Keep debug builds fast and readable
         }
+        // Private device acceptance without replacing a Google Play-signed install.
+        // Uses release optimization and main sources, not debug test harnesses.
+        create("preview") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
 
     compileOptions {

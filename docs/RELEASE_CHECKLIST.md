@@ -258,3 +258,7 @@ everything that can be committed:
   release commit** for AGPL (§6).
 - (Recommended, other agents) ship the in-app **Open-source licenses** screen
   (`T-DOCS-LICENSES`) — the user-facing half of AGPL §13.
+
+## Private phone acceptance alongside Google Play
+
+Use `./gradlew assemblePreview` to build an optimized, locally debug-key-signed `ai.genwhy.nobonk.preview` app labeled **NoBonk Preview**, with a `-preview` version suffix. It uses main source and release optimization, excludes debug test harnesses, and has its own private settings/data. This permits device testing without uninstalling or replacing a Google Play-signed installation. Never upload this separate-package preview to NoBonk's Play listing. Google Play enrollment and production-app data are not migrated to it. Keep the normal NoBonk app installed for Play testing/updates; use only one scanner at a time.
