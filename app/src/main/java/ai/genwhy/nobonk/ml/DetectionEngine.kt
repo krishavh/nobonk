@@ -195,6 +195,8 @@ class DetectionEngine(private val appContext: Context) {
     private var packedRows: java.nio.ByteBuffer? = null
     private var rowScratch: ByteArray? = null
     private val workMatrix = Matrix()
+    /** Reused across frames (re-targeted only when [workBitmap] is reallocated). */
+    private val workCanvas = Canvas()
     private val workPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private var lastMeanBrightness = 128f
     private var lastInferMs = 0L
@@ -236,7 +238,9 @@ class DetectionEngine(private val appContext: Context) {
                 else FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize, crop.left, crop.top, crop.width(), crop.height())
         var out = workBitmap
         if (out == null || out.width != g.outW || out.height != g.outH) {
+            workCanvas.setBitmap(null)
             out?.recycle(); out = Bitmap.createBitmap(g.outW, g.outH, Bitmap.Config.ARGB_8888); workBitmap = out
+            workCanvas.setBitmap(out)
         }
         workMatrix.reset()
         workMatrix.postTranslate(-g.cropLeft, -g.cropTop)   // ViewPort crop → origin
@@ -251,7 +255,7 @@ class DetectionEngine(private val appContext: Context) {
                 gainMatrix.setScale(gain, gain, gain, 1f); ColorMatrixColorFilter(gainMatrix)
             } else null
         }
-        Canvas(out).drawBitmap(raw, workMatrix, workPaint)
+        workCanvas.drawBitmap(raw, workMatrix, workPaint)
         return out
     }
 
@@ -609,6 +613,7 @@ class DetectionEngine(private val appContext: Context) {
 
     fun close() {
         rawBitmap?.recycle(); rawBitmap = null
+        workCanvas.setBitmap(null)
         workBitmap?.recycle(); workBitmap = null
 
         objectDetector?.close()

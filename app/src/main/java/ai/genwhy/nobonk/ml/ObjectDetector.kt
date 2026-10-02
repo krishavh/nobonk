@@ -50,6 +50,7 @@ class ObjectDetector(
         private set
 
     private val confidenceThreshold = 0.40f
+    private val letterboxPad = Color.rgb(114, 114, 114)
     private val iouThreshold = 0.45f
 
     val inputSize: Int
@@ -61,6 +62,8 @@ class ObjectDetector(
     // Reused letterbox input bitmap (avoids a per-frame ARGB allocation).
     private var lbBitmap: Bitmap? = null
     private val lbPaint = Paint().apply { isFilterBitmap = true; isAntiAlias = true }
+    private val lbCanvas = Canvas()
+    private val lbMatrix = android.graphics.Matrix()
 
     companion object {
         private const val TAG = "ObjectDetector"
@@ -189,14 +192,13 @@ class ObjectDetector(
 
     private fun letterbox(src: Bitmap, t: Letterbox.Transform): Bitmap {
         val out = lbBitmap ?: Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888)
-            .also { lbBitmap = it }
-        val canvas = Canvas(out)
-        canvas.drawColor(Color.rgb(114, 114, 114))   // standard YOLO gray pad
-        val m = android.graphics.Matrix().apply {
-            postScale(t.scale, t.scale)
-            postTranslate(t.padX, t.padY)
-        }
-        canvas.drawBitmap(src, m, lbPaint)
+            .also { lbBitmap = it; lbCanvas.setBitmap(it) }
+        // Canvas and Matrix are reused: allocating them per frame churned a native-backed
+        // Canvas peer (finalizer-tracked) on every analysed frame.
+        lbCanvas.drawColor(letterboxPad)   // standard YOLO gray pad
+        lbMatrix.setScale(t.scale, t.scale)
+        lbMatrix.postTranslate(t.padX, t.padY)
+        lbCanvas.drawBitmap(src, lbMatrix, lbPaint)
         return out
     }
 
@@ -254,6 +256,7 @@ class ObjectDetector(
     }
 
     fun close() {
+        lbCanvas.setBitmap(null)
         lbBitmap?.recycle(); lbBitmap = null
         try { preparedModel.close() } finally { ortEnvironment.close() }
     }
