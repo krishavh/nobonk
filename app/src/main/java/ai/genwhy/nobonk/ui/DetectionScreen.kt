@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
@@ -824,15 +825,21 @@ fun CameraPreview(
 
 @Composable
 fun CameraPermissionScreen(onRetry: () -> Unit, onSettings: () -> Unit, onExit: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(NB.Night).safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Wordmark(48)
-        Spacer(Modifier.height(24.dp))
-        Text("Camera access is off", color = NB.Ink, style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(12.dp))
-        Text("NoBonk needs the rear camera to scan. Frames stay on your phone. You can allow access now, or open Settings if Android no longer shows the permission prompt.", color = NB.Sub, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onRetry) { Text("Allow camera") }
-        TextButton(onClick = onSettings) { Text("Open app settings") }
-        TextButton(onClick = onExit) { Text("Not now") }
+    // Scrolls like the other setup screens: at the largest text sizes the buttons would otherwise be
+    // pushed off-screen, and once Android stops showing the prompt "Open app settings" is the only way
+    // forward. Still centered whenever everything fits.
+    Box(Modifier.fillMaxSize().background(NB.Night).safeDrawingPadding(), contentAlignment = Alignment.Center) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Wordmark(48)
+            Spacer(Modifier.height(24.dp))
+            Text("Camera access is off", color = NB.Ink, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center,
+                modifier = Modifier.semantics { heading() })
+            Spacer(Modifier.height(12.dp))
+            Text("NoBonk needs the rear camera to scan. Frames stay on your phone. You can allow access now, or open Settings if Android no longer shows the permission prompt.", color = NB.Sub, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(24.dp))
+            Button(onClick = onRetry) { Text("Allow camera", textAlign = TextAlign.Center) }
+            TextButton(onClick = onSettings) { Text("Open app settings", textAlign = TextAlign.Center) }
+            TextButton(onClick = onExit) { Text("Not now", textAlign = TextAlign.Center) }
+        }
     }
 }
