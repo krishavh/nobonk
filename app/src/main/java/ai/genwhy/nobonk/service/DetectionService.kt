@@ -675,7 +675,11 @@ open class DetectionService : LifecycleService() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "Detection Service", NotificationManager.IMPORTANCE_LOW)
+            // Shown in Android's notification settings: plain words, from resources. Re-creating an
+            // existing channel only renames it; the user's importance choice is kept.
+            val channel = NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_LOW).apply {
+                description = getString(R.string.notification_channel_description)
+            }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
             getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(WALKING_CHANNEL_ID, "Walking reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {

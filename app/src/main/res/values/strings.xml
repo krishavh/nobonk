@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NoBonk</string>
+    <string name="notification_channel_name">Background scanning</string>
+    <string name="notification_channel_description">Shows while NoBonk watches the path ahead with the app closed, with a Stop button.</string>
 </resources>
