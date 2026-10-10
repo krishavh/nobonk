@@ -27,8 +27,10 @@ android {
         applicationId = "ai.genwhy.nobonk"
         minSdk = 29        // Android 10+ (floor 26 for the SYSTEM_ALERT_WINDOW overlay; 29 ≈ 95%+ device reach)
         targetSdk = 36     // Android 16 — required for new-app submissions (Play API-36 cutoff)
-        versionCode = 24
-        versionName = "1.0.22"
+        versionCode = 25
+        versionName = "1.0.23"
+        // Walking reminders need physical-device acceptance before public release.
+        buildConfigField("boolean", "WALKING_REMINDERS_AVAILABLE", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables {
@@ -75,6 +77,7 @@ android {
         }
         debug {
             isMinifyEnabled = false     // Keep debug builds fast and readable
+            buildConfigField("boolean", "WALKING_REMINDERS_AVAILABLE", "true")
         }
         // Private device acceptance without replacing a Google Play-signed install.
         // Uses release optimization and main sources, not debug test harnesses.

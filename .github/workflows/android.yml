@@ -54,6 +54,7 @@ jobs:
       - name: Release AAB (unsigned) + 16 KB alignment check
         run: |
           ./gradlew --no-daemon bundleRelease -Pbundle
+          python scripts/verify_release_manifest.py
           bash scripts/check_16kb_alignment.sh
       - uses: actions/upload-artifact@v4
         with:

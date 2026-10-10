@@ -146,7 +146,11 @@ class MainActivity : ComponentActivity() {
 
         val prefs = getSharedPreferences("nobonk_prefs", Context.MODE_PRIVATE)
         cueChoiceDone = prefs.getBoolean("cue_choice_done", false)
-        walkingEnabled = prefs.getBoolean("walking_mode_enabled", false) && ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this) && ai.genwhy.nobonk.motion.WalkingMonitor.supported(this)
+        walkingEnabled = BuildConfig.WALKING_REMINDERS_AVAILABLE && prefs.getBoolean("walking_mode_enabled", false) && ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this) && ai.genwhy.nobonk.motion.WalkingMonitor.supported(this)
+        if (!BuildConfig.WALKING_REMINDERS_AVAILABLE) {
+            prefs.edit().remove("walking_mode_enabled").apply()
+            getSystemService(android.app.NotificationManager::class.java).cancel(DetectionService.WALKING_NOTIFICATION_ID)
+        }
         showHistory = savedInstanceState?.getBoolean(STATE_HISTORY_VISIBLE) == true
         showLicenses = savedInstanceState?.getBoolean(STATE_LICENSES_VISIBLE) == true
         walkingStatus = savedInstanceState?.getString(STATE_WALKING_STATUS).orEmpty()
@@ -172,7 +176,7 @@ class MainActivity : ComponentActivity() {
         // prompted after they read the rationale and tap "continue".
         // Permissions are requested only once the gate is cleared for this launch (return to a
         // live session); otherwise they are requested from the OK / accept callbacks below.
-        showWalkingPrompt = savedInstanceState?.getBoolean("walking_prompt_visible") == true
+        showWalkingPrompt = BuildConfig.WALKING_REMINDERS_AVAILABLE && savedInstanceState?.getBoolean("walking_prompt_visible") == true
         if (showWalkingPrompt || savedInstanceState?.getBoolean("scan_stopped") == true) viewModel.stopScanning()
         if (savedInstanceState == null) consumeWalkingReminder(intent)
         else intent.removeExtra(DetectionService.EXTRA_WALKING_REMINDER)
@@ -317,6 +321,7 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra(DetectionService.EXTRA_WALKING_REMINDER, false) != true) return
         intent.removeExtra(DetectionService.EXTRA_WALKING_REMINDER)
         viewModel.stopScanning() // Before initialization / composition: tapping a reminder is NOT consent.
+        if (!BuildConfig.WALKING_REMINDERS_AVAILABLE) return
         showWalkingPrompt = true
         showHistory = false
         showLicenses = false
@@ -425,6 +430,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setWalkingMode(enabled: Boolean) {
+        if (!BuildConfig.WALKING_REMINDERS_AVAILABLE) return
         walkingStatus = ""
         if (!enabled) {
             setWalkingPreference(false)
@@ -440,6 +446,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun armWalkingMode() {
+        if (!BuildConfig.WALKING_REMINDERS_AVAILABLE) return
         if (sessionStartPending) return
         if (!walkingEnabled || !ai.genwhy.nobonk.motion.WalkingMonitor.permitted(this)) {
             walkingStatus = "Enable walking reminders and allow motion access first."
@@ -456,6 +463,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startDetectionService(waitForWalking: Boolean = false) {
+        if (waitForWalking && !BuildConfig.WALKING_REMINDERS_AVAILABLE) return
         if (sessionStartPending || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
         if (!ai.genwhy.nobonk.safety.SessionState.gate.cameraAllowed(ackVersion)) return   // never start detection past a pending gate
         if (!waitForWalking && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {

@@ -150,6 +150,12 @@ open class DetectionService : LifecycleService() {
                 // Never restore camera authorization after process death, reboot or an unknown intent.
                 if (intent?.action != ACTION_START) { stopSelf(); return START_NOT_STICKY }
                 val requestedWalking = intent.getBooleanExtra(EXTRA_WAIT_FOR_WALKING, false)
+                if (requestedWalking && !ai.genwhy.nobonk.BuildConfig.WALKING_REMINDERS_AVAILABLE) {
+                    // Reject stale walking requests without disrupting a live manual scan.
+                    reportArmResult(intent, 0)
+                    if (!ai.genwhy.nobonk.safety.SessionState.gate.serviceActive) stopSelf()
+                    return START_NOT_STICKY
+                }
                 if (!life.onStartRequested(waitForWalking = requestedWalking)) {
                     reportArmResult(intent, 0)
                     if (life.isStopped) { stopSelf(); return START_NOT_STICKY }
@@ -695,7 +701,7 @@ open class DetectionService : LifecycleService() {
                 description = getString(R.string.notification_channel_description)
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-            getSystemService(NotificationManager::class.java).createNotificationChannel(
+            if (ai.genwhy.nobonk.BuildConfig.WALKING_REMINDERS_AVAILABLE) getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(WALKING_CHANNEL_ID, "Walking reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "One reminder per explicitly armed walk; never starts scanning automatically."
                 })

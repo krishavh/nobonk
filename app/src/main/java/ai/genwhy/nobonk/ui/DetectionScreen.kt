@@ -225,7 +225,7 @@ fun DetectionScreen(
         } else if (frameAlert == AlertLevel.HIGH && phoneAngleQuality != SensorMonitor.AngleQuality.BAD) {
             LookUpOverlay(className = viewModel.lookUpLabel ?: "person", bearingPan = viewModel.bearingPan)
         }
-        if (showWalkingSetup) {
+        if (ai.genwhy.nobonk.BuildConfig.WALKING_REMINDERS_AVAILABLE && showWalkingSetup) {
             AlertDialog(
                 onDismissRequest = { showWalkingSetup = false },
                 title = { Text("Walking reminder · Experimental") },
@@ -581,7 +581,7 @@ internal fun ControlDock(
         }
           }
         }
-        TextButton(onClick = onWalkingSetup, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        if (ai.genwhy.nobonk.BuildConfig.WALKING_REMINDERS_AVAILABLE) TextButton(onClick = onWalkingSetup, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(if (walkingEnabled) "Walking reminder · ask once" else "Walking reminder · optional", color = NB.Accent, fontSize = 12.sp)
         }
         // Row 3 — actions
