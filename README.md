@@ -37,9 +37,9 @@ Current Android distance estimates are approximate, and hazards may be missed. N
 
 ## Set up in the foreground. Use it in the background.
 
-**Development candidate:** This branch prepares 1.0.22. A source update is not proof of Google Play availability. The ask-first walking reminder and the background refinements below are still awaiting release verification.
+**Release candidate 1.0.24 (27):** This branch adds quieter repeat alerts after short camera interruptions, a guard against height-only approach estimates for clipped people, consistent low-light checks, complete object-history loading, and a spoken video guide in Settings. The guide works offline, starts only when you press Play, and stops scanning before it opens. [Watch the guide on nobonk.com](https://nobonk.com/guide/). A source update is not proof of Google Play availability. Walking reminders are disabled in the 1.0.23 manual-scanning release and this candidate.
 
-**Android controls:** Change People/Everything from the top status tag or the labelled **Settings** button. Find **Detection history** inside Settings. Optional walking reminders are directly below the main controls: after sustained walking, NoBonk asks once whether to start. The camera stays off until you choose Start scanning; ignoring or dismissing the reminder does not repeat it. Start scanning is compact, and Stop stays available in the settings sheet while scanning.
+**Android controls:** Change People/Everything from the top status tag or the labelled **Settings** button. Find **Detection history** inside Settings. Scanning starts only when you choose Start scanning. Start scanning is compact, and Stop stays available in the settings sheet while scanning.
 
 **Android 1.0.18:** People is the default, including on the first launch after this update. People mode excludes object and surface warnings. Choose Everything explicitly to include objects such as chairs and experimental wall/ground warnings. Person alerts require consecutive matching detections; boxes remain visible while confirmation is pending. Detection can still miss or misidentify hazards.
 
@@ -63,9 +63,9 @@ Unretouched frames from a developer-supplied phone recording—not mockups.
 
 These show the interface in one test, not verified detection accuracy. [Watch the real walkthrough](https://nobonk.com/#background).
 
-## Join the Android closed test
+## Get NoBonk for Android
 
-Use the same Google account to [join the tester group](https://groups.google.com/g/nobonk-android-testers), then [opt into the Google Play test and install](https://play.google.com/apps/testing/ai.genwhy.nobonk). Stay opted in for at least 14 consecutive days, try the app regularly, and send feedback to support@genwhy.ai. [Full testing instructions](https://nobonk.com/#testing-guide).
+[Download NoBonk from Google Play](https://play.google.com/store/apps/details?id=ai.genwhy.nobonk). Production 1.0.23 (25) was verified live on November 11, 2026. This branch prepares the next update; a source commit does not mean Google has approved or delivered it. Send feedback from Settings or email support@nobonk.com. [Setup and testing guide](https://nobonk.com/#testing-guide).
 
 ## How it works
 
