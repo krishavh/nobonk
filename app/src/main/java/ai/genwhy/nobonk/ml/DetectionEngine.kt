@@ -187,7 +187,7 @@ class DetectionEngine(private val appContext: Context) {
      */
     // ── Zero-allocation frame path (T-PERF-FRAME) ───────────────────────────────
     // CameraX hands us an RGBA_8888 plane. We copy it into a REUSABLE raw bitmap, then
-    // rotate-to-upright + downscale in ONE Canvas draw into a REUSABLE work bitmap.
+    // Rotate/downscale into a reusable work bitmap; dim frames also get a boosted draw.
     // Previously: toBitmap() + createBitmap(rotate) + createScaledBitmap = 3 allocations
     // per frame (GC churn, frame-time spikes). Now: none in steady state.
     private var rawBitmap: Bitmap? = null
@@ -202,6 +202,8 @@ class DetectionEngine(private val appContext: Context) {
     private var lastInferMs = 0L
     private var appliedGain = 1f
     private val gainMatrix = ColorMatrix()
+    private var gainFilter: ColorMatrixColorFilter? = null
+    private var sceneBrightnessAndVariance = 128f to 0f
 
     private fun proxyToRawBitmap(p: ImageProxy): Bitmap {
         val w = p.width; val h = p.height
@@ -232,7 +234,7 @@ class DetectionEngine(private val appContext: Context) {
         return bmp
     }
 
-    /** Rotate to upright and downscale so the longest edge == [inputSize] — one draw, reusable output. */
+    /** Rotate/downscale into reusable output; dim frames get a second, boosted draw. */
     private fun toUprightWork(raw: Bitmap, rotationDeg: Int, crop: android.graphics.Rect? = null): Bitmap {
         val g = if (crop == null || crop.isEmpty) FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize)
                 else FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize, crop.left, crop.top, crop.width(), crop.height())
@@ -247,15 +249,23 @@ class DetectionEngine(private val appContext: Context) {
         workMatrix.postRotate(rotationDeg.toFloat())
         workMatrix.postTranslate(g.shiftX, g.shiftY)
         workMatrix.postScale(g.scale, g.scale)
-        // Night boost: brighten the detector input in the same draw when the last frame was dark.
+        // Measure the actual scene before night boost. Mean and variance must use the
+        // same unmodified pixels; undoing gain after clipping cannot recover them.
+        workPaint.colorFilter = null
+        workCanvas.drawBitmap(raw, workMatrix, workPaint)
+        sceneBrightnessAndVariance = brightnessAndVariance(out)
+        // Only dark frames need a second draw. Reuse the bitmap, canvas and filter.
         val gain = LowLight.gainFor(lastMeanBrightness)
         if (gain != appliedGain) {
             appliedGain = gain
-            workPaint.colorFilter = if (gain > LowLight.BOOST_ACTIVE_GAIN) {
+            gainFilter = if (gain > LowLight.BOOST_ACTIVE_GAIN) {
                 gainMatrix.setScale(gain, gain, gain, 1f); ColorMatrixColorFilter(gainMatrix)
             } else null
         }
-        workCanvas.drawBitmap(raw, workMatrix, workPaint)
+        if (gainFilter != null) {
+            workPaint.colorFilter = gainFilter
+            workCanvas.drawBitmap(raw, workMatrix, workPaint)
+        }
         return out
     }
 
@@ -311,9 +321,7 @@ class DetectionEngine(private val appContext: Context) {
         }
 
         // ── Blocked-camera check: low brightness AND low variance (fixes ML-06) ──
-        val (boostedMean, variance) = brightnessAndVariance(work)
-        // Undo the boost so the blocked/low-light logic sees the true scene brightness.
-        val meanBrightness = boostedMean / appliedGain
+        val (meanBrightness, variance) = sceneBrightnessAndVariance
         val nightBoost = appliedGain > LowLight.BOOST_ACTIVE_GAIN
         lastMeanBrightness = meanBrightness
         val blocked = LowLight.isBlocked(meanBrightness, variance)

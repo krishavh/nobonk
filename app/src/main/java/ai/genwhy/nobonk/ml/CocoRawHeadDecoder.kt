@@ -25,6 +25,9 @@ internal object CocoRawHeadDecoder {
 
     fun classNameFor(classId: Int): String = names[classId] ?: "object"
 
+    /** Persistence uses the same labels as inference, including the legacy fallback. */
+    val validHistoryClassNames: Set<String> = names.values.toSet() + "object"
+
     fun decode(
         output: Array<Array<FloatArray>>,
         isStandard: Boolean,

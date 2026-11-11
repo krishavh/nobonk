@@ -118,8 +118,24 @@ class ApproachTracker(
                 idMap[det.id] = match.id
                 val dtSec = ((now - match.lastSeen).coerceAtLeast(1L)) / 1000f
                 val instRate = (fill - match.fill) / dtSec
+                // Tilting the phone can reveal more of a person cut off by a frame edge.
+                // That height growth alone is not evidence of motion toward the camera.
+                // Require width to grow too; the ordinary fill-based warning remains active.
+                val clippedPerson = det.className == "person" &&
+                    (match.box.top <= 0.01f || det.boundingBox.top <= 0.01f ||
+                        match.box.bottom >= 0.99f || det.boundingBox.bottom >= 0.99f)
+                val relativeHeightGrowth = (fill - match.fill) / match.fill.coerceAtLeast(0.001f)
+                val relativeWidthGrowth = (det.boundingBox.width - match.box.width) /
+                    match.box.width.coerceAtLeast(0.001f)
+                val growthCorroborated = !clippedPerson ||
+                    relativeWidthGrowth >= relativeHeightGrowth * 0.5f
                 // EMA smoothing to reject single-frame noise.
-                match.fillVelocity = match.fillVelocity * 0.6f + instRate * 0.4f
+                if (growthCorroborated) {
+                    match.fillVelocity = match.fillVelocity * 0.6f + instRate * 0.4f
+                } else {
+                    match.fillVelocity = 0f
+                    match.closingStreak = 0
+                }
                 val prevCenterX = match.box.centerX
                 val centerX = det.boundingBox.centerX
                 match.lateralDriftEma =

@@ -65,8 +65,11 @@ class AlertCadence {
         return true
     }
 
-    /** A covered/unavailable camera contributes no clear-scene evidence. */
-    fun interruptObservation() { clearSince = null }
+    /** A covered/unavailable camera proves neither a clear scene nor a new person's identity. */
+    fun interruptObservation() {
+        clearSince = null
+        identityContinuous = false
+    }
 
     fun reset() {
         lastEmission = null; lastCall = null; lastObservation = null; clearSince = null
