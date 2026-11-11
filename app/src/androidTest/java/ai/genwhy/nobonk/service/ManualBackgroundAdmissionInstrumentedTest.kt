@@ -14,7 +14,9 @@ import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.printToLog
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -33,6 +35,7 @@ import org.junit.Test
 class ManualBackgroundAdmissionInstrumentedTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private var diagnostics: () -> String = { "Activity not launched" }
 
     private fun await(label: String, timeoutMs: Long = 60_000, condition: () -> Boolean) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
@@ -45,7 +48,16 @@ class ManualBackgroundAdmissionInstrumentedTest {
             if (ready) return
             SystemClock.sleep(50)
         }
-        fail("Timed out: $label; service failure=${SessionState.backgroundFailure}")
+        var state = ""
+        instrumentation.runOnMainSync {
+            state = "${diagnostics()}; gateCleared=${SessionState.gate.cleared}; " +
+                "activityResumed=${SessionState.gate.activityResumed}; " +
+                "serviceActive=${SessionState.gate.serviceActive}; " +
+                "walkingSession=${SessionState.walkingSession}; " +
+                "userStopped=${SessionState.backgroundStoppedByUser}"
+        }
+        runCatching { compose.onRoot(useUnmergedTree = true).printToLog("ManualAdmission") }
+        fail("Timed out: $label; service failure=${SessionState.backgroundFailure}; $state")
     }
 
     private fun viewModel(activity: MainActivity): DetectionViewModel =
@@ -95,6 +107,12 @@ class ManualBackgroundAdmissionInstrumentedTest {
             lateinit var original: MainActivity
             lateinit var model: DetectionViewModel
             scenario.onActivity { original = it; model = viewModel(it) }
+            diagnostics = {
+                "initializing=${model.isInitializing}; status=${model.initializationStatus}; " +
+                    "scanning=${model.scanningEnabled}; battery=${model.batteryLevel}; " +
+                    "cameraAvailable=${camera.available}; cameraError=${model.cameraError}; " +
+                    "lifecycle=${original.lifecycle.currentState}"
+            }
             await("foreground model and camera ready") { !model.isInitializing && camera.available == false }
             compose.onNodeWithText("Run in background").assertIsDisplayed().performClick()
 
