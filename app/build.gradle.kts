@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -27,8 +29,8 @@ android {
         applicationId = "ai.genwhy.nobonk"
         minSdk = 29        // Android 10+ (floor 26 for the SYSTEM_ALERT_WINDOW overlay; 29 ≈ 95%+ device reach)
         targetSdk = 36     // Android 16 — required for new-app submissions (Play API-36 cutoff)
-        versionCode = 25
-        versionName = "1.0.23"
+        versionCode = 27
+        versionName = "1.0.24"
         // Walking reminders need physical-device acceptance before public release.
         buildConfigField("boolean", "WALKING_REMINDERS_AVAILABLE", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -120,6 +122,35 @@ android {
         }
     }
 }
+
+// Model binaries are distributed separately from Git. Fail the build rather than
+// create an installable app whose scanner cannot load either shipped model.
+val verifiedModels = mapOf(
+    "yolo26n_416.onnx" to "9931a595afd6c780bdbe5ef12e99d34526b6f30dbc7641cf920572798e4ed96d",
+    "yolo26s_416.onnx" to "706b34041df74890c4d5720b26e47ced3d825a3b7dd1bad6cf73fcdcb7740356"
+)
+val modelAssets = layout.projectDirectory.dir("src/main/assets")
+val verifyBundledModels by tasks.registering {
+    inputs.files(verifiedModels.keys.map { modelAssets.file(it) })
+    doLast {
+        verifiedModels.forEach { (name, expected) ->
+            val model = modelAssets.file(name).asFile
+            check(model.isFile) { "Missing $name. Restore the verified release model before building." }
+            val digest = MessageDigest.getInstance("SHA-256")
+            model.inputStream().use { stream ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val count = stream.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            check(actual == expected) { "Unexpected model checksum for $name. Review the model change before building." }
+        }
+    }
+}
+tasks.named("preBuild").configure { dependsOn(verifyBundledModels) }
 
 dependencies {
     // Core Android
