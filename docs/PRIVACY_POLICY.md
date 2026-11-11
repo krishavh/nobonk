@@ -1,10 +1,10 @@
 # NoBonk — Privacy Policy
 
-**Last updated:** 2026-10-02
+**Last updated:** 2026-10-10
 **App:** NoBonk (`ai.genwhy.nobonk`)
 **Developer:** Published by a parent/guardian on behalf of Krishav (student author).
-**Contact:** support@genwhy.ai (Haarith, parent and account holder), or an issue at github.com/krishavh/nobonk.
-**Public URL of this policy:** https://krishavh.github.io/privacy/nobonk.html (short-form page; this file is the long-form text).
+**Contact:** support@nobonk.com (Haarith, parent and account holder), or an issue at github.com/krishavh/nobonk.
+**Public URL of this policy:** https://nobonk.com/privacy/ (short-form page; this file is the long-form text).
 
 > **Plain-language summary:** NoBonk runs entirely on your phone. It uses the
 > back camera to watch the path ahead and warn you before you walk into
@@ -60,9 +60,11 @@ can be erased at any time (see §7).
   **never transmitted** anywhere.
 - You can turn it off again, or delete all stored locations, at any time.
 
-## Optional walking mode — experimental, off by default
+## Optional walking mode — earlier experimental builds
 
-In Android 1.0.21 and later, the optional walking reminder requests Physical activity (`ACTIVITY_RECOGNITION`) permission. After you explicitly arm a session, local step-detector events and timestamps are processed temporarily in memory to recognize sustained walking and ask once whether you want to start NoBonk. Steps are not saved in history, uploaded, shared, sold, or used for advertising or fitness profiles. NoBonk does not use Health Connect or health records.
+Walking reminders are disabled in the manual-scanning 1.0.23 release and 1.0.24 guide candidate. These builds do not request Physical activity permission.
+
+In the experimental Android 1.0.21–1.0.22 builds, the optional walking reminder requests Physical activity (`ACTIVITY_RECOGNITION`) permission. After you explicitly arm a session, local step-detector events and timestamps are processed temporarily in memory to recognize sustained walking and ask once whether you want to start NoBonk. Steps are not saved in history, uploaded, shared, sold, or used for advertising or fitness profiles. NoBonk does not use Health Connect or health records.
 
 The camera stays closed while waiting and after the reminder. Scanning starts only after you choose **Start scanning**. Ignoring or dismissing the reminder does not repeat it; another reminder requires explicit rearming. Motion monitoring ends when the reminder is posted, when you press Stop or reopen NoBonk while waiting, or after a 30-minute waiting period (cleanup occurs on the next process wake if the phone sleeps). An ongoing notification shows waiting status and Stop. Process death or reboot never rearms it. Only the setup preference is stored. You can disable it or revoke Physical activity access in Android Settings; manual background scanning works without that permission. Sensor support and screen-off behavior vary by phone. Older 1.0.16–1.0.20 walking mode could start and pause scanning within an explicitly armed session; updating to 1.0.21 replaces that behavior with this reminder.
 
@@ -110,17 +112,20 @@ If this policy changes, the updated version will be posted at the same public UR
 
 ## 11. Contact
 
-Questions or requests: support@genwhy.ai (Haarith, parent and account holder).
+Questions or requests: support@nobonk.com (Haarith, parent and account holder).
 
 ---
 
 ### Publication note (for the developer)
-The public short-form page is https://krishavh.github.io/privacy/nobonk.html (repo
-`krishavh/krishavh.github.io`); Play Console → App content → Privacy policy points at it.
+The public short-form page is https://nobonk.com/privacy/; keep the Play Console privacy-policy URL aligned with this address.
 Keep this file and that page in agreement whenever permissions or stored data change.
 
-## Optional feedback (1.0.22 development candidate)
+## Optional feedback
 
 Settings → Send feedback stops scanning and prepares a draft in the email app you choose. You write the message and decide whether to include the displayed app version, phone model, Android version and current detection/cue settings. NoBonk does not attach camera images, detection history, sensor readings or location. Nothing is sent automatically. Copy feedback places the displayed report on the system clipboard only when you choose that action.
 
 If you send the email, your email provider handles delivery and NoBonk support receives your message and sender address so we can investigate and reply. Avoid including sensitive information. The draft remains in the interface during ordinary screen recreation; NoBonk does not add it to detection history or a feedback database. Close the feedback screen to discard the in-app draft.
+
+## Offline video guide (1.0.24)
+
+Settings → Watch the video guide stops scanning and opens a video included in the app. It does not use the camera or the internet. Playback starts only when you press Play and pauses when you leave the guide. The optional website link opens nobonk.com in your browser, where normal website hosting logs may apply.

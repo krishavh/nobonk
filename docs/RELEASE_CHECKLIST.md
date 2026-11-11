@@ -1,6 +1,13 @@
 # NoBonk — Play Store Release Checklist
 
-## Current release state — verified October 2, 2026
+## Current release state — verified November 11, 2026
+
+- Production 1.0.23 (25) is live at 100% rollout in Play Console.
+- This branch prepares 1.0.24 (27), based on that production source plus the offline guide and audit fixes. Submission and approval are separate steps; see the release review for validation evidence.
+- Walking reminders remain disabled in release and preview builds. No new permissions are needed.
+- Use the existing local upload keystore. Do not regenerate it or put passwords in logs or source.
+
+## Historical release state — October 2, 2026
 
 - Google Play Console says **“We have your application for production access”** and **“We're reviewing your application form.”** It records the application on Thursday, October 1 at 10:47 AM. Production is still inactive. Do not submit a duplicate application or describe access as approved.
 - The last verified closed-test release is 1.0.20 (22). The prior 1.0.21 (23) draft and the local 1.0.22 (24) usability candidate are not proof of tester availability.
