@@ -1,5 +1,6 @@
 package ai.genwhy.nobonk.data
 
+import ai.genwhy.nobonk.ml.CocoRawHeadDecoder
 import org.json.JSONObject
 import java.util.UUID
 
@@ -67,12 +68,10 @@ data class DetectionEvent(
         private val VALID_ALERT_LEVELS = setOf("LOW", "MEDIUM", "HIGH")
 
         /**
-         * Known COCO classes emitted by ObjectDetector.classNameFor (keep in sync).
-         * "object" is the catch-all bucket for detections outside the curated classes.
+         * All labels emitted by the shipped decoder, plus the legacy "object" fallback.
+         * Sharing this list prevents valid Everything-mode history from being discarded.
          */
-        private val VALID_CLASS_NAMES = setOf(
-            "person", "bicycle", "car", "motorcycle", "bus", "truck", "dog", "cat", "object"
-        )
+        private val VALID_CLASS_NAMES = CocoRawHeadDecoder.validHistoryClassNames
 
         /**
          * Legacy "no GPS fix" sentinel written by older app versions: an exact
