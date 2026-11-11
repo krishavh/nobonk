@@ -405,7 +405,8 @@ internal fun ControlDock(
     /** When non-null the pipeline is not watching (blocked / starting / off-angle); shown instead of a detection summary. */
     pausedReason: String? = null,
     /** Camera heuristics (wall / ground) flag something even though the model recognised no object. */
-    heuristicObstacle: Boolean = false
+    heuristicObstacle: Boolean = false,
+    onShowVideoGuide: (() -> Unit)? = null
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showFeedback by rememberSaveable { mutableStateOf(false) }
@@ -556,6 +557,12 @@ internal fun ControlDock(
             Spacer(Modifier.height(6.dp))
             OutlinedButton(onClick = { onStopBackground(); showSettings = false; showFeedback = true },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Send feedback") }
+            OutlinedButton(onClick = {
+                onStopBackground()
+                showSettings = false
+                if (onShowVideoGuide != null) onShowVideoGuide()
+                else dockContext.startActivity(android.content.Intent(dockContext, ai.genwhy.nobonk.VideoGuideActivity::class.java))
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Watch the video guide · offline") }
             TextButton(onClick = { showSettings = false; showBackgroundHelp = true },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Camera angle & background help") }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
