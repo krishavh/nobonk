@@ -49,6 +49,9 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".VideoGuideActivity" android:exported="false"
+            android:theme="@style/Theme.PersonDetection" />
+
         <service
             android:name=".service.DetectionService"
             android:enabled="true"
