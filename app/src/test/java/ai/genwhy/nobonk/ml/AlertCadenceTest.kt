@@ -65,7 +65,8 @@ class AlertCadenceTest {
         // Tracker may have assigned a new ID after the off-angle frame.
         assertFalse(gate.shouldEmit(HIGH, "new-a", 300, true))
         assertFalse(gate.shouldEmit(HIGH, "new-a", 1499, true))
-        assertTrue(gate.shouldEmit(HIGH, "new-a", 1500, true))
+        assertFalse(gate.shouldEmit(HIGH, "new-a", 1500, true))
+        assertTrue(gate.shouldEmit(HIGH, "new-a", 6000, true))
     }
     @Test fun continuousTrackChurnStillHasAGlobalLimit() {
         val gate = AlertCadence()

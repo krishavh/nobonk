@@ -21,6 +21,11 @@ class NmsTest {
 }
 
 class LowLightTest {
+    @Test fun `raw variance preserves shipped night scene boundary`() {
+        assertTrue(LowLight.isBlocked(20f, 6.3f))
+        assertFalse(LowLight.isBlocked(20f, 6.4f))
+        assertFalse(LowLight.isBlocked(20f, 16f))
+    }
     @Test fun `flat dark lens is blocked`() = assertTrue(LowLight.isBlocked(10f, 5f))
     @Test fun `dark but structured street is not blocked`() = assertFalse(LowLight.isBlocked(25f, 400f))
     @Test fun `bright scene is not blocked`() = assertFalse(LowLight.isBlocked(120f, 800f))
