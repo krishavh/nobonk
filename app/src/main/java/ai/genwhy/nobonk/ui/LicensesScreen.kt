@@ -35,9 +35,9 @@ private val LIBRARIES = listOf(
 )
 
 private const val SOURCE_URL = "github.com/krishavh/nobonk"
-private const val PRIVACY_URL = "krishavh.github.io/privacy/nobonk.html"
+private const val PRIVACY_URL = "nobonk.com/privacy/"
 
-/** About, credits and open-source licenses. Reached from History → "About". */
+/** About, credits and open-source licenses. Reached from Settings. */
 @Composable
 fun LicensesScreen(onBack: () -> Unit, updateStatus: String = "", onCheckUpdates: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(NB.Night).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
@@ -106,9 +106,13 @@ fun LicensesScreen(onBack: () -> Unit, updateStatus: String = "", onCheckUpdates
             }
         }
         Spacer(Modifier.height(22.dp))
-        SectionLabel("Source & privacy")
+        SectionLabel("Website, support & privacy")
         Spacer(Modifier.height(8.dp))
         Card {
+            Text("nobonk.com · support@nobonk.com", color = NB.Accent, fontSize = 14.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("Video guide music: Inspired — Kevin MacLeod (incompetech.com). CC BY 4.0: creativecommons.org/licenses/by/4.0/. Edited and mixed under synthetic Kokoro narration. The bundled guide plays offline.", color = NB.Sub, fontSize = 12.sp)
+            Spacer(Modifier.height(8.dp))
             Text("NoBonk is itself AGPL-3.0. Source, model recipe and issue tracker:", color = NB.Sub, fontSize = 13.sp)
             Text(SOURCE_URL, color = NB.Accent, fontSize = 14.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(vertical = 4.dp))
             Text("Privacy policy:", color = NB.Sub, fontSize = 13.sp)

@@ -18,7 +18,7 @@ class OrtPowerExperimentTest {
         val env = OrtEnvironment.getEnvironment()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         for (model in listOf("yolo26n_416.onnx", "yolo26s_416.onnx")) {
-            val bytes = context.assets.open(model).use { it.readBytes() }
+            val modelFile = BundledModelFile.load(context, model)
             // Forward then reverse ordering: shared-host load still prevents phone-performance claims.
             for (policy in listOf("default", "off", "bounded", "bounded", "off", "default")) {
                 OrtSession.SessionOptions().use { options ->
@@ -28,7 +28,7 @@ class OrtPowerExperimentTest {
                         options.addConfigEntry("session.intra_op.spin_duration_us", "1000")
                         options.addConfigEntry("session.intra_op.spin_backoff_max", "8")
                     }
-                    env.createSession(bytes, options).use { session ->
+                    env.createSession(modelFile.file.absolutePath, options).use { session ->
                         val input = ByteBuffer.allocateDirect(4 * 3 * 416 * 416)
                             .order(ByteOrder.nativeOrder()).asFloatBuffer()
                         OrtFloatRunner(env, session, input, longArrayOf(1, 3, 416, 416)).use { runner ->

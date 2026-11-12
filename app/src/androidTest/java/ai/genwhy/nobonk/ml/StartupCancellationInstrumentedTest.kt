@@ -2,13 +2,12 @@ package ai.genwhy.nobonk.ml
 
 import ai.genwhy.nobonk.viewmodel.AccuracyMode
 import ai.genwhy.nobonk.viewmodel.DetectionViewModel
-import android.os.Build
+import ai.genwhy.nobonk.requireIsolatedEmulator
 import android.os.SystemClock
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /** Real ViewModel/jobs/native models; no camera or physical-device state changes. */
@@ -49,7 +48,7 @@ class StartupCancellationInstrumentedTest {
     }
 
     @Test fun immediateStopStartAndModelReplacementRecoverWithoutStaleLoadingState() {
-        assumeTrue("Use the isolated emulator only", Build.MODEL.contains("sdk_gphone"))
+        requireIsolatedEmulator()
         val store = ViewModelStore()
         lateinit var model: DetectionViewModel
         lateinit var replacement: AccuracyMode

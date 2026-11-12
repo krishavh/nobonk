@@ -21,8 +21,13 @@ object LowLight {
     /** Default mean-luma threshold below which a frame counts as "dark". */
     private const val DEFAULT_BRIGHTNESS_THRESHOLD = 35f
 
-    /** Default luma-variance threshold below which a frame counts as "flat". */
-    private const val DEFAULT_VARIANCE_THRESHOLD = 40f
+    /**
+     * Raw-luma threshold equivalent to the shipped steady dark-scene behavior:
+     * the old pipeline compared variance after 2.5x boost to 40 (40 / 2.5² = 6.4).
+     * Measuring raw pixels now avoids the first-frame flip without blocking more
+     * dim scenes than the public release did.
+     */
+    private const val DEFAULT_VARIANCE_THRESHOLD = 6.4f
 
     /** Default mean-luma threshold below which a frame counts as "dim" (banner). */
     private const val DEFAULT_LOW_LIGHT_THRESHOLD = 60f
@@ -53,7 +58,7 @@ object LowLight {
      * @param brightnessThreshold mean luma below which the scene counts as "dark";
      *                            default 35f
      * @param varianceThreshold   luma variance below which the scene counts as "flat";
-     *                            default 40f
+     *                            default 6.4f on unboosted pixels
      * @return `true` only when the frame is both dark and flat, i.e. plausibly covered
      */
     fun isBlocked(

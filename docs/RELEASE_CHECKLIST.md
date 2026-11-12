@@ -1,5 +1,22 @@
 # NoBonk — Play Store Release Checklist
 
+## Current release state — verified November 11, 2026
+
+- Production 1.0.24 (27) is active in Play Console in 178 countries/regions.
+- The matching source is tagged [v1.0.24-v27](https://github.com/krishavh/nobonk/releases/tag/v1.0.24-v27). This release includes the offline guide and audit fixes. See the release review for validation evidence.
+- Walking reminders remain disabled in release and preview builds. No new permissions are needed.
+- Use the existing local upload keystore. Do not regenerate it or put passwords in logs or source.
+
+## Historical release state — October 2, 2026
+
+- Google Play Console says **“We have your application for production access”** and **“We're reviewing your application form.”** It records the application on Thursday, October 1 at 10:47 AM. Production is still inactive. Do not submit a duplicate application or describe access as approved.
+- The last verified closed-test release is 1.0.20 (22). The prior 1.0.21 (23) draft and the local 1.0.22 (24) usability candidate are not proof of tester availability.
+- The walking reminder candidate still needs its applicable foreground-service declaration evidence and release review. The existing manual-camera video does not demonstrate the new walking flow.
+- Use the **existing** laptop upload keystore and its local signing procedure; do not regenerate keys from the historical setup example below. Passwords stay in local Keychain/signing memory and must not appear in logs or handoffs.
+- Current website: https://nobonk.com/. Candidate test evidence and remaining physical-device checks: [background usability review](reviews/2026-10-02-background-usability.md).
+
+The original setup checklist below is historical where it conflicts with this dated state.
+
 Owner of this doc: release engineering. Audience: the **adult parent/guardian**
 who will hold the Play Console account, plus any agent finishing the build.
 
@@ -71,7 +88,7 @@ NOBONK_KEY_PASSWORD=********
 ```
 
 …or as environment variables of the same names (best for CI). With them present,
-`./gradlew bundleRelease` produces a **signed** `app-release.aab`. Without them,
+`./gradlew -Pbundle bundleRelease` produces a **signed** `app-release.aab`. Without them,
 the build still works but the release artifact is unsigned (safe default).
 
 **Enroll in Play App Signing** (default for new apps): you upload with this
@@ -86,7 +103,7 @@ NDK r27+ present via ONNX/CameraX):
 
 ```bash
 ./gradlew clean
-./gradlew bundleRelease          # -> app/build/outputs/bundle/release/app-release.aab
+./gradlew -Pbundle bundleRelease          # -> app/build/outputs/bundle/release/app-release.aab
 scripts/check_16kb_alignment.sh  # must print RESULT: PASS  (see PLAY_16KB_CHECK.md)
 ```
 
@@ -100,7 +117,7 @@ Also recommended:
 
 > ⚠️ This checklist's Gradle changes were **not build-verified in the
 > release-engineering sandbox** (no JDK/Android SDK there). Run
-> `./gradlew bundleRelease` (or at least `assembleDebug`) once on the build
+> `./gradlew -Pbundle bundleRelease` (or at least `assembleDebug`) once on the build
 > machine and fix any sync error before submitting. The config was reviewed for
 > correctness: `compileSdk=36` needs AGP ≥ 8.9 (repo uses AGP 9.0.1 ✓);
 > core-library desugaring dep added; signing block is credential-guarded.
@@ -198,7 +215,7 @@ a retrain + re-benchmark effort. Not chosen now.
    **identity/address verification**. (§1)
 2. **Generate the upload keystore** and store the credentials outside the repo.
    (§2) Back it up.
-3. On the build machine, **build the signed AAB** (`./gradlew bundleRelease`) and
+3. On the build machine, **build the signed AAB** (`./gradlew -Pbundle bundleRelease`) and
    **run `scripts/check_16kb_alignment.sh`** → must PASS. (§3, R4)
 4. In Console, **Create app** → name **NoBonk**, Default language English (US),
    App or game = **App**, Free, accept declarations.
@@ -248,3 +265,7 @@ everything that can be committed:
   release commit** for AGPL (§6).
 - (Recommended, other agents) ship the in-app **Open-source licenses** screen
   (`T-DOCS-LICENSES`) — the user-facing half of AGPL §13.
+
+## Private phone acceptance alongside Google Play
+
+Use `./gradlew assemblePreview` to build an optimized, locally debug-key-signed `ai.genwhy.nobonk.preview` app labeled **NoBonk Preview**, with a `-preview` version suffix. It uses main source and release optimization, excludes debug test harnesses, and has its own private settings/data. This permits device testing without uninstalling or replacing a Google Play-signed installation. Never upload this separate-package preview to NoBonk's Play listing. Google Play enrollment and production-app data are not migrated to it. Keep the normal NoBonk app installed for Play testing/updates; use only one scanner at a time.

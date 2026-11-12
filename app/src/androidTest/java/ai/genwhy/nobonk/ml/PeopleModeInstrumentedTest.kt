@@ -16,10 +16,13 @@ import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
 
 /** Shared RGBA camera fixture; only the native frame path consumes it. */
-internal fun grayFrame(level: Int = 127): Pair<ImageProxy, () -> Boolean> {
+internal fun grayFrame(level: Int = 127, alternateLevel: Int = level): Pair<ImageProxy, () -> Boolean> {
     val size = 128
     val bytes = ByteBuffer.allocateDirect(size * size * 4)
-    repeat(size * size) { bytes.put(level.toByte()); bytes.put(level.toByte()); bytes.put(level.toByte()); bytes.put(255.toByte()) }
+    repeat(size * size) { index ->
+        val value = if (((index % size) / 8 + (index / size) / 8) % 2 == 0) level else alternateLevel
+        bytes.put(value.toByte()); bytes.put(value.toByte()); bytes.put(value.toByte()); bytes.put(255.toByte())
+    }
     bytes.rewind()
     var closed = false
     val plane = Proxy.newProxyInstance(ImageProxy.PlaneProxy::class.java.classLoader,

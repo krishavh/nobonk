@@ -9,9 +9,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import ai.genwhy.nobonk.util.Dbg
 import ai.genwhy.nobonk.model.Detection
-import ai.genwhy.nobonk.model.NormBox
 import java.nio.FloatBuffer
-import java.util.UUID
 
 /**
  * Object detector using ONNX Runtime — supports both YOLO11 and YOLO26 model families.
@@ -52,6 +50,7 @@ class ObjectDetector(
         private set
 
     private val confidenceThreshold = 0.40f
+    private val letterboxPad = Color.rgb(114, 114, 114)
     private val iouThreshold = 0.45f
 
     val inputSize: Int
@@ -63,6 +62,8 @@ class ObjectDetector(
     // Reused letterbox input bitmap (avoids a per-frame ARGB allocation).
     private var lbBitmap: Bitmap? = null
     private val lbPaint = Paint().apply { isFilterBitmap = true; isAntiAlias = true }
+    private val lbCanvas = Canvas()
+    private val lbMatrix = android.graphics.Matrix()
 
     companion object {
         private const val TAG = "ObjectDetector"
@@ -73,13 +74,13 @@ class ObjectDetector(
 
     init {
         checkActive()
-        val modelBytes = context.assets.open(modelName).use { it.readBytes() }
+        val model = BundledModelFile.load(context, modelName, checkActive)
         checkActive()
 
         // Cache a verified measured choice, not a hardware assumption. Invalidate after
         // model/app/runtime/OS changes; a failed cached warm-up triggers benchmarking.
         val digest = java.security.MessageDigest.getInstance("SHA-256")
-        val modelHash = digest.digest(modelBytes).joinToString("") { "%02x".format(it) }
+        val modelHash = model.sha256
         val identity = "$modelHash|${android.os.Build.FINGERPRINT}|${ortEnvironment.version}|${ai.genwhy.nobonk.BuildConfig.VERSION_CODE}|ep-v3"
         val key = digest.digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
         val prefs = context.getSharedPreferences("nobonk_execution", Context.MODE_PRIVATE)
@@ -100,7 +101,7 @@ class ObjectDetector(
                         "XNNPACK" -> { options.setIntraOpNumThreads(1); options.addXnnpack(mapOf("intra_op_num_threads" to "4")) }
                         else -> options.setIntraOpNumThreads(4)
                     }
-                    val session = ortEnvironment.createSession(modelBytes, options)
+                    val session = ortEnvironment.createSession(model.file.absolutePath, options)
                     try {
                         checkActive()
                         val size = readInputSize(session, modelName, requestedInputSize)
@@ -191,14 +192,13 @@ class ObjectDetector(
 
     private fun letterbox(src: Bitmap, t: Letterbox.Transform): Bitmap {
         val out = lbBitmap ?: Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888)
-            .also { lbBitmap = it }
-        val canvas = Canvas(out)
-        canvas.drawColor(Color.rgb(114, 114, 114))   // standard YOLO gray pad
-        val m = android.graphics.Matrix().apply {
-            postScale(t.scale, t.scale)
-            postTranslate(t.padX, t.padY)
-        }
-        canvas.drawBitmap(src, m, lbPaint)
+            .also { lbBitmap = it; lbCanvas.setBitmap(it) }
+        // Canvas and Matrix are reused: allocating them per frame churned a native-backed
+        // Canvas peer (finalizer-tracked) on every analysed frame.
+        lbCanvas.drawColor(letterboxPad)   // standard YOLO gray pad
+        lbMatrix.setScale(t.scale, t.scale)
+        lbMatrix.postTranslate(t.padX, t.padY)
+        lbCanvas.drawBitmap(src, lbMatrix, lbPaint)
         return out
     }
 
@@ -223,30 +223,10 @@ class ObjectDetector(
         estimateDistance(box.height, box.width, name)
     }
 
-    private fun parseYolo26(output: FloatBuffer, numBoxes: Int, t: Letterbox.Transform): List<Detection> {
-        val detections = mutableListOf<Detection>()
-        for (i in 0 until numBoxes) {
-            val row = i * 6
-            val confidence = output.get(row + 4)
-            if (confidence < confidenceThreshold) continue
-            val classId = output.get(row + 5).toInt()
-            val box = Letterbox.boxToOriginalNorm(output.get(row), output.get(row + 1), output.get(row + 2), output.get(row + 3), t)
-            detections.add(makeDetection(box, confidence, classId))
+    private fun parseYolo26(output: FloatBuffer, numBoxes: Int, t: Letterbox.Transform): List<Detection> =
+        CocoRawHeadDecoder.decodeEndToEnd(output, numBoxes, t, confidenceThreshold) { box, name ->
+            estimateDistance(box.height, box.width, name)  // informational only
         }
-        return detections
-    }
-
-    private fun makeDetection(box: NormBox, score: Float, classId: Int): Detection {
-        val cls = classNameFor(classId)
-        return Detection(
-            id = UUID.randomUUID().toString(),
-            boundingBox = box,
-            confidence = score,
-            distance = estimateDistance(box.height, box.width, cls),  // informational only
-            className = cls,
-            classId = classId
-        )
-    }
 
     /**
      * Rough monocular distance for the on-screen label / history only. The alarm ladder
@@ -276,6 +256,7 @@ class ObjectDetector(
     }
 
     fun close() {
+        lbCanvas.setBitmap(null)
         lbBitmap?.recycle(); lbBitmap = null
         try { preparedModel.close() } finally { ortEnvironment.close() }
     }

@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <application>
+        <service android:name=".service.DetectionService"
+            android:foregroundServiceType="camera|health"
+            tools:replace="android:foregroundServiceType" />
         <!-- DEBUG BUILDS ONLY: lets `adb shell am broadcast` trigger the exact ACTION_STOP path the
              notification's Stop action uses, so Stop can be exercised deterministically on an emulator. -->
         <receiver android:name=".debug.DebugStopReceiver" android:exported="true">
             <intent-filter><action android:name="ai.genwhy.nobonk.debug.STOP" /></intent-filter>
         </receiver>
+        <activity android:name=".testing.TypingHarnessActivity" android:exported="false" />
+        <activity android:name=".testing.CompetingCameraActivity" android:exported="false" />
         <activity android:name=".testing.WalkingHarnessActivity" android:exported="false" />
-        <service android:name=".testing.WalkingServiceHarness" android:exported="false" android:foregroundServiceType="camera" />
+        <service android:name=".testing.WalkingServiceHarness" android:exported="false" android:foregroundServiceType="camera|health" />
     </application>
 </manifest>

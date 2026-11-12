@@ -6,49 +6,30 @@ import org.junit.Test
 
 class WalkingLifecycleRegressionTest {
     private fun armed() = ServiceLifecycle().apply { assertTrue(onStartRequested(true)) }
-    private fun run(l: ServiceLifecycle): Long {
+    @Test fun walkingAuthorizesExactlyOneReminderNeverCameraOrModel() {
+        val l = armed(); val old = l.scanGeneration()
         assertTrue(l.onWalkingConfirmed())
-        val scan = l.scanGeneration()
-        assertTrue(l.onModelLoaded(scan)); l.onCameraBound(scan)
-        assertTrue(l.mayProcessFrames(scan))
-        return scan
+        assertEquals(Phase.WALKING_PROMPTED, l.phase)
+        repeat(20) { assertFalse(l.onWalkingConfirmed()) }
+        assertFalse(l.onModelLoaded(old)); assertFalse(l.onModelLoaded())
+        assertFalse(l.mayBindCamera()); l.onCameraBound()
+        assertFalse(l.mayProcessFrames()); assertFalse(l.mayPostAlerts())
     }
-    @Test fun pauseInvalidatesOldFramesEvenAfterNewScanIsRunning() {
-        val l = armed(); val old = run(l)
-        assertTrue(l.onWalkingPaused())
-        assertFalse(l.mayPostAlerts(old)); assertFalse(l.mayProcessFrames(old))
-        val fresh = run(l)
-        assertFalse(l.mayPostAlerts(old)); assertTrue(l.mayPostAlerts(fresh))
-        assertFalse(l.onModelLoaded(old)); l.onCameraBound(old)
-        assertEquals(Phase.RUNNING, l.phase)
+    @Test fun stopBeforeWalkingNeverPrompts() {
+        val l = armed(); l.stop(StopReason.USER)
+        assertFalse(l.onWalkingConfirmed()); assertFalse(l.onStartRequested(true))
     }
-    @Test fun oldModelCompletionCannotBeAdoptedIntoNextLoadingCycle() {
-        val l = armed(); l.onWalkingConfirmed(); val old = l.scanGeneration()
-        assertTrue(l.onWalkingPaused()); l.onWalkingConfirmed()
-        assertFalse(l.onModelLoaded(old)); assertEquals(Phase.LOADING_MODEL, l.phase)
-        assertTrue(l.onModelLoaded(l.scanGeneration()))
+    @Test fun promptThenStopCannotRearmOrLoad() {
+        val l = armed(); l.onWalkingConfirmed(); l.stop(StopReason.USER)
+        assertFalse(l.onWalkingConfirmed()); assertFalse(l.onModelLoaded())
+        assertFalse(l.onStartRequested()); assertTrue(l.stoppedByUser)
     }
-    @Test fun oldCameraCallbackCannotBindIntoNextBindingCycle() {
-        val l = armed(); l.onWalkingConfirmed(); val old = l.scanGeneration(); l.onModelLoaded(old)
-        assertTrue(l.onWalkingPaused()); l.onWalkingConfirmed(); val fresh = l.scanGeneration(); l.onModelLoaded(fresh)
-        assertFalse(l.mayBindCamera(old)); l.onCameraBound(old)
-        assertEquals(Phase.BINDING_CAMERA, l.phase)
-        l.onCameraBound(fresh); assertEquals(Phase.RUNNING, l.phase)
-    }
-    @Test fun manualStopWinsFromEveryWalkingPhaseAndNeverRearms() {
-        for (stage in 0..4) {
-            val l = armed()
-            if (stage >= 1) l.onWalkingConfirmed()
-            if (stage >= 2) l.onModelLoaded()
-            if (stage >= 3) l.onCameraBound()
-            if (stage == 4) l.onWalkingPaused()
-            val token = l.scanGeneration(); l.stop(StopReason.USER)
-            assertFalse(l.onWalkingConfirmed()); assertFalse(l.onWalkingPaused())
-            assertFalse(l.onStartRequested(true)); assertFalse(l.isCurrent(token)); assertTrue(l.stoppedByUser)
-        }
-    }
-    @Test fun stationaryDoesNotPauseManualBackgroundScanning() {
-        val l = ServiceLifecycle(); l.onStartRequested(); l.onModelLoaded(); l.onCameraBound()
-        assertFalse(l.onWalkingPaused()); assertTrue(l.mayPostAlerts())
+    @Test fun explicitManualStartUsesFreshInstanceAndStopInvalidatesFrames() {
+        val reminder = armed(); reminder.onWalkingConfirmed(); reminder.stop(StopReason.USER)
+        val scan = ServiceLifecycle(); assertTrue(scan.onStartRequested())
+        val token = scan.scanGeneration(); assertTrue(scan.onModelLoaded(token)); scan.onCameraBound(token)
+        assertTrue(scan.mayPostAlerts(token)); assertFalse(scan.onWalkingConfirmed())
+        scan.stop(StopReason.USER)
+        assertFalse(scan.mayProcessFrames(token)); assertFalse(scan.mayPostAlerts(token))
     }
 }

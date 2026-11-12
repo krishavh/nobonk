@@ -1,0 +1,58 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main, release/1.0.24-audit]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        if: matrix.language == 'java-kotlin'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        if: matrix.language == 'java-kotlin'
+        with:
+          packages: platform-tools
+      - uses: actions/setup-python@v5
+        if: matrix.language == 'java-kotlin'
+        with:
+          python-version: '3.12'
+      - name: Install checksum-verified detection models
+        if: matrix.language == 'java-kotlin'
+        run: python scripts/install_verified_models.py
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - name: Compile Android source for CodeQL
+        if: matrix.language == 'java-kotlin'
+        # Keep the model verification gate enabled. Autobuild lacks this setup.
+        run: ./gradlew --no-daemon --no-build-cache -Pbundle assembleDebug
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

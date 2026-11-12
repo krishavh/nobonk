@@ -122,10 +122,7 @@ class DetectionEngine(private val appContext: Context) {
     @Volatile private var ttsReady = false
     private var lastSpokenAt = 0L
 
-    // Per-track HIGH re-alert mute (Round-2): after a HIGH fires the loud LOOK-UP + sound
-    // on a track, don't re-blast the same track for MUTE_MS — the box stays red and
-    // haptics continue, but we stop hammering the user for one persistent hazard.
-    private val highMute = HighReAlertMute(muteMs = 2_000L)
+    private val alertCadence = AlertCadence()
 
     // Alert-level hysteresis (fixes ML-11 flicker): escalate immediately, but hold the
     // level for LINGER_MS before de-escalating so overlay/sound/HUD don't strobe when an
@@ -190,7 +187,7 @@ class DetectionEngine(private val appContext: Context) {
      */
     // ── Zero-allocation frame path (T-PERF-FRAME) ───────────────────────────────
     // CameraX hands us an RGBA_8888 plane. We copy it into a REUSABLE raw bitmap, then
-    // rotate-to-upright + downscale in ONE Canvas draw into a REUSABLE work bitmap.
+    // Rotate/downscale into a reusable work bitmap; dim frames also get a boosted draw.
     // Previously: toBitmap() + createBitmap(rotate) + createScaledBitmap = 3 allocations
     // per frame (GC churn, frame-time spikes). Now: none in steady state.
     private var rawBitmap: Bitmap? = null
@@ -198,11 +195,15 @@ class DetectionEngine(private val appContext: Context) {
     private var packedRows: java.nio.ByteBuffer? = null
     private var rowScratch: ByteArray? = null
     private val workMatrix = Matrix()
+    /** Reused across frames (re-targeted only when [workBitmap] is reallocated). */
+    private val workCanvas = Canvas()
     private val workPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private var lastMeanBrightness = 128f
     private var lastInferMs = 0L
     private var appliedGain = 1f
     private val gainMatrix = ColorMatrix()
+    private var gainFilter: ColorMatrixColorFilter? = null
+    private var sceneBrightnessAndVariance = 128f to 0f
 
     private fun proxyToRawBitmap(p: ImageProxy): Bitmap {
         val w = p.width; val h = p.height
@@ -233,28 +234,38 @@ class DetectionEngine(private val appContext: Context) {
         return bmp
     }
 
-    /** Rotate to upright and downscale so the longest edge == [inputSize] — one draw, reusable output. */
+    /** Rotate/downscale into reusable output; dim frames get a second, boosted draw. */
     private fun toUprightWork(raw: Bitmap, rotationDeg: Int, crop: android.graphics.Rect? = null): Bitmap {
         val g = if (crop == null || crop.isEmpty) FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize)
                 else FrameGeometry.compute(raw.width, raw.height, rotationDeg, inputSize, crop.left, crop.top, crop.width(), crop.height())
         var out = workBitmap
         if (out == null || out.width != g.outW || out.height != g.outH) {
+            workCanvas.setBitmap(null)
             out?.recycle(); out = Bitmap.createBitmap(g.outW, g.outH, Bitmap.Config.ARGB_8888); workBitmap = out
+            workCanvas.setBitmap(out)
         }
         workMatrix.reset()
         workMatrix.postTranslate(-g.cropLeft, -g.cropTop)   // ViewPort crop → origin
         workMatrix.postRotate(rotationDeg.toFloat())
         workMatrix.postTranslate(g.shiftX, g.shiftY)
         workMatrix.postScale(g.scale, g.scale)
-        // Night boost: brighten the detector input in the same draw when the last frame was dark.
+        // Measure the actual scene before night boost. Mean and variance must use the
+        // same unmodified pixels; undoing gain after clipping cannot recover them.
+        workPaint.colorFilter = null
+        workCanvas.drawBitmap(raw, workMatrix, workPaint)
+        sceneBrightnessAndVariance = brightnessAndVariance(out)
+        // Only dark frames need a second draw. Reuse the bitmap, canvas and filter.
         val gain = LowLight.gainFor(lastMeanBrightness)
         if (gain != appliedGain) {
             appliedGain = gain
-            workPaint.colorFilter = if (gain > LowLight.BOOST_ACTIVE_GAIN) {
+            gainFilter = if (gain > LowLight.BOOST_ACTIVE_GAIN) {
                 gainMatrix.setScale(gain, gain, gain, 1f); ColorMatrixColorFilter(gainMatrix)
             } else null
         }
-        Canvas(out).drawBitmap(raw, workMatrix, workPaint)
+        if (gainFilter != null) {
+            workPaint.colorFilter = gainFilter
+            workCanvas.drawBitmap(raw, workMatrix, workPaint)
+        }
         return out
     }
 
@@ -296,7 +307,7 @@ class DetectionEngine(private val appContext: Context) {
             processedScope = config.includeNonPerson
             readiness.reset(); personConfirmation.reset(); frameAnalyzer.reset()
             lastHapticTime.clear(); lastCueTime.clear()
-            approachTracker.reset(); boxSmoother.reset(); highMute.reset()
+            approachTracker.reset(); boxSmoother.reset(); alertCadence.reset()
             heldAlert = AlertLevel.NONE; heldUntil = 0; heldLabel = null
             lastAnyCueTime = 0; lastSpokenAt = 0; lastMeanBrightness = 128f
         }
@@ -310,16 +321,16 @@ class DetectionEngine(private val appContext: Context) {
         }
 
         // ── Blocked-camera check: low brightness AND low variance (fixes ML-06) ──
-        val (boostedMean, variance) = brightnessAndVariance(work)
-        // Undo the boost so the blocked/low-light logic sees the true scene brightness.
-        val meanBrightness = boostedMean / appliedGain
+        val (meanBrightness, variance) = sceneBrightnessAndVariance
         val nightBoost = appliedGain > LowLight.BOOST_ACTIVE_GAIN
         lastMeanBrightness = meanBrightness
         val blocked = LowLight.isBlocked(meanBrightness, variance)
 
         if (blocked || detector == null) {
+            withContext(Dispatchers.Main.immediate) { alertCadence.interruptObservation() }
             readiness.reset(); personConfirmation.reset(); frameAnalyzer.reset()
-            approachTracker.reset(); boxSmoother.reset(); highMute.reset()
+            approachTracker.reset(); boxSmoother.reset()
+            // Preserve cue cadence through a brief obstruction; readiness still resets.
             // Reset linger so a stale HIGH doesn't survive a blocked frame.
             heldAlert = AlertLevel.NONE; heldLabel = null; heldUntil = 0L
             return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = blocked,
@@ -358,7 +369,8 @@ class DetectionEngine(private val appContext: Context) {
         val ready = readiness.observe(now, usable = true)
         val confirmedPeople = personConfirmation.update(if (angleBad) emptyList() else filtered, now)
         if (!ready || angleBad) {
-            approachTracker.reset(); highMute.reset()
+            approachTracker.reset()
+            // A tilt or warmup frame must not rearm a rapid repeat cue.
             heldAlert = AlertLevel.NONE; heldUntil = 0; heldLabel = null
             wall = false; ground = false
         }
@@ -393,23 +405,7 @@ class DetectionEngine(private val appContext: Context) {
         }
         val displayAlert = heldAlert
 
-        // ── Per-track HIGH re-alert mute + bad-angle gating ──
-        // When the angle is BAD the camera is pointed at the ceiling/ground: detections
-        // are unreliable, so we suppress the loud LOOK-UP + sound and instead surface a
-        // "point phone forward" reliability cue. When the same track already fired HIGH
-        // within the mute window, we also hold the loud re-alert.
-        // The mute window is consumed only when the cue actually fires (a HIGH seen at a
-        // bad angle must not delay the first audible alert after the angle is corrected).
-        val fireHigh = rawHighest == AlertLevel.HIGH &&
-            highMute.shouldEmit(topDet?.let { approachTracker.trackIdFor(it.id) }, now, canEmit = !angleBad)
-        val mutedRepeat = displayAlert == AlertLevel.HIGH && !angleBad && !fireHigh
-        // Distinguish "don't re-PLAY the sound" from "hide the visual warning" (HIGH-1).
-        // A persistent hazard re-fires HIGH every frame; after the first alert we mute the
-        // re-played SOUND on that track for the mute window — but the red LOOK-UP visual
-        // (overlay + HUD line) must stay up, not blink out for 2 s. Only a BAD angle (camera
-        // at ceiling/ground → unreliable detections) suppresses the visual, swapping in the
-        // "point phone forward" cue instead.
-        val suppressSound = mutedRepeat || angleBad
+        // The cadence gate controls physical cues only; keep every detection and visual warning.
         val suppressVisual = angleBad
 
         // ── Physical feedback requires a current confirmed hazard; linger is display-only. ──
@@ -419,11 +415,18 @@ class DetectionEngine(private val appContext: Context) {
         val label = topDet?.className
         val suppressed = withContext(Dispatchers.Main.immediate) {
             if (halted || muted || !config.cuesAllowed()) return@withContext true
-            if (rawHighest != AlertLevel.NONE && !angleBad && config.hapticsEnabled) handleHaptics(rawHighest)
-            // Sound: HIGH = urgent triple chirp, MEDIUM = softer double chirp, LOW = haptic only.
-            // The cue is panned toward the object so a left-side hazard is heard on the left.
-            if (config.soundEnabled && !suppressSound && rawHighest.ordinal >= AlertLevel.MEDIUM.ordinal) playAlertCue(rawHighest, pan ?: 0f)
-            if (config.voiceEnabled && !suppressSound && rawHighest == AlertLevel.HIGH) speak(VoiceCue.phrase(rawHighest, label, AlertCue.sideFor(pan)))
+            if (config.voiceEnabled && tts == null) prepareVoice()
+            val physicalChannelReady = config.soundEnabled ||
+                (config.hapticsEnabled && vibrator?.hasVibrator() == true) || (config.voiceEnabled && ttsReady)
+            val emit = alertCadence.shouldEmit(
+                rawHighest, topDet?.let { approachTracker.trackIdFor(it.id) }, now,
+                canEmit = ready && !angleBad && physicalChannelReady
+            )
+            if (emit) {
+                if (config.hapticsEnabled) handleHaptics(rawHighest)
+                if (config.soundEnabled && rawHighest.ordinal >= AlertLevel.MEDIUM.ordinal) playAlertCue(rawHighest, pan ?: 0f)
+                if (config.voiceEnabled && rawHighest == AlertLevel.HIGH) speak(VoiceCue.phrase(rawHighest, label, AlertCue.sideFor(pan)))
+            }
             false
         }
         if (suppressed) return Result(emptyList(), AlertLevel.NONE, lookUpLabel = null, cameraBlocked = false, wallDetected = false, groundHazard = false, hudMessage = null)
@@ -606,11 +609,10 @@ class DetectionEngine(private val appContext: Context) {
         } catch (e: Exception) { Dbg.e(TAG, "TTS init failed: ${e.message}") }
     }
 
-    /** Lazily create the TTS engine (first HIGH with voice on), then speak [text] once per [VoiceCue.REPEAT_MS]. */
+    /** The shared cadence gate has already spaced this cue; do not silently consume it again. */
     private fun speak(text: String?) {
         text ?: return
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastSpokenAt < VoiceCue.REPEAT_MS) return
         if (tts == null) prepareVoice()
         val engine = tts ?: return
         if (!ttsReady) return   // first call warms the engine; the next HIGH speaks
@@ -620,6 +622,7 @@ class DetectionEngine(private val appContext: Context) {
 
     fun close() {
         rawBitmap?.recycle(); rawBitmap = null
+        workCanvas.setBitmap(null)
         workBitmap?.recycle(); workBitmap = null
 
         objectDetector?.close()
@@ -630,7 +633,7 @@ class DetectionEngine(private val appContext: Context) {
         boxSmoother.reset()
         stopSensors()
         sensorMonitor = null
-        highMute.reset()
+        alertCadence.reset()
     }
 
     companion object { private const val TAG = "DetectionEngine" }

@@ -88,8 +88,8 @@ class ApproachTracker(
     private var imminentIds: Set<String> = emptySet()
 
     /**
-     * Stable track id for a current-frame detection id, or null if this detection did
-     * not match any existing track (i.e. it's brand new this frame). Lets the engine
+     * Stable track id for every current-frame detection, including a newly created track.
+     * Null means the detection is absent from the current frame. Lets the engine
      * mute repeat HIGH re-alerts per *track* rather than per (unstable) detection id.
      */
     fun trackIdFor(detectionId: String): String? = detIdToTrackId[detectionId]
@@ -118,8 +118,24 @@ class ApproachTracker(
                 idMap[det.id] = match.id
                 val dtSec = ((now - match.lastSeen).coerceAtLeast(1L)) / 1000f
                 val instRate = (fill - match.fill) / dtSec
+                // Tilting the phone can reveal more of a person cut off by a frame edge.
+                // That height growth alone is not evidence of motion toward the camera.
+                // Require width to grow too; the ordinary fill-based warning remains active.
+                val clippedPerson = det.className == "person" &&
+                    (match.box.top <= 0.01f || det.boundingBox.top <= 0.01f ||
+                        match.box.bottom >= 0.99f || det.boundingBox.bottom >= 0.99f)
+                val relativeHeightGrowth = (fill - match.fill) / match.fill.coerceAtLeast(0.001f)
+                val relativeWidthGrowth = (det.boundingBox.width - match.box.width) /
+                    match.box.width.coerceAtLeast(0.001f)
+                val growthCorroborated = !clippedPerson ||
+                    relativeWidthGrowth >= relativeHeightGrowth * 0.5f
                 // EMA smoothing to reject single-frame noise.
-                match.fillVelocity = match.fillVelocity * 0.6f + instRate * 0.4f
+                if (growthCorroborated) {
+                    match.fillVelocity = match.fillVelocity * 0.6f + instRate * 0.4f
+                } else {
+                    match.fillVelocity = 0f
+                    match.closingStreak = 0
+                }
                 val prevCenterX = match.box.centerX
                 val centerX = det.boundingBox.centerX
                 match.lateralDriftEma =
@@ -159,9 +175,11 @@ class ApproachTracker(
                     if (ttcSec <= imminentTtcSec) imminent.add(det.id)
                 }
             } else {
+                val trackId = "t${nextId++}"
+                idMap[det.id] = trackId
                 tracks.add(
                     Track(
-                        id = "t${nextId++}",
+                        id = trackId,
                         className = det.className,
                         box = det.boundingBox,
                         fill = fill,

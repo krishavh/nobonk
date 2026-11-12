@@ -40,10 +40,12 @@ class ApproachTrackerTest {
             now += 100
             tracker.update(listOf(person("before", 0.5f, fill)))
         }
+        val oldTrack = tracker.trackIdFor("before")
         now += 2_000
         val result = tracker.update(listOf(person("after", 0.5f, 0.85f)))
         assertFalse(result.contains("after"))
-        assertTrue(tracker.trackIdFor("after") == null)
+        assertTrue(tracker.trackIdFor("after") != null)
+        assertTrue(tracker.trackIdFor("after") != oldTrack)
     }
 
     @Test fun `static person in a two-person scene is never falsely flagged approaching`() {
