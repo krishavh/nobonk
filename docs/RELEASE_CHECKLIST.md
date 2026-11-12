@@ -2,8 +2,8 @@
 
 ## Current release state — verified November 11, 2026
 
-- Production 1.0.23 (25) is live at 100% rollout in Play Console.
-- This branch prepares 1.0.24 (27), based on that production source plus the offline guide and audit fixes. Submission and approval are separate steps; see the release review for validation evidence.
+- Production 1.0.24 (27) is active in Play Console in 178 countries/regions.
+- The matching source is tagged [v1.0.24-v27](https://github.com/krishavh/nobonk/releases/tag/v1.0.24-v27). This release includes the offline guide and audit fixes. See the release review for validation evidence.
 - Walking reminders remain disabled in release and preview builds. No new permissions are needed.
 - Use the existing local upload keystore. Do not regenerate it or put passwords in logs or source.
 
