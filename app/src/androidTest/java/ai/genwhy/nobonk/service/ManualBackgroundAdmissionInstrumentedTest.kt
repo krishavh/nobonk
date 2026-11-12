@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.printToLog
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -103,7 +104,11 @@ class ManualBackgroundAdmissionInstrumentedTest {
         val camera = RearCameraProbe(context.getSystemService(CameraManager::class.java))
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
-            compose.onNodeWithText(SafetyNotice.REMINDER_OK_LABEL).performClick()
+            // At 200% text on CI's shorter display, OK is below the scroll viewport.
+            // A click at its off-screen coordinates does not acknowledge the gate.
+            compose.onNodeWithText(SafetyNotice.REMINDER_OK_LABEL)
+                .performScrollTo().assertIsDisplayed().performClick()
+            instrumentation.runOnMainSync { assertTrue("The user acknowledged this launch", SessionState.gate.cleared) }
             lateinit var original: MainActivity
             lateinit var model: DetectionViewModel
             scenario.onActivity { original = it; model = viewModel(it) }
@@ -175,7 +180,8 @@ class ManualBackgroundAdmissionInstrumentedTest {
             openPostedNotification(secondPosted)
             assertFalse(model.scanningEnabled)
             assertEquals(true, camera.available)
-            compose.onNodeWithText(SafetyNotice.REMINDER_OK_LABEL).performClick()
+            compose.onNodeWithText(SafetyNotice.REMINDER_OK_LABEL)
+                .performScrollTo().assertIsDisplayed().performClick()
             compose.onNodeWithText("Start scanning").assertIsDisplayed()
             assertFalse(model.scanningEnabled)
             // ActivityScenario loses its internal stage after the real task is moved back
